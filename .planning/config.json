@@ -1,0 +1,26 @@
+{
+  "mode": "yolo",
+  "granularity": "coarse",
+  "parallelization": true,
+  "commit_docs": false,
+  "model_profile": "balanced",
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "nyquist_validation": false,
+    "auto_advance": false
+  },
+  "project": {
+    "name": "KI Email Agent",
+    "code": "KEA",
+    "type": "self-built-python-agent",
+    "base": "Eigenbau (Python 3.13 + imap-tools + Anthropic SDK)",
+    "single_tenant": true,
+    "operator_type": "non-technical",
+    "customer": "Tankstelle"
+  },
+  "ship": {
+    "pr_body_sections": []
+  }
+}

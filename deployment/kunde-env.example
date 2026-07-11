@@ -1,0 +1,35 @@
+# ==== KUNDEN-KONFIGURATION ====
+# Vor-Ort-Setup: diese 5 Felder mit Kunde gemeinsam ausfüllen.
+
+# IMAP-Zugang (Kunde nennt E-Mail-Adresse + Passwort + gewünschten KI-Ordner-Namen)
+IMAP_USER=<info@tankstelle-name.de>
+IMAP_PASSWORD=<app-password-oder-mail-password>
+IMAP_DRAFTS_FOLDER=<KI-Entwürfe>   # Wird automatisch angelegt falls nicht vorhanden
+OWN_EMAIL_ADDRESS=<info@tankstelle-name.de>  # Meistens identisch zu IMAP_USER
+
+# Anthropic API-Key (Vizionists stellt aus Business-Account)
+ANTHROPIC_API_KEY=<sk-ant-xxx>
+
+# ==== OPTIONAL — Nur setzen wenn Auto-Detect fehlschlägt ====
+# Der Agent erkennt IMAP-Host aus der E-Mail-Domain automatisch.
+# Unterstützte Provider: GMX, Web.de, IONOS, T-Online, Gmail, Outlook/M365, Mailbox.org, Strato, Hetzner.
+# Manuelle Overrides:
+# IMAP_HOST=imap.eigener-server.de
+# IMAP_PORT=993
+# IMAP_USE_SSL=true
+# IMAP_SENT_FOLDER=Sent
+
+# ==== DEFAULTS — Normalerweise nicht ändern ====
+IMAP_INBOX_FOLDER=INBOX
+POLL_INTERVAL_SECONDS=300
+BACKFILL_DAYS=1
+OWN_DISPLAY_NAME=<Tankstelle Name>
+MODEL_CLASSIFY=claude-haiku-4-5
+MODEL_DRAFT=claude-sonnet-4-6
+LLM_MAX_TOKENS_DRAFT=600
+LLM_TEMPERATURE_DRAFT=0.3
+ENABLE_PII_REDACTION=true
+LOG_LEVEL=INFO
+CONTEXT_FILE=/config/context.md
+STATE_DB=/data/state.db
+PROMPTS_DIR=/app/prompts

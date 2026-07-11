@@ -1,0 +1,26 @@
+# ==== VIZIONISTS-TEST-KONFIGURATION ====
+# Pre-Deployment-Test bei Vizionists gegen shala@vizionists.com über IONOS.
+
+IMAP_USER=shala@vizionists.com
+IMAP_PASSWORD=<ionos-app-password>       # aus IONOS Kundencenter -> E-Mail -> App-Passwörter
+IMAP_DRAFTS_FOLDER=KEA-Test-Entwürfe     # Neuer Ordner — Auto-CREATE wird beim ersten Draft getestet
+OWN_EMAIL_ADDRESS=shala@vizionists.com
+
+ANTHROPIC_API_KEY=<sk-ant-xxx>
+
+# IONOS ist in der statischen Provider-Tabelle — kein Override nötig.
+# Auto-Detect liefert: imap.ionos.de:993 SSL, Sent="Sent".
+
+IMAP_INBOX_FOLDER=INBOX
+POLL_INTERVAL_SECONDS=300
+BACKFILL_DAYS=1
+OWN_DISPLAY_NAME=Vizionists Test
+MODEL_CLASSIFY=claude-haiku-4-5
+MODEL_DRAFT=claude-sonnet-4-6
+LLM_MAX_TOKENS_DRAFT=600
+LLM_TEMPERATURE_DRAFT=0.3
+ENABLE_PII_REDACTION=true
+LOG_LEVEL=INFO
+CONTEXT_FILE=/config/context.md
+STATE_DB=/data/state.db
+PROMPTS_DIR=/app/prompts
