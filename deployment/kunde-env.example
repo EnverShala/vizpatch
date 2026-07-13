@@ -33,3 +33,13 @@ LOG_LEVEL=INFO
 CONTEXT_FILE=/config/context.md
 STATE_DB=/data/state.db
 PROMPTS_DIR=/app/prompts
+
+# ==== WEBUI (Phase 4) ====
+# WEBUI_USER: Login für Browser-UI. Zufallswert empfohlen: openssl rand -base64 12
+WEBUI_USER=admin
+# WEBUI_PASSWORD: Muss VOR erstem Start gesetzt werden (nie Default lassen!)
+WEBUI_PASSWORD=<setzen-vor-erstem-start>
+# AUTOSTART_ENABLED: true = beim Server-Start via systemd. Siehe install-autostart.sh
+AUTOSTART_ENABLED=false
+# DOCKER_GID: Wird von install-autostart.sh mit echter Host-GID überschrieben
+DOCKER_GID=999

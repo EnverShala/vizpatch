@@ -19,6 +19,7 @@ RUN mkdir -p src && touch src/__init__.py && pip install --no-cache-dir .
 
 # App code
 COPY src/ ./src/
+COPY static/ ./static/
 
 RUN mkdir -p /config && chown -R webui:webui /config /app
 

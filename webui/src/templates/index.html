@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+{% if saved %}
+<div class="banner-success">&#10003; Änderungen gespeichert.</div>
+{% endif %}
+
+<form action="/save" method="post">
+  <fieldset>
+    <legend>IMAP-Zugang</legend>
+
+    <label for="imap_user">E-Mail-Adresse (IMAP_USER)</label>
+    <input type="email" id="imap_user" name="imap_user" value="{{ env.IMAP_USER or '' }}">
+
+    <p class="password-hint">&#9432; Passwort- und API-Key-Felder: leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
+
+    <label for="imap_password">IMAP-Passwort (IMAP_PASSWORD)</label>
+    <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
+
+    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER)</label>
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or '' }}">
+
+    <label for="own_email_address">Eigene E-Mail (OWN_EMAIL_ADDRESS)</label>
+    <input type="email" id="own_email_address" name="own_email_address" value="{{ env.OWN_EMAIL_ADDRESS or '' }}">
+  </fieldset>
+
+  <fieldset>
+    <legend>Anthropic API</legend>
+    <p class="password-hint">&#9432; API-Key leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
+    <label for="anthropic_api_key">API-Key (ANTHROPIC_API_KEY)</label>
+    <input type="password" id="anthropic_api_key" name="anthropic_api_key" value="" placeholder="**** (leer lassen = unverändert)">
+  </fieldset>
+
+  <fieldset>
+    <legend>Autostart</legend>
+    <label>
+      <input type="checkbox" name="autostart_enabled" value="true" {% if env.AUTOSTART_ENABLED == 'true' %}checked{% endif %}>
+      Autostart aktiviert (AUTOSTART_ENABLED)
+    </label>
+    <p class="hint">Erfordert einmaliges <code>sudo ./install-autostart.sh enable</code> auf dem Host (siehe RUNBOOK)</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>context.md</legend>
+    <label for="context_md">Firmen-Kontext für den KI-Agenten</label>
+    <textarea id="context_md" name="context_md" rows="20">{{ context_md }}</textarea>
+  </fieldset>
+
+  <button type="submit">Speichern</button>
+</form>
+{% endblock %}
