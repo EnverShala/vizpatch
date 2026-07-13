@@ -1,0 +1,28 @@
+<div id="status-card" hx-get="/agent/status" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h3>Agent-Status</h3>
+  {% if status.state == "running" %}
+  <p class="state-running">Status: <strong>{{ status.state }}</strong></p>
+  {% elif status.state == "not_created" %}
+  <p class="state-exited">Status: <strong>{{ status.state }}</strong> (noch nicht gestartet)</p>
+  {% elif status.state == "error" %}
+  <p class="state-error">Status: <strong>Fehler</strong>{% if status.error %} — {{ status.error }}{% endif %}</p>
+  {% else %}
+  <p class="state-exited">Status: <strong>{{ status.state }}</strong></p>
+  {% endif %}
+  {% if status.started_at and status.state == "running" %}
+  <p>Gestartet: {{ status.started_at }}</p>
+  {% endif %}
+  {% if last_poll %}
+  <p>Letzter Poll: {{ last_poll }}</p>
+  {% else %}
+  <p>Letzter Poll: keine Daten</p>
+  {% endif %}
+  {% if action_result is defined %}
+  <pre class="action-result">{{ action_result }}</pre>
+  {% endif %}
+  <div class="agent-buttons">
+    <button hx-post="/agent/start" hx-target="#status-card" hx-swap="outerHTML">Start</button>
+    <button hx-post="/agent/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
+    <button hx-post="/agent/restart" hx-target="#status-card" hx-swap="outerHTML">Restart</button>
+  </div>
+</div>

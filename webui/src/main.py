@@ -1,11 +1,11 @@
 import os
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config_io
+from . import auth, config_io, docker_ctrl, state_reader
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -33,10 +33,35 @@ def index(
 ):
     env_vals = config_io.read_env_masked()
     context_md = config_io.read_context_md()
+    status = docker_ctrl.get_agent_status()
+    last_poll = state_reader.get_last_poll()
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"env": env_vals, "context_md": context_md, "saved": saved},
+        {"env": env_vals, "context_md": context_md, "saved": saved, "status": status, "last_poll": last_poll},
+    )
+
+
+@app.get("/agent/status", response_class=HTMLResponse)
+def agent_status(request: Request, user: str = Depends(auth.require_auth)):
+    status = docker_ctrl.get_agent_status()
+    last_poll = state_reader.get_last_poll()
+    return templates.TemplateResponse(
+        request, "_status_card.html", {"status": status, "last_poll": last_poll}
+    )
+
+
+@app.post("/agent/{action}", response_class=HTMLResponse)
+def agent_action(request: Request, action: str, user: str = Depends(auth.require_auth)):
+    if action not in ("start", "stop", "restart"):
+        raise HTTPException(status_code=400, detail="invalid action")
+    result = docker_ctrl.control_agent(action)
+    status = docker_ctrl.get_agent_status()
+    last_poll = state_reader.get_last_poll()
+    return templates.TemplateResponse(
+        request,
+        "_status_card.html",
+        {"status": status, "last_poll": last_poll, "action_result": result},
     )
 
 

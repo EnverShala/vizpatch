@@ -6,12 +6,13 @@
   <title>Vizpatch WebUI</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body hx-on::response-error="if (event.detail.xhr.status === 401) location.reload();">
   <header>
     <h1>Vizpatch &mdash; Konfiguration</h1>
   </header>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+  <script src="/static/htmx.min.js"></script>
 </body>
 </html>
