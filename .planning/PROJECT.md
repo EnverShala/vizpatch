@@ -1,4 +1,4 @@
-# KI Email Agent — Schmaler Eigenbau für eine Tankstelle
+# Vizpatch — Schmaler KI-Email-Agent
 
 ## What This Is
 

@@ -12,8 +12,8 @@
     "auto_advance": false
   },
   "project": {
-    "name": "KI Email Agent",
-    "code": "KEA",
+    "name": "Vizpatch",
+    "code": "VIZPATCH",
     "type": "self-built-python-agent",
     "base": "Eigenbau (Python 3.13 + imap-tools + Anthropic SDK)",
     "single_tenant": true,

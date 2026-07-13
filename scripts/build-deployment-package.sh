@@ -7,8 +7,8 @@
 #   VERSION default: v1.0.0 (Semver-Tag)
 #
 # Ergebnis: dist/deployment-paket-<VERSION>/
-#   kea-tankstelle-<VERSION>.tar        Docker-Image-Tarball
-#   kea-tankstelle-<VERSION>.tar.sha256 SHA256-Checksum (Integritätsprüfung vor docker load)
+#   vizpatch-<VERSION>.tar        Docker-Image-Tarball
+#   vizpatch-<VERSION>.tar.sha256 SHA256-Checksum (Integritätsprüfung vor docker load)
 #   docker-compose.yml                  Compose-Datei für den Kundenserver
 #   README.md                           Setup-Anleitung
 #   prompts/                            classify.txt + generate.txt (Bind-Mount-Quelle)
@@ -19,14 +19,14 @@
 #     context.md.vizionists-test.md     Vizionists-Test-Kontext
 #
 # USB-Transfer: den gesamten dist/deployment-paket-<VERSION>/-Ordner auf USB kopieren.
-# Auf Kundenserver: docker load -i kea-tankstelle-<VERSION>.tar && docker compose up -d
+# Auf Kundenserver: docker load -i vizpatch-<VERSION>.tar && docker compose up -d
 
 set -euo pipefail
 
 VERSION="${1:-v1.0.0}"
-IMAGE_TAG="kea-tankstelle:${VERSION}"
+IMAGE_TAG="vizpatch:${VERSION}"
 DIST_DIR="dist/deployment-paket-${VERSION}"
-TAR_NAME="kea-tankstelle-${VERSION}.tar"
+TAR_NAME="vizpatch-${VERSION}.tar"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"

@@ -1,4 +1,4 @@
-# Requirements — KI Email Agent (Eigenbau-Miniagent für Tankstelle)
+# Requirements — Vizpatch (schmaler KI-Email-Agent)
 
 **Scope v1:** Ein Docker-Container, der IMAP polt, Kundenanfragen klassifiziert und Antwort-Drafts in den `Drafts`-Ordner des Kunden-Postfachs legt. Betreiber prüft und sendet manuell.
 
@@ -36,7 +36,7 @@
 - [ ] **DEL-05**: `context.md.example` — Template mit den Sektionen About / Öffnungszeiten / Angebote / FAQ / Ton / Signatur, mit Platzhaltern
 - [ ] **DEL-06**: `prompts/classify.txt` + `prompts/generate.txt` — externalisierte Prompt-Templates mit Platzhaltern (`{context}`, `{from}`, `{subject}`, `{body}`, `{signature}`)
 - [ ] **DEL-07**: `README.md` — max. 1 Seite: Setup (`.env` füllen, `context.md` füllen, `docker compose up -d`), Kommandos (logs, stop, start, update), Troubleshooting-Kurz-Sektion
-- [ ] **DEL-08**: **Öffentliches** GitHub-Repo `vizionists/kea-tankstelle` mit Tag `v1.0.0` (in Phase 2 Discuss als public entschieden — nichts Firmen-Spezifisches im Code, Delivery via `git clone` ohne Auth)
+- [ ] **DEL-08**: **Öffentliches** GitHub-Repo `EnverShala/vizpatch` mit Tag `v1.0.0`. Public, weil nichts Firmen-Spezifisches im Code liegt und GHCR-Package `ghcr.io/EnverShala/vizpatch` damit ebenfalls anonym pullbar ist (Phase-4-Update-Flow braucht keine PAT-Auth).
 
 ### Tests (TEST) — pragmatisches Minimum
 
@@ -46,7 +46,7 @@
 
 ### Deployment beim Kunden (DEP)
 
-- [ ] **DEP-01**: Verzeichnis `/opt/kea` auf Kundenserver, Docker Compose gestartet, `agent-data`-Volume angelegt
+- [ ] **DEP-01**: Verzeichnis `/opt/vizpatch` auf Kundenserver, Docker Compose gestartet, `agent-data`-Volume angelegt
 - [ ] **DEP-02**: `.env` mit echten Credentials befüllt, `chmod 600`
 - [ ] **DEP-03**: `context.md` mit echten Firmen-Inhalten befüllt (Zusammenarbeit im Setup-Call)
 - [ ] **DEP-04**: Erster erfolgreicher Poll-Zyklus, `docker compose logs` zeigt "Connected to IMAP", keine Auth-Fehler
@@ -69,14 +69,21 @@
 - [ ] **OPS-04**: Externes Monitoring (Empfehlung UptimeRobot): Container-Health via `docker compose ps` bzw. Cron-Skript
 - [ ] **OPS-05**: Backup des `agent-data`-Volumes (nur State-DB, keine Mails) — Empfehlung im README
 
+### Web-UI (UI)
+
+- [ ] **UI-01**: FastAPI-basierter zweiter Docker-Service `webui` läuft neben `agent` in derselben `docker-compose.yml`; Server-rendered HTML (Jinja2), Basic-Auth via `WEBUI_USER` + `WEBUI_PASSWORD` in `.env`; erreichbar unter `http://<host>:8080` mit Health-Endpoint `/healthz`
+- [ ] **UI-02**: Konfig-Formular liest und schreibt `.env` + `context.md` auf das Host-Volume; Felder: E-Mail, IMAP-Passwort (masked), Anthropic-API-Key (masked), Drafts-Ordner-Name, Autostart-Checkbox; Validierung + `chmod 600` bei jedem Save-Vorgang; keine Secrets in HTML-Rendering nach Save
+- [ ] **UI-03**: "Context per KI generieren"-Aktion — Betreiber gibt Firmen-URL oder Freitext-Beschreibung ein, WebUI ruft Sonnet 4.6 mit externem Prompt-Template `prompts/context-seed.txt` auf, gibt Draft im editierbaren `<textarea>` zurück (About / Öffnungszeiten / Angebote / FAQ / Ton / Signatur — gleiche Struktur wie `context.md.example`); nichts wird ohne Betreiber-Save persistiert
+- [ ] **UI-04**: Steuer-Panel mit "Start / Stop / Restart / Status"-Buttons — steuert den `agent`-Service via Docker-SDK (Docker-Socket `/var/run/docker.sock` als Read-Write-Bind-Mount in `webui`); Status-Kachel zeigt Container-State, Uptime und letzten Poll-Zeitpunkt (Read-Only-Zugriff auf `agent-data/state.sqlite`)
+- [ ] **UI-05**: "Update"-Aktion — pullt neuestes `vizpatch:latest` Image (aus GitHub Container Registry `ghcr.io/EnverShala/vizpatch`) oder lädt lokalen Tarball via Upload-Feld; führt `docker compose up -d agent` aus, protokolliert Ergebnis im UI; Autostart-Checkbox schreibt/entfernt systemd-Unit `/etc/systemd/system/vizpatch.service` via Post-Install-Helper-Skript (einmalig manuell mit Root aktiviert)
+
 ---
 
 ## v2 Requirements (nach v1)
 
 - IMAP-IDLE statt Polling (niedrigere Latenz, weniger Rate-Limit-Risiko)
-- Web-UI zum Editieren von `context.md` und Anzeigen aktueller Drafts
+- Draft-Vorschau + Prompt-Tuning direkt in WebUI (letzte 20 Drafts anzeigen, Prompt-A/B-Test)
 - Slack-/Telegram-Notification bei neuem Draft
-- Prompt-Tuning-UI (verschiedene Prompt-Varianten A/B testen)
 - Learning aus Betreiber-Edits (edited Draft vs. LLM-Draft als Trainingsdaten für System-Prompt-Verbesserung)
 - OAuth2 statt App-Password für M365/Gmail (moderner, aber komplexer)
 - Multi-Tenant-Modus (mehrere Tankstellen im gleichen Setup)
@@ -86,7 +93,7 @@
 ## Out of Scope (v1)
 
 - InboxZero oder andere Fremdsoftware als Basis
-- Web-UI, Frontend, Dashboard
+- Draft-Editor / Draft-History im WebUI (nur Konfig + Steuerung, keine Mail-Anzeige)
 - Rules-Engine (im Klassifikations-Prompt implizit)
 - Bulk-Unsubscribe, Cold-Email-Blocker als separate Features
 - Auto-Send / Fully Autonomous Reply
@@ -108,3 +115,4 @@
 | DEP-01 … DEP-06 | Phase 2 | Pending |
 | OP-01 … OP-05 | Phase 3 | Pending |
 | OPS-01 … OPS-05 | Phase 3 | Pending |
+| UI-01 … UI-05 | Phase 4 | Pending |

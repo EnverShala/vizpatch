@@ -1,0 +1,36 @@
+From: MAILER-DAEMON@mail.example.com
+To: shala@vizionists.com
+Subject: Undelivered Mail Returned to Sender
+Date: Sat, 11 Jul 2026 10:05:32 +0200
+Message-ID: <bounce-2026-07-11-100532@mail.example.com>
+Auto-Submitted: auto-replied
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is the mail system at host mail.example.com.
+
+I'm sorry to have to inform you that your message could not
+be delivered to one or more recipients. It's attached below.
+
+For further assistance, please send mail to postmaster.
+
+If you do so, please include this problem report. You can
+delete your own text from the attached returned message.
+
+                   The mail system
+
+<info@old-client-domain.de> (expanded from <info@old-client-domain.de>):
+    host mail.old-client-domain.de[203.0.113.42] said: 550 5.1.1
+    The email account that you tried to reach does not exist. Please try
+    double-checking the recipient's email address for typos or unnecessary
+    spaces. Learn more at https://support.example.com/mail/troubleshoot
+    (in reply to RCPT TO command)
+
+------ Undeliverable message follows ------
+
+Delivery-Date: Sat, 11 Jul 2026 09:58:04 +0200
+To: info@old-client-domain.de
+Subject: Angebot Jahres-Inspektion
+
+Guten Tag,
+...

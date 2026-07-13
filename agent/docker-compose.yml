@@ -1,0 +1,18 @@
+services:
+  agent:
+    image: vizpatch:v1.0.0
+    container_name: vizpatch-agent
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./context.md:/config/context.md:ro
+      - ./prompts:/app/prompts:ro
+      - agent-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agent-data:

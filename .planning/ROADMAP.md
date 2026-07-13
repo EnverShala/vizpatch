@@ -1,4 +1,4 @@
-# Roadmap — KI Email Agent (Eigenbau-Miniagent für Tankstelle)
+# Roadmap — Vizpatch (schmaler KI-Email-Agent)
 
 **Mode:** MVP · Vertikale Slices · Coarse (3 Phasen)
 **Ziel-Kalenderzeit bis Live:** 3–5 Werktage
@@ -10,10 +10,11 @@
 | # | Phase | Ziel | Requirements | Success Criteria | Status |
 |---|---|---|---|---|---|
 | 1 | Agent MVP bauen | Docker-Container läuft lokal gegen Test-IMAP-Account, klassifiziert und draftet | AGT-01…10, DEL-01…08, TEST-01…03, PRE-01 | 5 | ✅ Complete (2026-07-10) |
-| 2 | Deployment beim Kunden | Container läuft auf Kundenserver, echter Live-Betrieb, erste Drafts entstehen | PRE-02…05, DEP-01…06 | 4 | ⏳ Pending |
+| 2 | Deployment beim Kunden | Container läuft auf Kundenserver, echter Live-Betrieb, erste Drafts entstehen | PRE-02…05, DEP-01…06 | 4 | 🔧 Code fertig, Pre-Test ausstehend |
 | 3 | Tuning & Übergabe | Draft-Qualität ≥ 80 %, Betreiber nutzt selbständig | OP-01…05, OPS-01…05 | 5 | ⏳ Pending |
+| 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
 
-**33 Requirements, 3 Phasen. Alle v1-Requirements gemappt.**
+**38 Requirements, 4 Phasen (v1). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
 
 ---
 
@@ -30,7 +31,7 @@
 2. `docker compose up -d` startet den Container gegen einen Test-`.env` erfolgreich, `logs -f` zeigt "Polling started"
 3. Testmail an IMAP-Testaccount schicken → innerhalb von ≤ 10 Min erscheint Draft im Drafts-Ordner mit korrektem Threading
 4. Klassifikation trennt sichtbar: Newsletter-Test-Mail bekommt keinen Draft, Kundenanfrage-Test-Mail bekommt Draft
-5. Tag `v1.0.0` im GitHub-Repo `vizionists/kea-tankstelle` gepusht
+5. Tag `v1.0.0` im GitHub-Repo `EnverShala/vizpatch` gepusht
 
 **Requirements mapped:** PRE-01 (parallel — Kundenprovider klären), AGT-01, AGT-02, AGT-03, AGT-04, AGT-05, AGT-06, AGT-07, AGT-08, AGT-09, AGT-10, DEL-01, DEL-02, DEL-03, DEL-04, DEL-05, DEL-06, DEL-07, DEL-08, TEST-01, TEST-02, TEST-03
 
@@ -61,19 +62,19 @@
 Plans:
 **Wave 1**
 
-- [ ] 02.01-auto-provider-detection-PLAN.md - Auto-Provider-Detection (D-23) fuer IMAP-Host/Port/SSL/Sent-Ordner aus E-Mail-Domain
-- [ ] 02-02-PLAN.md - Auto-CREATE Drafts-Ordner (D-25) bei erstem APPEND-Fehler
-- [ ] 02-06-PLAN.md - Preflight + AVV-Checklist + Kunden-Interview (PRE-02/PRE-04/PRE-05)
+- [x] 02.01-auto-provider-detection-PLAN.md - Auto-Provider-Detection (D-23) fuer IMAP-Host/Port/SSL/Sent-Ordner aus E-Mail-Domain
+- [x] 02-02-PLAN.md - Auto-CREATE Drafts-Ordner (D-25) bei erstem APPEND-Fehler
+- [x] 02-06-PLAN.md - Preflight + AVV-Checklist + Kunden-Interview (PRE-02/PRE-04/PRE-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md - Konversations-Kontext via Live-IMAP-Fetch (D-26) mit Thread- und Sender-Fallback
-- [ ] 02-04-PLAN.md - Docker-Bind-Mount fuer prompts (D-16) + Deployment-Paket-Builder (D-04/D-22)
+- [x] 02-03-PLAN.md - Konversations-Kontext via Live-IMAP-Fetch (D-26) mit Thread- und Sender-Fallback
+- [x] 02-04-PLAN.md - Docker-Bind-Mount fuer prompts (D-16) + Deployment-Paket-Builder (D-04/D-22)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 02-05-PLAN.md - Pre-Deployment-Test bei Vizionists (D-18/D-20): 14 .eml-Fixtures + Test-Ablauf + Report-Template
-- [ ] 02-07-PLAN.md - Vor-Ort-Setup-Runbook (DEP-01/DEP-03..06) inkl. Remote-Setups-Sektion (D-02)
+- [x] 02-07-PLAN.md - Vor-Ort-Setup-Runbook (DEP-01/DEP-03..06) inkl. Remote-Setups-Sektion (D-02)
 
 **Hauptrisiken:**
 
@@ -107,6 +108,56 @@ Plans:
 
 ---
 
+### Phase 4: Web-UI & Multi-Kunde
+
+**Goal:** Der Kunde erhält gemeinsam mit dem Agent-Container einen zweiten Docker-Service — eine schlanke Browser-UI (FastAPI + Server-rendered HTML) — der ihm erlaubt, den Agent per Web-Formular zu konfigurieren, zu starten/stoppen, `context.md` per LLM-Assistent zu erzeugen und Updates auszurollen. Kein SSH mehr für Setup und Betrieb.
+**Mode:** mvp
+**Ziel-Aufwand:** 1.5–2 Werktage Vizionists
+**Depends on:** Phase 2 (Container v1.0.0 lauffähig, Deployment-Paket-Builder vorhanden)
+**Success Criteria:**
+
+1. Zweiter Docker-Service `webui` läuft neben `agent` in derselben `docker-compose.yml`; Betreiber öffnet `http://<server-ip>:8080` und sieht die Konfig-Seite ohne Login-Overhead (Basic-Auth reicht)
+2. Konfig-Formular schreibt `.env` (E-Mail, Passwort, API-Key, Drafts-Ordner-Name) + `context.md` valide auf das Host-Volume, `chmod 600` bleibt erhalten
+3. "Context per KI generieren"-Button ruft Sonnet 4.6 mit einem Website-URL- oder Firmen-Beschreibungs-Input auf, produziert ein `context.md`-Draft im Textfeld, das der Betreiber vor dem Speichern editieren kann
+4. "Start / Stop / Status"-Buttons steuern den `agent`-Service via Docker-Socket-Mount; Status-Kachel zeigt `Up | Stopped | Error` + letzten Poll-Zeitpunkt aus SQLite-State
+5. "Autostart"-Checkbox schreibt/entfernt eine systemd-Unit (`vizpatch.service`) auf dem Host, sodass beide Compose-Services beim Reboot automatisch starten
+6. "Update"-Button pullt neuestes Image aus GitHub Container Registry (oder lädt lokalen Tarball) und startet den `agent`-Service neu ohne UI-Neustart; Rollback-Pfad dokumentiert
+
+**Requirements mapped:** UI-01, UI-02, UI-03, UI-04, UI-05
+
+**Plans:** 5 plans (5 waves sequentiell — jeder Plan baut auf UI-State des Vorgängers auf, gemeinsame Dateien webui/src/main.py, webui/src/templates/index.html, webui/Dockerfile werden sequentiell erweitert)
+
+Plans:
+**Wave 1**
+
+- [ ] 04.01-walking-skeleton-PLAN.md - FastAPI /healthz Container + docker-compose Erweiterung um webui-Service (UI-01 partiell)
+
+**Wave 2** *(blocked on 04.01)*
+
+- [ ] 04.02-config-formular-PLAN.md - Basic-Auth + Konfig-Formular liest/schreibt .env + context.md mit Masking und chmod 600 (UI-01 + UI-02)
+
+**Wave 3** *(blocked on 04.02)*
+
+- [ ] 04.03-steuerung-status-PLAN.md - Start/Stop/Restart Buttons via Docker-Socket + Status-Kachel mit HTMX-Refresh und Last-Poll aus SQLite (UI-04)
+
+**Wave 4** *(blocked on 04.03)*
+
+- [ ] 04.04-context-ki-assistent-PLAN.md - LLM-Seed via Sonnet 4.6 + prompts/context-seed.txt + Warn-Banner (UI-03)
+
+**Wave 5** *(blocked on 04.04)*
+
+- [ ] 04.05-update-autostart-deployment-PLAN.md - GHCR-Pull + Tarball-Upload + install-autostart.sh + build-deployment-package.sh v1.1.0 (UI-05)
+
+
+**Hauptrisiken:**
+
+- Docker-Socket-Mount vom `webui`-Container hat Root-äquivalente Rechte auf dem Host → Basic-Auth zwingend erforderlich, Doku warnt vor Exposure jenseits LAN
+- LLM-generierter `context.md`-Seed halluziniert Öffnungszeiten/Preise → Textfeld ist ausdrücklich als Draft-für-Bearbeitung markiert, Betreiber-Prüfung Pflicht
+- systemd-Unit-Schreiben braucht Root — WebUI kann das nicht selbst, muss per Post-Install-Skript einmalig aktiviert werden; Fallback: kein Autostart, `restart: unless-stopped` bleibt
+- Update-Button lädt Image während laufender Poll-Zyklen → sauberer Stop → Pull → Start, kein Restart-Loop
+
+---
+
 ## Estimation
 
 | Phase | Vizionists-Aufwand | Kunden-Beteiligung |
@@ -114,17 +165,17 @@ Plans:
 | Phase 1 | 1.5–2.5 Tage | keine |
 | Phase 2 | ~8–10 h (D-23 30–45 Min + D-25 15 Min + D-26 2–3 h + 2–4 h Vor-Test IONOS + 0.5–1 h Vor-Ort) | ~1 h vor Ort + ~30 Min Interview vorab (nur E-Mail+Passwort+Drafts-Ordner) |
 | Phase 3 | 0.5–1 Tag (verteilt) | 1 h Übergabe, ~30 Min Feedback pro Draft-Batch |
-| **Summe** | **~3 Werktage** | **~5 h** |
+| Phase 4 | 1.5–2 Tage | ~30 Min Erst-Konfig per WebUI vor Ort |
+| **Summe** | **~4.5–5 Werktage** | **~5.5 h** |
 
-**Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 3 (Tuning + Übergabe). **Nach 2 Kalenderwochen läuft der Agent produktiv beim Kunden.**
-
-Bei sehr straffem Timing (Vizionists 3 Tage konzentriert, Kunde parallel Preflight erledigt): **Ende Woche 1 live**.
+**Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 4 (Web-UI) → Vor-Ort-Termin bei Esso Leonberg mit UI-Rollout. Woche 3 = Phase 3 (Tuning + Übergabe, teilweise parallel).
 
 ---
 
 ## Dependencies zwischen Phasen
 
 - Phase 2 setzt Phase 1 (fertiger Container) und PRE-01…05 voraus
-- Phase 3 setzt Phase 2 (Live-Betrieb) und ~1 Woche gesammelte Real-Drafts voraus
+- Phase 4 setzt Phase 2 (Container + Deployment-Paket-Builder) voraus, kann vor Phase 3 laufen
+- Phase 3 setzt Phase 2 (Live-Betrieb) und ~1 Woche gesammelte Real-Drafts voraus; kann parallel zu Phase 4 laufen (Feedback aus Live-Betrieb informiert UI-Tuning)
 
 Preflight-Requirements (PRE-01…05) können teilweise parallel zu Phase 1 vom Kunden bearbeitet werden.

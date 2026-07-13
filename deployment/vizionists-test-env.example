@@ -3,7 +3,7 @@
 
 IMAP_USER=shala@vizionists.com
 IMAP_PASSWORD=<ionos-app-password>       # aus IONOS Kundencenter -> E-Mail -> App-Passwörter
-IMAP_DRAFTS_FOLDER=KEA-Test-Entwürfe     # Neuer Ordner — Auto-CREATE wird beim ersten Draft getestet
+IMAP_DRAFTS_FOLDER=Vizpatch     # Manuell im Mail-Client angelegt (Enver 2026-07-13)
 OWN_EMAIL_ADDRESS=shala@vizionists.com
 
 ANTHROPIC_API_KEY=<sk-ant-xxx>

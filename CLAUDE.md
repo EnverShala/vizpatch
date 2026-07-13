@@ -2,11 +2,11 @@
 
 ## Projekt
 
-**KI Email Agent** — schmaler Eigenbau-Miniagent für **eine Tankstelle**. Python + Docker + IMAP + Anthropic-LLM. Kein InboxZero, kein Framework, keine Web-UI.
+**Vizpatch** — schmaler Eigenbau-KI-Email-Agent. Python + Docker + IMAP + Anthropic-LLM. Kein InboxZero, kein Framework, Web-UI erst in Phase 4. **Erster Kunde:** Esso-Tankstelle Leonberg (Single-Tenant-Rollout, Produkt selbst ist branchen-agnostisch).
 
 ## Ziel in einer Zeile
 
-Eingehende Mails werden auf Kundenanfragen klassifiziert; für jede relevante Mail entsteht ein Antwort-Draft im IMAP-`Drafts`-Ordner der Tankstelle. Der Betreiber prüft im normalen Mail-Programm und sendet.
+Eingehende Mails werden auf Kundenanfragen klassifiziert; für jede relevante Mail entsteht ein Antwort-Draft im IMAP-`Drafts`-Ordner des Kunden-Postfachs. Der Betreiber prüft im normalen Mail-Programm und sendet.
 
 ## Nicht-Ziele
 
@@ -46,7 +46,7 @@ Eingehende Mails werden auf Kundenanfragen klassifiziert; für jede relevante Ma
 ## Repo-Layout (in Phase 1 zu bauen)
 
 ```
-vizionists/kea-tankstelle/
+EnverShala/vizpatch/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml

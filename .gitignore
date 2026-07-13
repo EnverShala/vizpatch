@@ -1,0 +1,28 @@
+# Deployment-Artefakte (gebaute Tarballs)
+dist/
+
+# Backup vom migrierten agent-Submodule (lokal, nicht ins Repo)
+.git-backup-agent/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Secrets — Kunde-spezifisch, niemals ins Repo
+.env
+!.env.example
+!*env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local build artifacts
+*.log
+agent/.git.disabled/
