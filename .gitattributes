@@ -1,0 +1,33 @@
+# Erzwinge LF überall — Code läuft im Linux-Docker-Container.
+# Windows-Editoren (VS Code, Cursor) kommen problemlos mit LF klar.
+
+# Default: alle Textfiles auf LF
+* text=auto eol=lf
+
+# Explizit LF für kritische Formate
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.json text eol=lf
+*.env.example text eol=lf
+*env.example  text eol=lf
+Dockerfile text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Binaries — nicht anfassen
+*.tar    binary
+*.tar.gz binary
+*.zip    binary
+*.eml    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.pdf    binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
