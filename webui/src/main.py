@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config_io, docker_ctrl, state_reader
+from . import auth, config_io, docker_ctrl, llm_seed, state_reader
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -62,6 +62,25 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
         request,
         "_status_card.html",
         {"status": status, "last_poll": last_poll, "action_result": result},
+    )
+
+
+@app.post("/context/generate", response_class=HTMLResponse)
+def context_generate(
+    request: Request,
+    firma_input: str = Form(..., max_length=5000),
+    user: str = Depends(auth.require_auth),
+):
+    try:
+        seed_text = llm_seed.generate(firma_input)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="LLM service error")
+    return templates.TemplateResponse(
+        request, "_seed_output.html", {"seed_text": seed_text, "firma_input": firma_input}
     )
 
 

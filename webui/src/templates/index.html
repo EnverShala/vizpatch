@@ -6,6 +6,18 @@
 
 {% include "_status_card.html" %}
 
+<section class="seed-section">
+  <h2>Context per KI generieren</h2>
+  <label>Beschreibung der Firma (Freitext oder Website-Auszug einfügen):<br>
+    <textarea name="firma_input" rows="6" maxlength="5000"></textarea>
+  </label>
+  <button hx-post="/context/generate" hx-include="[name='firma_input']" hx-target="#seed-output" hx-swap="innerHTML" hx-indicator=".htmx-indicator">
+    Context per KI generieren
+  </button>
+  <span class="htmx-indicator">&#9203; Generiere (~10s)...</span>
+  <div id="seed-output"></div>
+</section>
+
 <form action="/save" method="post">
   <fieldset>
     <legend>IMAP-Zugang</legend>
