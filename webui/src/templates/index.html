@@ -61,4 +61,13 @@
 
   <button type="submit">Speichern</button>
 </form>
+<section class="update-section">
+  <h2>Update</h2>
+  <button hx-post="/update/pull" hx-target="#update-log" hx-swap="innerHTML" hx-confirm="Update pullen und agent neu starten?">Latest von GHCR pullen</button>
+  <form hx-post="/update/upload" hx-encoding="multipart/form-data" hx-target="#update-log" hx-swap="innerHTML">
+    <input type="file" name="tarball" accept=".tar" required>
+    <button type="submit">Tarball hochladen und Update starten</button>
+  </form>
+  <div id="update-log"></div>
+</section>
 {% endblock %}

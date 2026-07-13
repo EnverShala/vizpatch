@@ -58,3 +58,57 @@ def control_agent(action: str) -> dict:
     elif action == "restart":
         container.restart(timeout=30)
     return {"ok": True, "action": action}
+
+
+def pull_and_restart(image_ref: str = "ghcr.io/EnverShala/vizpatch:latest") -> list[str]:
+    log: list[str] = []
+    client = _get_client()
+    try:
+        for chunk in client.api.pull(image_ref, stream=True, decode=True):
+            status = chunk.get("status", "")
+            progress = chunk.get("progress", "")
+            if status or progress:
+                log.append(f"{status} {progress}".strip())
+    except APIError as e:
+        log.append(f"pull_error: {e}")
+        return log
+    version = os.getenv("WEBUI_AGENT_VERSION", "v1.1.0")
+    try:
+        client.images.get(image_ref).tag("vizpatch", tag=version)
+        log.append(f"tagged vizpatch:{version}")
+    except Exception as e:
+        log.append(f"tag_error: {e}")
+    result = subprocess.run(
+        ["docker", "compose", "up", "-d", "agent"],
+        cwd=COMPOSE_DIR,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        log.append(result.stdout)
+    if result.stderr:
+        log.append(f"stderr: {result.stderr}")
+    return log
+
+
+def load_and_restart(tarball_path: Path) -> list[str]:
+    if not tarball_path.exists():
+        raise FileNotFoundError(tarball_path)
+    log: list[str] = []
+    client = _get_client()
+    with tarball_path.open("rb") as f:
+        images = client.images.load(f)
+    log.append(f"loaded: {[img.tags for img in images]}")
+    result = subprocess.run(
+        ["docker", "compose", "up", "-d", "agent"],
+        cwd=COMPOSE_DIR,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        log.append(result.stdout)
+    if result.stderr:
+        log.append(f"stderr: {result.stderr}")
+    return log
