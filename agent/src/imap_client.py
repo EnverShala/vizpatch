@@ -46,6 +46,25 @@ class ImapClient:
                 continue
             yield msg
 
+    def detect_drafts_folder(self) -> Optional[str]:
+        """Auto-Discovery via IMAP SPECIAL-USE (RFC 6154).
+        Sucht nach einem Ordner mit \\Drafts-Flag. Gibt None zurück wenn der
+        Server das Feature nicht announciert oder kein Draft-Ordner markiert ist.
+        """
+        assert self._mailbox is not None, "Use inside 'with' block"
+        try:
+            for folder_info in self._mailbox.folder.list():
+                flags = tuple(str(f) for f in (folder_info.flags or ()))
+                if any("Drafts" in f for f in flags):
+                    self.logger.info(
+                        "drafts_folder_detected_via_special_use",
+                        extra={"folder": folder_info.name, "flags": flags},
+                    )
+                    return folder_info.name
+        except Exception as e:
+            self.logger.warning("special_use_detection_failed", extra={"error": str(e)})
+        return None
+
     def append_to_drafts(self, raw_msg_bytes: bytes) -> None:
         """APPEND mit Auto-CREATE-Fallback bei fehlendem Drafts-Ordner (D-25)."""
         assert self._mailbox is not None, "Use inside 'with' block"

@@ -32,6 +32,7 @@ def mock_config(tmp_path: Path) -> Config:
         imap_user="test@example.com",
         imap_password="dummy",
         imap_drafts_folder="Drafts",
+        imap_drafts_folder_explicit=True,
         imap_sent_folder="Sent",
         imap_inbox_folder="INBOX",
         poll_interval_seconds=300,

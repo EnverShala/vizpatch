@@ -54,9 +54,25 @@
     <label for="imap_password">IMAP-Passwort (IMAP_PASSWORD)</label>
     <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
 
+    {% set drafts_source = drafts_status.detection_source if drafts_status else None %}
+    {% if drafts_source == 'unresolved' %}
+    <div class="banner-error">
+      &#9888; Kein Drafts-Ordner gefunden — Server hat keinen \Drafts-markierten Ordner announciert und die Provider-Tabelle deckt diese Domain nicht ab. Bitte manuell setzen:
+    </div>
     <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER)</label>
-    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or 'Vizpatch' }}">
-    <p class="hint">Standard: <code>Vizpatch</code> — wird beim ersten Draft automatisch angelegt falls nicht vorhanden</p>
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or '' }}" placeholder="z. B. Drafts, Entwürfe, INBOX.Drafts">
+    {% elif drafts_source in ('special-use', 'provider') %}
+    <p class="hint">
+      &#10003; <strong>Drafts-Ordner automatisch erkannt:</strong> <code>{{ drafts_status.drafts_folder }}</code>
+      {% if drafts_source == 'special-use' %}(via IMAP SPECIAL-USE-Flag){% else %}(Provider-Default){% endif %}
+    </p>
+    {% elif drafts_source == 'explicit' or env.IMAP_DRAFTS_FOLDER %}
+    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER, manuell gesetzt)</label>
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or drafts_status.drafts_folder or '' }}">
+    <p class="hint">Leer lassen um Auto-Discovery wieder zu aktivieren.</p>
+    {% else %}
+    <p class="hint">Drafts-Ordner wird beim ersten Poll automatisch erkannt (IMAP SPECIAL-USE oder Provider-Tabelle).</p>
+    {% endif %}
 
   </fieldset>
 

@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sqlite3
@@ -5,6 +6,20 @@ from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def get_drafts_folder_status() -> dict:
+    """Liest /data/agent_status.json (vom Agent-Container geschrieben).
+    Enthält aktuellen Drafts-Ordner + Detection-Source (explicit|special-use|provider|unresolved).
+    """
+    path = Path(os.getenv("AGENT_STATUS_FILE", "/data/agent_status.json"))
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("agent_status_read_failed", extra={"error": str(e)})
+        return {}
 
 
 def get_last_poll() -> datetime | None:

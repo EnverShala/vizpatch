@@ -40,6 +40,7 @@ def index(
     context_md = config_io.read_context_md()
     status = docker_ctrl.get_agent_status()
     last_poll = state_reader.get_last_poll()
+    drafts_status = state_reader.get_drafts_folder_status()
     missing = config_io.get_missing_config()
     return templates.TemplateResponse(
         request,
@@ -52,6 +53,7 @@ def index(
             "error": error,
             "status": status,
             "last_poll": last_poll,
+            "drafts_status": drafts_status,
             "configured": not missing,
             "missing": missing,
             "auth_enabled": auth.is_auth_enabled(),
@@ -129,7 +131,7 @@ def save(
     imap_user: str = Form(...),
     imap_password: str = Form(""),
     anthropic_api_key: str = Form(""),
-    imap_drafts_folder: str = Form(...),
+    imap_drafts_folder: str = Form(""),
     autostart_enabled: str = Form("false"),
     context_md: str = Form(""),
     webui_user: str = Form(""),
@@ -178,9 +180,10 @@ def save(
         "IMAP_USER": imap_user,
         # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups
         "OWN_EMAIL_ADDRESS": imap_user,
-        "IMAP_DRAFTS_FOLDER": imap_drafts_folder,
         "AUTOSTART_ENABLED": "true" if autostart_enabled in ("true", "on", "1") else "false",
     }
+    if imap_drafts_folder.strip() != "":
+        updates["IMAP_DRAFTS_FOLDER"] = imap_drafts_folder.strip()
     if imap_password.strip() != "":
         updates["IMAP_PASSWORD"] = imap_password
     if anthropic_api_key.strip() != "":

@@ -10,7 +10,9 @@ from typing import Optional
 
 from anthropic import Anthropic
 
-from . import classify, generate, pii, state
+from dataclasses import replace
+
+from . import classify, generate, pii, state, status_writer
 from .config import Config, load_config
 from .draft import build_reply_draft
 from .imap_client import ImapClient
@@ -145,6 +147,43 @@ def _poll_once(config: Config, anthropic_client: Anthropic, logger: logging.Logg
 CONFIG_WAIT_SECONDS = 30
 
 
+def _resolve_drafts_folder(config: Config, logger: logging.Logger) -> Config:
+    """Resolution-Chain für den Drafts-Ordner:
+      1. User hat IMAP_DRAFTS_FOLDER explizit gesetzt → respektieren
+      2. IMAP SPECIAL-USE Auto-Discovery (\\Drafts-Flag)
+      3. Statischer Provider-Default (bereits in config.imap_drafts_folder)
+      4. Als Fallback bleibt der Provider-Default; Fehler wird notiert
+    Schreibt das Ergebnis in /data/agent_status.json (für WebUI).
+    """
+    if config.imap_drafts_folder_explicit:
+        logger.info("drafts_folder_source_explicit", extra={"folder": config.imap_drafts_folder})
+        status_writer.write_status(
+            drafts_folder=config.imap_drafts_folder,
+            detection_source="explicit",
+        )
+        return config
+
+    detected: str | None = None
+    try:
+        with ImapClient(config, logger=logger) as imap:
+            detected = imap.detect_drafts_folder()
+    except Exception as e:
+        logger.warning("drafts_folder_probe_failed", extra={"error": str(e)})
+
+    if detected:
+        logger.info("drafts_folder_source_special_use", extra={"folder": detected})
+        status_writer.write_status(drafts_folder=detected, detection_source="special-use")
+        return replace(config, imap_drafts_folder=detected)
+
+    # Fallback: provider_config-Wert (bereits in config.imap_drafts_folder)
+    logger.info("drafts_folder_source_provider_default", extra={"folder": config.imap_drafts_folder})
+    status_writer.write_status(
+        drafts_folder=config.imap_drafts_folder,
+        detection_source="provider",
+    )
+    return config
+
+
 def _wait_for_config(logger: logging.Logger) -> Config:
     """Wartet in einer Schleife bis /config/.env vollständig ist.
     Kein Crash / kein Restart-Loop bei leerer Zero-Config-Installation —
@@ -189,6 +228,8 @@ def main() -> int:
         },
     )
     state.init_db(config.state_db)
+
+    config = _resolve_drafts_folder(config, logger)
 
     anthropic_client = Anthropic(api_key=config.anthropic_api_key)
 

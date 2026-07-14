@@ -110,9 +110,10 @@ def test_get_missing_config_empty_env(tmp_path, monkeypatch):
     missing = config_io.get_missing_config()
     assert "IMAP_USER" in missing
     assert "IMAP_PASSWORD" in missing
-    assert "IMAP_DRAFTS_FOLDER" in missing
     assert "ANTHROPIC_API_KEY" in missing
     assert "context.md" in missing
+    # IMAP_DRAFTS_FOLDER ist NICHT mehr Pflicht — Auto-Discovery
+    assert "IMAP_DRAFTS_FOLDER" not in missing
     assert config_io.is_configured() is False
 
 

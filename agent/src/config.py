@@ -17,6 +17,10 @@ REQUIRED_ENV_VARS = [
     "ANTHROPIC_API_KEY",
 ]
 
+# IMAP_DRAFTS_FOLDER ist nicht Pflicht: der Agent probiert Auto-Discovery
+# (IMAP SPECIAL-USE → provider_config → statischer Fallback "Drafts").
+# Nur wenn User explizit im WebUI setzt, wird der Wert respektiert.
+
 
 @dataclass(frozen=True)
 class Config:
@@ -27,6 +31,7 @@ class Config:
     imap_user: str
     imap_password: str
     imap_drafts_folder: str
+    imap_drafts_folder_explicit: bool
     imap_sent_folder: str
     imap_inbox_folder: str
 
@@ -73,18 +78,21 @@ def load_config(env_file: str | None = None) -> Config:
     if missing:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
 
+    drafts_folder_env = os.getenv("IMAP_DRAFTS_FOLDER", "").strip()
+    drafts_explicit = bool(drafts_folder_env)
+
     imap_host_override = os.getenv("IMAP_HOST")
     if imap_host_override:
         imap_cfg = {
             "host": imap_host_override,
             "port": int(os.getenv("IMAP_PORT", "993")),
             "ssl": os.getenv("IMAP_USE_SSL", "true").lower() == "true",
-            "drafts": os.getenv("IMAP_DRAFTS_FOLDER", "Drafts"),
+            "drafts": drafts_folder_env or "Drafts",
             "sent": os.getenv("IMAP_SENT_FOLDER", "Sent"),
         }
     else:
         imap_cfg = resolve_imap_config(os.environ["IMAP_USER"])
-        imap_cfg["drafts"] = os.getenv("IMAP_DRAFTS_FOLDER", imap_cfg["drafts"])
+        imap_cfg["drafts"] = drafts_folder_env or imap_cfg["drafts"]
         imap_cfg["sent"] = os.getenv("IMAP_SENT_FOLDER", imap_cfg["sent"])
 
     prompts_dir = Path(os.getenv("PROMPTS_DIR", "/app/prompts"))
@@ -102,6 +110,7 @@ def load_config(env_file: str | None = None) -> Config:
         imap_user=os.environ["IMAP_USER"],
         imap_password=os.environ["IMAP_PASSWORD"],
         imap_drafts_folder=imap_cfg["drafts"],
+        imap_drafts_folder_explicit=drafts_explicit,
         imap_sent_folder=imap_cfg["sent"],
         imap_inbox_folder=os.getenv("IMAP_INBOX_FOLDER", "INBOX"),
         poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "300")),
