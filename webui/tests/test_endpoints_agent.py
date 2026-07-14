@@ -44,8 +44,9 @@ def test_agent_status_returns_status_card(authed_client, mocker):
     assert "running" in response.text
 
 
-def test_agent_start_action(authed_client, mocker):
+def test_agent_start_action(authed_client, mocker, tmp_path, monkeypatch):
     mock_client, mock_container = _mock_running_docker(mocker)
+    _write_full_config(tmp_path, monkeypatch)
     response = authed_client.post("/agent/start", auth=("admin", "pw"))
     assert response.status_code == 200
     mock_container.start.assert_called_once()
@@ -84,3 +85,71 @@ def test_status_shows_last_poll(authed_client, mocker, tmp_path, monkeypatch):
     response = authed_client.get("/agent/status", auth=("admin", "pw"))
     assert response.status_code == 200
     assert "2026-07-13" in response.text
+
+
+def _write_full_config(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "IMAP_USER=u@x.de\nIMAP_PASSWORD=pw\nIMAP_DRAFTS_FOLDER=Drafts\n"
+        "OWN_EMAIL_ADDRESS=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n",
+        encoding="utf-8",
+    )
+    context_file = tmp_path / "context.md"
+    context_file.write_text("Inhalt", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+
+
+def test_agent_start_blocked_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
+    _mock_running_docker(mocker)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
+    response = authed_client.post("/agent/start", auth=("admin", "pw"))
+    assert response.status_code == 400
+    assert "Konfiguration unvollständig" in response.text
+    assert "IMAP_USER" in response.text
+
+
+def test_agent_restart_blocked_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
+    _mock_running_docker(mocker)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
+    response = authed_client.post("/agent/restart", auth=("admin", "pw"))
+    assert response.status_code == 400
+    assert "Konfiguration unvollständig" in response.text
+
+
+def test_agent_stop_allowed_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
+    mock_client, mock_container = _mock_running_docker(mocker)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
+    response = authed_client.post("/agent/stop", auth=("admin", "pw"))
+    assert response.status_code == 200
+    mock_container.stop.assert_called_once()
+
+
+def test_agent_start_succeeds_when_configured(authed_client, mocker, tmp_path, monkeypatch):
+    mock_client, mock_container = _mock_running_docker(mocker)
+    _write_full_config(tmp_path, monkeypatch)
+    response = authed_client.post("/agent/start", auth=("admin", "pw"))
+    assert response.status_code == 200
+    mock_container.start.assert_called_once()
+
+
+def test_status_card_disables_buttons_when_incomplete(authed_client, mocker, tmp_path, monkeypatch):
+    _mock_running_docker(mocker)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
+    response = authed_client.get("/agent/status", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "disabled" in response.text
+    assert "gesperrt" in response.text
+
+
+def test_status_card_enables_buttons_when_configured(authed_client, mocker, tmp_path, monkeypatch):
+    _mock_running_docker(mocker)
+    _write_full_config(tmp_path, monkeypatch)
+    response = authed_client.get("/agent/status", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "disabled" not in response.text
+    assert "gesperrt" not in response.text

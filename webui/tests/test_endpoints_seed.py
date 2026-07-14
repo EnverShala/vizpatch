@@ -19,7 +19,7 @@ def test_context_generate_requires_auth(authed_client, mocker):
     assert response.status_code == 401
 
 
-def test_context_generate_returns_seed_html(authed_client, mocker):
+def test_context_generate_returns_plain_text(authed_client, mocker):
     _mock_docker_running(mocker)
     mocker.patch("src.llm_seed.generate", return_value="# About\nMocked content")
     response = authed_client.post(
@@ -28,10 +28,8 @@ def test_context_generate_returns_seed_html(authed_client, mocker):
         data={"firma_input": "Meine Tankstelle"},
     )
     assert response.status_code == 200
-    assert "Mocked content" in response.text
-    assert "KI-Draft" in response.text
-    assert 'id="seed-output"' in response.text
-    assert 'id="seed-draft"' in response.text
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "# About\nMocked content"
 
 
 def test_context_generate_too_long(authed_client, mocker):
@@ -55,7 +53,7 @@ def test_context_generate_llm_error(authed_client, mocker):
     assert response.status_code == 500
 
 
-def test_index_shows_seed_section(authed_client, mocker, tmp_path, monkeypatch):
+def test_index_shows_ki_helper(authed_client, mocker, tmp_path, monkeypatch):
     _mock_docker_running(mocker)
     env_file = tmp_path / ".env"
     env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
@@ -65,5 +63,8 @@ def test_index_shows_seed_section(authed_client, mocker, tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
     response = authed_client.get("/", auth=("admin", "pw"))
     assert response.status_code == 200
-    assert 'name="firma_input"' in response.text
-    assert 'hx-post="/context/generate"' in response.text
+    assert 'id="firma_input"' in response.text
+    assert 'onclick="generateContext(this)"' in response.text
+    assert 'id="context_md"' in response.text
+    # Nur EIN context.md-textarea sichtbar (name="context_md")
+    assert response.text.count('name="context_md"') == 1

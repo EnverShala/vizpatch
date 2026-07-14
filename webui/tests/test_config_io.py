@@ -101,3 +101,49 @@ def test_lazy_path_evaluation(tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_ENV_PATH", str(new_env))
     config_io.write_env({"KEY": "new_val"})
     assert "KEY=new_val" in new_env.read_text(encoding="utf-8")
+
+
+def test_get_missing_config_empty_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "does-not-exist.md"))
+    import src.config_io as config_io
+    missing = config_io.get_missing_config()
+    assert "IMAP_USER" in missing
+    assert "IMAP_PASSWORD" in missing
+    assert "IMAP_DRAFTS_FOLDER" in missing
+    assert "ANTHROPIC_API_KEY" in missing
+    assert "context.md" in missing
+    assert config_io.is_configured() is False
+
+
+def test_get_missing_config_full(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "IMAP_USER=u@x.de\nIMAP_PASSWORD=pw\nIMAP_DRAFTS_FOLDER=Drafts\n"
+        "OWN_EMAIL_ADDRESS=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n",
+        encoding="utf-8",
+    )
+    context_file = tmp_path / "context.md"
+    context_file.write_text("# Firma\nInhalt vorhanden.", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    import src.config_io as config_io
+    assert config_io.get_missing_config() == []
+    assert config_io.is_configured() is True
+
+
+def test_get_missing_config_whitespace_only_values(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "IMAP_USER=   \nIMAP_PASSWORD=pw\nIMAP_DRAFTS_FOLDER=Drafts\n"
+        "OWN_EMAIL_ADDRESS=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n",
+        encoding="utf-8",
+    )
+    context_file = tmp_path / "context.md"
+    context_file.write_text("   \n\n", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    import src.config_io as config_io
+    missing = config_io.get_missing_config()
+    assert "IMAP_USER" in missing
+    assert "context.md" in missing

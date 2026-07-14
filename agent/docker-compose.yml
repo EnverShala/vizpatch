@@ -1,11 +1,13 @@
 services:
   agent:
     image: vizpatch:v1.0.0
+    build: .
     container_name: vizpatch-agent
     restart: unless-stopped
-    env_file: .env
+    # Startet immer mit — wartet aber im Wait-for-Config-Loop bis /config/.env
+    # vollständig ist. Kein Crash, kein Restart-Loop bei leerer Zero-Config-Install.
     volumes:
-      - ./context.md:/config/context.md:ro
+      - ./config:/config:ro
       - ./prompts:/app/prompts:ro
       - agent-data:/data
     logging:
@@ -16,19 +18,20 @@ services:
 
   webui:
     image: vizpatch-webui:v1.1.0
-    build: ./webui
+    build: ../webui
     container_name: vizpatch-webui
     restart: unless-stopped
-    env_file: .env
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WEBUI_COMPOSE_DIR: /compose
     ports:
       - "8080:8080"
     group_add:
       - "${DOCKER_GID:-999}"
     volumes:
-      - ./.env:/config/.env:rw
-      - ./context.md:/config/context.md:rw
-      - ./docker-compose.yml:/config/docker-compose.yml:ro
-      - agent-data:/data:ro
+      - ./config:/config:rw
+      - ./docker-compose.yml:/compose/docker-compose.yml:ro
+      - agent-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     logging:
       driver: json-file

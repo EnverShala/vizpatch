@@ -13,7 +13,7 @@ def test_static_ionos():
     assert cfg["port"] == 993
     assert cfg["ssl"] is True
     assert cfg["drafts"] == "Drafts"
-    assert cfg["sent"] == "Sent"
+    assert cfg["sent"] == "Gesendete Objekte"
 
 
 def test_static_gmx_umlaut():

@@ -9,8 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --uid 1000 --create-home --shell /bin/bash webui
-
 WORKDIR /app
 
 # Layer-Caching: Dependencies zuerst
@@ -22,8 +20,12 @@ COPY src/ ./src/
 COPY static/ ./static/
 COPY prompts/ ./prompts/
 
-RUN mkdir -p /config && chown -R webui:webui /config /app
+# Entrypoint: seed /config/.env und /config/context.md falls fehlend (Zero-Config-Bootstrap)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER webui
+RUN mkdir -p /config
+
 EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -17,11 +17,18 @@ venv/
 !.env.example
 !*env.example
 
+# Zero-Config-Runtime-Verzeichnis (wird bei erstem Start von WebUI befüllt)
+agent/config/*
+!agent/config/.gitkeep
+
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Claude Code runtime state (worktrees, agent caches)
+.claude/
 
 # Local build artifacts
 *.log

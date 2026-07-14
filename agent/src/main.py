@@ -142,17 +142,42 @@ def _poll_once(config: Config, anthropic_client: Anthropic, logger: logging.Logg
         logger.info("poll_done", extra={"processed": count})
 
 
+CONFIG_WAIT_SECONDS = 30
+
+
+def _wait_for_config(logger: logging.Logger) -> Config:
+    """Wartet in einer Schleife bis /config/.env vollständig ist.
+    Kein Crash / kein Restart-Loop bei leerer Zero-Config-Installation —
+    Agent kann sofort mit Compose hochgezogen werden und "wacht auf"
+    sobald der Betreiber im WebUI-Formular gespeichert hat.
+    """
+    while not _shutdown:
+        try:
+            return load_config()
+        except RuntimeError as e:
+            logger.info(
+                "waiting_for_config",
+                extra={"reason": str(e), "retry_in_seconds": CONFIG_WAIT_SECONDS},
+            )
+            slept = 0
+            while slept < CONFIG_WAIT_SECONDS and not _shutdown:
+                time.sleep(min(5, CONFIG_WAIT_SECONDS - slept))
+                slept += 5
+    raise SystemExit(0)
+
+
 def main() -> int:
     signal.signal(signal.SIGTERM, _handle_sigterm)
     signal.signal(signal.SIGINT, _handle_sigterm)
 
+    # Basic-Logging vor Config-Load — damit Wait-Loop-Meldungen sichtbar sind
+    setup_logging("INFO")
+    boot_logger = logging.getLogger("vizpatch")
+
     try:
-        config = load_config()
-    except RuntimeError as e:
-        # setup basic logging so error is visible
-        setup_logging("INFO")
-        logging.getLogger("vizpatch").error("config_failed", extra={"error": str(e)})
-        return 1
+        config = _wait_for_config(boot_logger)
+    except SystemExit:
+        return 0
 
     logger = setup_logging(config.log_level)
     logger.info(

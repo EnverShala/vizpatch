@@ -1,63 +1,56 @@
-# Vizpatch-Deployment v1.1.0 — Setup mit WebUI
+# Vizpatch-Deployment v1.1.0 — Zero-Config-Setup
 
 ## Was ist im Paket
 
 - `vizpatch-v1.1.0.tar` — Docker-Image für den KI-E-Mail-Agenten
 - `vizpatch-webui-v1.1.0.tar` — Docker-Image für die Browser-UI
 - `docker-compose.yml` — Compose-Datei mit beiden Services
-- `deployment/` — Konfigurationsvorlagen (`.env`-Template, `context.md`-Vorlagen)
-- `prompts/` — Prompt-Templates inkl. `context-seed.txt` (neu in v1.1.0)
+- `config/` — leeres Verzeichnis, wird beim ersten WebUI-Start automatisch mit `.env` + `context.md` befüllt
+- `prompts/` — Prompt-Templates (`classify.txt`, `generate.txt`, `context-seed.txt`)
 - `scripts/install-autostart.sh` — Autostart bei Server-Reboot (optional)
 
-## Setup-Schritte
+## Setup-Schritte (5 Minuten, ohne Kommandozeilen-Editor)
 
-**1. Integrität prüfen:**
+**1. Integrität prüfen und Images laden:**
 ```bash
 sha256sum -c vizpatch-v1.1.0.tar.sha256
 sha256sum -c vizpatch-webui-v1.1.0.tar.sha256
-```
-
-**2. Images laden:**
-```bash
 docker load -i vizpatch-v1.1.0.tar
 docker load -i vizpatch-webui-v1.1.0.tar
 ```
 
-**3. Deployment-Ordner anlegen:**
+**2. Deployment-Ordner anlegen und Paket-Inhalt kopieren:**
 ```bash
 mkdir -p /opt/vizpatch && cd /opt/vizpatch
+# Paket-Inhalt hierher entpacken (docker-compose.yml, config/, prompts/, scripts/)
 ```
-Paket-Inhalt hierher kopieren (docker-compose.yml, prompts/, scripts/, deployment/).
 
-**4. `.env` erstellen:**
+**3. Docker-Socket-GID setzen (einmalig):**
 ```bash
-cp deployment/kunde-env.example .env && chmod 600 .env
-nano .env
+export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+echo "DOCKER_GID=$DOCKER_GID" >> ~/.bashrc   # optional: dauerhaft
 ```
-Pflichtfelder: `IMAP_USER`, `IMAP_PASSWORD`, `ANTHROPIC_API_KEY`, `IMAP_DRAFTS_FOLDER`, `OWN_EMAIL_ADDRESS`, `WEBUI_USER`, `WEBUI_PASSWORD` (Empfehlung: `openssl rand -base64 24`).
 
-**5. `context.md` initial befüllen:**
+**4. WebUI starten:**
 ```bash
-cp deployment/context.md.tankstelle-erstversion.md context.md
-```
-Später im Browser per KI-Assistent nachbessern.
-
-**6. Stack starten:**
-```bash
-docker compose up -d
+docker compose up -d webui
 ```
 
-**7. WebUI öffnen:**
-Browser: `http://<server-ip>:8080/` — Basic-Auth-Prompt erscheint.
-Login mit `WEBUI_USER` / `WEBUI_PASSWORD`.
+Der Agent-Service läuft absichtlich **noch nicht** — er wird erst später vom WebUI gestartet, sobald Konfiguration da ist.
 
-**8. Health-Check:**
-```bash
-curl http://localhost:8080/healthz
-```
-Erwartete Ausgabe: `{"status":"ok"}`
+**5. Browser öffnen:**
+`http://<server-ip>:8080/` — **kein Login-Prompt**, direkt das Setup-Formular.
 
-**9. Autostart einrichten (optional, empfohlen):**
+Ausfüllen:
+- IMAP-Adresse + Passwort (Provider wird automatisch erkannt)
+- Drafts-Ordner (Standard: `Vizpatch`, wird ggf. automatisch angelegt)
+- Anthropic API-Key
+- context.md (per KI-Assistent generieren oder manuell)
+- **Optional:** WebUI-Login (Benutzer + Passwort) — bei erreichbarer WebUI außerhalb Trust-Zone unbedingt setzen (bcrypt-gehasht gespeichert)
+
+→ **Speichern** → Start-Button wird aktiv → **Start** → Agent läuft.
+
+**6. Autostart einrichten (optional, empfohlen):**
 ```bash
 sudo bash /opt/vizpatch/scripts/install-autostart.sh enable
 ```
@@ -65,21 +58,24 @@ Test: `sudo reboot`, dann `docker ps` — beide Container sollten automatisch st
 
 ## Sicherheits-Warnung
 
-> **Achtung:** Der `webui`-Container hat via `/var/run/docker.sock` root-äquivalente Rechte auf dem Host-Server. Wer die WebUI erreichen und die Basic-Auth überwinden kann, hat effektiv Root am gesamten Host.
+> **Achtung:** Der `webui`-Container hat via `/var/run/docker.sock` root-äquivalente Rechte auf dem Host-Server. Wer die WebUI erreichen kann, hat effektiv Root am gesamten Host.
 >
-> **Konsequenz:** Der WebUI-Port (8080) darf **nur im lokalen Netzwerk** erreichbar sein. Weder eine öffentliche IP-Route noch ein Port-Forwarding im Router. `WEBUI_PASSWORD` muss zufällig generiert werden (z.B. `openssl rand -base64 24`) — nicht "admin" oder Ähnliches.
+> **Konsequenz:** Der WebUI-Port (8080) darf **nur im lokalen Netzwerk** erreichbar sein. Weder eine öffentliche IP-Route noch ein Port-Forwarding im Router. Wenn die WebUI aus einem Netzwerk erreichbar ist, das nicht ausschließlich der Betreiber kontrolliert → im Formular unter "WebUI-Login (optional)" einen Benutzer + zufälliges Passwort setzen (z. B. `openssl rand -base64 24`).
 
-## Rollback (manuell, v1)
+## Update / Rollback
 
-```bash
-docker images vizpatch        # alten Tag finden
-docker tag vizpatch:<alter-tag> vizpatch:v1.1.0
-docker compose up -d agent
-```
+- **Update:** WebUI → "Latest von GHCR pullen" oder "Tarball hochladen" → automatischer Agent-Restart.
+- **Manuelles Rollback (v1):**
+  ```bash
+  docker images vizpatch        # alten Tag finden
+  docker tag vizpatch:<alter-tag> vizpatch:v1.1.0
+  docker compose up -d agent
+  ```
 
 ## Troubleshooting
 
-- **Docker-Socket-GID falsch** (permission denied in webui-Logs): `sudo bash scripts/install-autostart.sh enable` — setzt DOCKER_GID neu (idempotent).
-- **WebUI erreichbar aber /healthz 502**: `docker logs vizpatch-webui`
-- **chmod-Warnungen für .env**: `sudo chown 1000:1000 /opt/vizpatch/.env /opt/vizpatch/context.md`
-- **webui-Log: "no such file: /config/docker-compose.yml"**: `docker-compose.yml` muss im selben Verzeichnis wie `.env` liegen (Bind-Mount-Voraussetzung).
+- **Docker-Socket-GID falsch** (permission denied in webui-Logs): `stat -c '%g' /var/run/docker.sock` → `.env` prüfen bzw. `DOCKER_GID` im Compose-Env setzen (siehe Schritt 3).
+- **WebUI erreichbar aber /healthz gibt 502:** `docker compose logs webui`
+- **Start-Buttons bleiben grau:** noch nicht alle Pflichtfelder ausgefüllt (siehe Warnbanner in der Status-Kachel — dort steht welches Feld fehlt).
+- **Login vergessen:** `sudo sed -i '/^WEBUI_/d' /opt/vizpatch/config/.env && docker compose restart webui` → WebUI ist wieder ohne Login erreichbar, danach im Formular neu setzen.
+- **Fresh reset:** `cd /opt/vizpatch && rm config/.env config/context.md && docker compose restart webui` — Setup startet von vorne.

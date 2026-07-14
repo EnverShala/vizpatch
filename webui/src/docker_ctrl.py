@@ -35,6 +35,22 @@ def get_agent_status() -> dict:
         return {"state": "error", "started_at": None, "container_name": AGENT_CONTAINER_NAME, "error": str(e)}
 
 
+def stop_and_remove_agent() -> dict:
+    try:
+        container = _get_client().containers.get(AGENT_CONTAINER_NAME)
+    except NotFound:
+        return {"ok": True, "note": "container did not exist"}
+    try:
+        container.stop(timeout=15)
+    except APIError as e:
+        logger.warning("agent_stop_failed", extra={"error": str(e)})
+    try:
+        container.remove(force=True)
+    except APIError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "removed": AGENT_CONTAINER_NAME}
+
+
 def control_agent(action: str) -> dict:
     if action not in {"start", "stop", "restart"}:
         raise ValueError(f"invalid action: {action}")

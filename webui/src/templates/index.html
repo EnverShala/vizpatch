@@ -4,26 +4,50 @@
 <div class="banner-success">&#10003; Änderungen gespeichert.</div>
 {% endif %}
 
+{% if reset %}
+<div class="banner-success">&#10003; Zero-Reset ausgeführt. Alle Daten gelöscht — bereit für frisches Setup.</div>
+{% endif %}
+
+{% if error %}
+<div class="banner-error">&#9888; {{ error }}</div>
+{% endif %}
+
+{% if not auth_enabled %}
+<div class="banner-warning">
+  &#9888; <strong>Kein Login-Schutz aktiv.</strong>
+  Diese WebUI hat Root-Zugriff auf den Host (Docker-Socket) — bitte nur im vertrauenswürdigen LAN erreichbar machen
+  oder unten unter "WebUI-Login" (optional) einen Benutzer + Passwort setzen.
+</div>
+{% endif %}
+
 {% include "_status_card.html" %}
 
-<section class="seed-section">
-  <h2>Context per KI generieren</h2>
-  <label>Beschreibung der Firma (Freitext oder Website-Auszug einfügen):<br>
-    <textarea name="firma_input" rows="6" maxlength="5000"></textarea>
-  </label>
-  <button hx-post="/context/generate" hx-include="[name='firma_input']" hx-target="#seed-output" hx-swap="innerHTML" hx-indicator=".htmx-indicator">
-    Context per KI generieren
-  </button>
-  <span class="htmx-indicator">&#9203; Generiere (~10s)...</span>
-  <div id="seed-output"></div>
-</section>
-
 <form action="/save" method="post">
+  <fieldset>
+    <legend>WebUI-Login (optional)</legend>
+    <p class="password-hint">&#9432; Nur nötig wenn die WebUI außerhalb des vertrauenswürdigen LAN erreichbar ist. <strong>Alle Felder leer lassen = kein Login-Schutz.</strong> Passwort wird bcrypt-gehasht gespeichert (nie im Klartext).</p>
+
+    <label for="webui_user">WebUI-Benutzername</label>
+    <input type="text" id="webui_user" name="webui_user" value="{{ env.WEBUI_USER or '' }}" placeholder="leer lassen = kein Login">
+
+    {% if password_configured %}
+    <label for="webui_password_current">Aktuelles Passwort <span class="hint-inline">(nur wenn Passwort geändert werden soll)</span></label>
+    <input type="password" id="webui_password_current" name="webui_password_current" value="" autocomplete="current-password" placeholder="leer lassen = Passwort unverändert">
+
+    <label for="webui_password_new">Neues Passwort <span class="hint-inline">(leer lassen = unverändert)</span></label>
+    <input type="password" id="webui_password_new" name="webui_password_new" value="" autocomplete="new-password" placeholder="leer lassen = unverändert">
+    {% else %}
+    <label for="webui_password_new">Passwort setzen <span class="hint-inline">(leer lassen = Login bleibt aus)</span></label>
+    <input type="password" id="webui_password_new" name="webui_password_new" value="" autocomplete="new-password" placeholder="leer lassen = kein Login aktivieren">
+    {% endif %}
+  </fieldset>
+
   <fieldset>
     <legend>IMAP-Zugang</legend>
 
     <label for="imap_user">E-Mail-Adresse (IMAP_USER)</label>
-    <input type="email" id="imap_user" name="imap_user" value="{{ env.IMAP_USER or '' }}">
+    <input type="email" id="imap_user" name="imap_user" value="{{ env.IMAP_USER or '' }}" required>
+    <p class="hint">Wird gleichzeitig als Own-Sender-Filter genutzt (verhindert dass der Agent auf eigene Ausgangs-Mails antwortet).</p>
 
     <p class="password-hint">&#9432; Passwort- und API-Key-Felder: leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
 
@@ -31,10 +55,9 @@
     <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
 
     <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER)</label>
-    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or '' }}">
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or 'Vizpatch' }}">
+    <p class="hint">Standard: <code>Vizpatch</code> — wird beim ersten Draft automatisch angelegt falls nicht vorhanden</p>
 
-    <label for="own_email_address">Eigene E-Mail (OWN_EMAIL_ADDRESS)</label>
-    <input type="email" id="own_email_address" name="own_email_address" value="{{ env.OWN_EMAIL_ADDRESS or '' }}">
   </fieldset>
 
   <fieldset>
@@ -54,13 +77,69 @@
   </fieldset>
 
   <fieldset>
-    <legend>context.md</legend>
-    <label for="context_md">Firmen-Kontext für den KI-Agenten</label>
+    <legend>context.md — Firmen-Kontext für den KI-Agenten</legend>
+    <p class="hint">Wird bei jeder E-Mail-Klassifikation und -Beantwortung in den Prompt injiziert. Öffnungszeiten, Angebote, Ton, FAQ.</p>
+
+    <details class="ki-helper">
+      <summary>Vorschlag von KI generieren lassen (optional)</summary>
+      <label for="firma_input">Kurzbeschreibung der Firma</label>
+      <textarea id="firma_input" rows="4" maxlength="5000" placeholder="z. B.: Esso-Tankstelle Leonberg, verkauft Kraftstoffe und Snacks, Öffnungszeiten Mo–So 06–22 Uhr, freundlich-professioneller Ton"></textarea>
+      <button type="button" id="ki-gen-btn" onclick="generateContext(this)">KI-Vorschlag generieren und unten einfügen</button>
+      <p class="banner-warning" id="ki-hint" style="display:none">&#9888; KI-Draft — bitte Öffnungszeiten und Preise manuell prüfen!</p>
+    </details>
+
+    <label for="context_md">context.md-Inhalt (wird gespeichert)</label>
     <textarea id="context_md" name="context_md" rows="20">{{ context_md }}</textarea>
   </fieldset>
 
   <button type="submit">Speichern</button>
 </form>
+
+<script>
+async function generateContext(btn) {
+  const descField = document.getElementById('firma_input');
+  const target = document.getElementById('context_md');
+  const hint = document.getElementById('ki-hint');
+  const desc = descField.value.trim();
+  if (!desc) { alert('Bitte erst eine Kurzbeschreibung eintragen.'); return; }
+  if (target.value.trim() && !confirm('Aktuellen context.md-Inhalt überschreiben?')) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '⏳ Generiere (~10s)…';
+  try {
+    const fd = new FormData();
+    fd.append('firma_input', desc);
+    const res = await fetch('/context/generate', {method: 'POST', body: fd});
+    if (!res.ok) {
+      const err = await res.text();
+      alert('Fehler ' + res.status + ':\n' + err);
+      return;
+    }
+    target.value = await res.text();
+    hint.style.display = 'block';
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+</script>
+
+<section class="danger-zone">
+  <h2>&#9888; Danger Zone — Zero-Reset</h2>
+  <p>Löscht die komplette Konfiguration (<code>.env</code>, <code>context.md</code>), verarbeitete E-Mails (<code>state.db</code>), stoppt und entfernt den Agent-Container. WebUI läuft weiter, ist danach wieder im Erst-Setup-Zustand (kein Login, leere Formular-Felder). <strong>Nicht rückgängig zu machen.</strong></p>
+
+  <details>
+    <summary>Zero-Reset öffnen…</summary>
+    <form action="/reset" method="post" onsubmit="return confirm('Wirklich alles löschen? Dies kann nicht rückgängig gemacht werden.');">
+      <label for="reset_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
+      <input type="text" name="confirmation" id="reset_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
+      <button type="submit" class="btn-danger">Jetzt alles löschen</button>
+    </form>
+  </details>
+</section>
+
 <section class="update-section">
   <h2>Update</h2>
   <button hx-post="/update/pull" hx-target="#update-log" hx-swap="innerHTML" hx-confirm="Update pullen und agent neu starten?">Latest von GHCR pullen</button>

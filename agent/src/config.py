@@ -62,7 +62,12 @@ def load_config(env_file: str | None = None) -> Config:
     if env_file:
         load_dotenv(env_file)
     else:
-        load_dotenv()
+        # Zero-Config-Layout: WebUI schreibt in /config/.env, Agent liest von dort.
+        default_env = Path(os.getenv("AGENT_ENV_FILE", "/config/.env"))
+        if default_env.exists():
+            load_dotenv(default_env)
+        else:
+            load_dotenv()
 
     missing = [k for k in REQUIRED_ENV_VARS if not os.getenv(k)]
     if missing:
