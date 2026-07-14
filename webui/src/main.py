@@ -126,75 +126,91 @@ def context_generate(
     return PlainTextResponse(seed_text)
 
 
+def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redirect_query: str) -> object:
+    """Section-Save (HTMX) → inline HTML-Fragment.
+    Full-Form-Save → Redirect zu / mit Query-Flag."""
+    if is_htmx:
+        css = "save-ok" if ok else "save-err"
+        icon = "&#10003;" if ok else "&#9888;"
+        return HTMLResponse(f'<span class="{css}">{icon} {message}</span>')
+    from urllib.parse import quote
+    return RedirectResponse(f"/?{redirect_query}={quote(message) if not ok else '1'}", status_code=303)
+
+
 @app.post("/save")
 def save(
-    imap_user: str = Form(...),
-    imap_password: str = Form(""),
-    anthropic_api_key: str = Form(""),
-    imap_drafts_folder: str = Form(""),
-    autostart_enabled: str = Form("false"),
-    context_md: str = Form(""),
-    webui_user: str = Form(""),
-    webui_password_current: str = Form(""),
-    webui_password_new: str = Form(""),
+    request: Request,
+    imap_user: str | None = Form(None),
+    imap_password: str | None = Form(None),
+    anthropic_api_key: str | None = Form(None),
+    imap_drafts_folder: str | None = Form(None),
+    autostart_enabled: str | None = Form(None),
+    context_md: str | None = Form(None),
+    webui_user: str | None = Form(None),
+    webui_password_current: str | None = Form(None),
+    webui_password_new: str | None = Form(None),
     user: str = Depends(auth.require_auth),
 ):
-    from urllib.parse import quote
-
+    is_htmx = request.headers.get("HX-Request") == "true"
     existing = config_io.read_env_raw()
-    webui_user_new = webui_user.strip()
+
+    # Passwort-Change-Logik — nur wenn WebUI-Login-Felder tatsächlich mitgesendet wurden
+    hashed_new_pw: str | None = None
+    webui_user_new = (webui_user or "").strip() if webui_user is not None else None
+    pw_current = webui_password_current or ""
+    pw_new = webui_password_new or ""
     existing_pw = existing.get("WEBUI_PASSWORD", "").strip()
 
-    # Passwort-Logik
-    hashed_new_pw: str | None = None
-    if existing_pw:
-        # Passwort bereits gesetzt — nur ändern wenn "Neues Passwort" ausgefüllt ist
-        if webui_password_new and not webui_password_current:
-            return RedirectResponse(
-                f"/?error={quote('Zum Ändern des Passworts bitte das aktuelle Passwort ins Feld darüber eintragen.')}",
-                status_code=303,
-            )
-        if webui_password_current and not webui_password_new:
-            return RedirectResponse(
-                f"/?error={quote('Aktuelles Passwort eingegeben, aber kein neues — bitte auch das Feld ‚Neues Passwort‘ ausfüllen (oder beide leer lassen um nichts zu ändern).')}",
-                status_code=303,
-            )
-        if webui_password_new and webui_password_current:
-            if not auth._verify_password(webui_password_current, existing_pw):
-                return RedirectResponse(
-                    f"/?error={quote('Aktuelles Passwort ist falsch.')}",
-                    status_code=303,
-                )
-            hashed_new_pw = auth.hash_password(webui_password_new)
-    else:
-        # Kein Passwort gesetzt
-        if webui_user_new and not webui_password_new:
-            return RedirectResponse(
-                f"/?error={quote('Beim ersten Setzen von WEBUI_USER muss auch ‚Neues Passwort‘ ausgefüllt sein (sonst wäre der Login unbrauchbar).')}",
-                status_code=303,
-            )
-        if webui_password_new:
-            hashed_new_pw = auth.hash_password(webui_password_new)
+    # Nur validieren wenn WebUI-Login-Felder überhaupt Teil der Submission sind
+    webui_section_submitted = (
+        webui_user is not None
+        or webui_password_current is not None
+        or webui_password_new is not None
+    )
+    if webui_section_submitted:
+        if existing_pw:
+            if pw_new and not pw_current:
+                return _save_response(request, is_htmx, False,
+                    "Zum Ändern des Passworts bitte das aktuelle Passwort eintragen.", "error")
+            if pw_current and not pw_new:
+                return _save_response(request, is_htmx, False,
+                    "Aktuelles Passwort eingegeben, aber kein neues — bitte auch ‚Neues Passwort‘ ausfüllen.", "error")
+            if pw_new and pw_current:
+                if not auth._verify_password(pw_current, existing_pw):
+                    return _save_response(request, is_htmx, False,
+                        "Aktuelles Passwort ist falsch.", "error")
+                hashed_new_pw = auth.hash_password(pw_new)
+        else:
+            if webui_user_new and not pw_new:
+                return _save_response(request, is_htmx, False,
+                    "Beim ersten Setzen von WEBUI_USER muss auch ‚Neues Passwort‘ ausgefüllt sein.", "error")
+            if pw_new:
+                hashed_new_pw = auth.hash_password(pw_new)
 
-    updates: dict[str, str] = {
-        "IMAP_USER": imap_user,
+    updates: dict[str, str] = {}
+    if imap_user is not None:
+        updates["IMAP_USER"] = imap_user
         # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups
-        "OWN_EMAIL_ADDRESS": imap_user,
-        "AUTOSTART_ENABLED": "true" if autostart_enabled in ("true", "on", "1") else "false",
-    }
-    if imap_drafts_folder.strip() != "":
+        updates["OWN_EMAIL_ADDRESS"] = imap_user
+    if autostart_enabled is not None:
+        updates["AUTOSTART_ENABLED"] = "true" if autostart_enabled in ("true", "on", "1") else "false"
+    if imap_drafts_folder is not None and imap_drafts_folder.strip() != "":
         updates["IMAP_DRAFTS_FOLDER"] = imap_drafts_folder.strip()
-    if imap_password.strip() != "":
+    if imap_password is not None and imap_password.strip() != "":
         updates["IMAP_PASSWORD"] = imap_password
-    if anthropic_api_key.strip() != "":
+    if anthropic_api_key is not None and anthropic_api_key.strip() != "":
         updates["ANTHROPIC_API_KEY"] = anthropic_api_key
     if webui_user_new:
         updates["WEBUI_USER"] = webui_user_new
     if hashed_new_pw is not None:
         updates["WEBUI_PASSWORD"] = hashed_new_pw
-    config_io.write_env(updates)
-    config_io.write_context_md_atomic(context_md)
-    return RedirectResponse("/?saved=1", status_code=303)
+
+    if updates:
+        config_io.write_env(updates)
+    if context_md is not None:
+        config_io.write_context_md_atomic(context_md)
+
+    return _save_response(request, is_htmx, True, "Gespeichert", "saved")
 
 
 @app.post("/reset")

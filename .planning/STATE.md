@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-07-13T00:00:00.000Z"
+last_updated: "2026-07-14T00:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
@@ -20,7 +20,7 @@ progress:
 
 ## Current Phase
 
-**Phase 4 — Web-UI & Multi-Kunde ✅ Code fertig. Ausstehend: manueller Browser-Checkpoint (Update-Flow + Deployment-Paket-Build `bash scripts/build-deployment-package.sh v1.1.0`) vor Live-Schaltung.**
+**Phase 4 — Web-UI & Multi-Kunde ✅ Code + Zero-Config-Overhaul + Auto-Discovery + Section-Save durch. End-to-End erfolgreich getestet mit Live-IMAP (IONOS) am 2026-07-14: echte Test-Mail → REPLY_NEEDED → Draft im "Entwürfe"-Ordner (via IMAP SPECIAL-USE detected). Deployment-Paket v1.1.0-Build (`bash scripts/build-deployment-package.sh v1.1.0`) noch offen.**
 
 ## Phase Status
 
@@ -29,7 +29,7 @@ progress:
 | 1 — Agent MVP bauen | ✅ Completed | 2026-07-09 | 2026-07-10 |
 | 2 — Deployment beim Kunden | ✅ Completed | 2026-07-11 | 2026-07-12 |
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
-| 4 — Web-UI & Multi-Kunde | ✅ Code fertig (59 Tests grün) | 2026-07-12 | 2026-07-13 |
+| 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
@@ -100,3 +100,4 @@ Einstieg: `/gsd:execute-phase 4` (beginnt mit Wave 1 = 04.01 Walking Skeleton).
 - **2026-07-13** — Produkt umbenannt: **KEA / kea-tankstelle → Vizpatch**. Rename in aktivem Code (`agent/src/*.py` Logger-Namen, `agent/Dockerfile` User, `agent/docker-compose.yml` Image+Container-Name, `agent/pyproject.toml` Package-Name, `agent/README.md`), aktiver Planung (`CLAUDE.md`, `.planning/*`, Phase-4-Plans + CONTEXT + RESEARCH), Skripten (`build-deployment-package.sh`) und Deployment-Templates. Historische Docs (Phase 1/2, `research/SUMMARY-inboxzero-obsolete.md`) und `dist/deployment-paket-v1.0.0/` unangetastet. Details: `.planning/quick/20260712-rename-kea-to-vizpatch/`.
 - **2026-07-13** — Positionierung nachgeschärft: "für Tankstelle" aus Produkt-Titeln entfernt (Vizpatch ist branchen-agnostisch, Tankstelle nur erster Kunde). Drafts-Ordner nun `Vizpatch` (Enver hat ihn im Mail-Client manuell so angelegt). **DEL-08 unverändert public** (Repo `EnverShala/vizpatch` ist öffentlich — GHCR-Package damit ebenfalls anonym pullbar). **D-45 neu in Phase-4-CONTEXT**: bestätigt kein PAT-Setup beim Kunden, `pull_and_restart` ohne `auth_config`.
 - **2026-07-13** — Phase 4 Code vollständig implementiert (5 Plans, 5 Waves). Commits: 04.01 Walking Skeleton, 04.02 Basic-Auth+Konfig-Formular, 04.03 Steuerung+Status, 04.04 KI-Assistent, 04.05 Update+Autostart+Deployment-Paket. **59 Tests grün, 1 skipped (chmod Windows)**. webui/ hat FastAPI+Jinja2+HTMX+Docker-SDK, alle Endpoints (/, /save, /agent/{action}, /agent/status, /context/generate, /update/pull, /update/upload, /healthz). Deployment-Paket v1.1.0 Builder bereit (`bash scripts/build-deployment-package.sh v1.1.0`). Ausstehend: manueller Browser-Checkpoint vor Vor-Ort-Termin Esso Leonberg.
+- **2026-07-14** — Phase-4-Nachtrag "Zero-Config-Overhaul + Live-Verification". Commits: `68d2a7a` (Zero-Config + bcrypt + UX-Overhaul, 27 Dateien), `c4986cd` (Drafts-Ordner Auto-Discovery via IMAP SPECIAL-USE, 10 Dateien), Section-Save-Buttons (in Arbeit). Kern-Änderungen: **(a)** WebUI startet ohne Vor-Config — `docker-entrypoint.sh` seedet `/config/.env` + `/config/context.md` beim ersten Start; **(b)** Login optional (Empty = kein Schutz + Warnbanner) mit bcrypt-Hashing + "Aktuelles/Neues Passwort"-Change-UX; **(c)** OWN_EMAIL_ADDRESS auto = IMAP_USER (Feld aus Formular entfernt); **(d)** Drafts-Ordner Auto-Discovery via RFC 6154 SPECIAL-USE (Fallback: provider_config); **(e)** Wait-for-Config-Loop im Agent (kein Restart-Loop bei leerer .env); **(f)** Danger-Zone / Zero-Reset-Button (löscht .env + context.md + state.db + Agent-Container); **(g)** Section-weise Save-Buttons (jedes Fieldset einzeln übernehmbar via HTMX, kein Page-Reload). **End-to-End-Test**: echte Test-Mail von privatem Gmail an IONOS-Postfach → Classify REPLY_NEEDED → Sonnet-Draft → APPEND in "Entwürfe" (via SPECIAL-USE detected) → im IONOS-Webmail sichtbar mit aktivem "Senden"-Button. **149 Tests grün** (63 agent + 86 webui + 3 neue Section-Save-Tests → 89 webui). Zombie-Container `kea-agent` (Prä-Rename) entfernt.

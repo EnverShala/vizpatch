@@ -41,38 +41,56 @@ Eingehende Mails werden auf Kundenanfragen klassifiziert; für jede relevante Ma
 - **Structured JSON Logging** über Python `logging` + JSON-Formatter, Docker-`json-file`-Driver rotiert
 - **Secrets** (`ANTHROPIC_API_KEY`, `IMAP_PASSWORD`) nur in `.env` (`chmod 600`), nie im Git
 - **Own-Sender-Filter** verhindert Reply-auf-Reply-Loops (`OWN_EMAIL_ADDRESS`)
-- **Docker-Volume `agent-data`** persistiert SQLite-State; `context.md` als Read-Only Mount
+- **Docker-Volume `agent-data`** persistiert SQLite-State + `agent_status.json`; **Bind-Mount `./config:/config`** enthält `.env` + `context.md` (Zero-Config: WebUI schreibt beim Speichern, Agent liest zur Laufzeit)
 
-## Repo-Layout (in Phase 1 zu bauen)
+## Repo-Layout (Stand nach Phase-4-Zero-Config-Overhaul)
 
 ```
 EnverShala/vizpatch/
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-├── .env.example
-├── context.md.example
-├── README.md
-├── prompts/
-│   ├── classify.txt
-│   └── generate.txt
-├── src/
-│   ├── __init__.py
-│   ├── main.py             # Polling-Loop
-│   ├── config.py           # .env + context.md + prompts laden
-│   ├── imap_client.py      # imap-tools Wrapper
-│   ├── state.py            # SQLite (processed_emails)
-│   ├── classify.py         # Haiku-Call
-│   ├── generate.py         # Sonnet-Call
-│   ├── draft.py            # RFC-5322 + Threading + IMAP APPEND
-│   ├── pii.py              # optional Regex-Redaction
-│   └── logging_setup.py    # JSON-Formatter
-└── tests/
-    ├── fixtures/*.eml
-    ├── test_classify.py
-    ├── test_generate.py
-    ├── test_draft.py
-    └── test_state.py
+├── agent/                         # Agent-Service (Polling + IMAP + LLM)
+│   ├── Dockerfile
+│   ├── docker-compose.yml         # beide Services (agent + webui)
+│   ├── pyproject.toml
+│   ├── .env.example               # nur als Referenz — WebUI schreibt live
+│   ├── context.md.example
+│   ├── config/.gitkeep            # Bind-Mount-Ziel (Zero-Config-Bootstrap)
+│   ├── prompts/{classify,generate}.txt
+│   └── src/
+│       ├── main.py                # Polling-Loop + Wait-for-Config + Drafts-Resolution
+│       ├── config.py              # .env + context.md + prompts laden
+│       ├── imap_client.py         # imap-tools Wrapper + detect_drafts_folder()
+│       ├── state.py               # SQLite (processed_emails)
+│       ├── classify.py            # Haiku-Call
+│       ├── generate.py            # Sonnet-Call
+│       ├── draft.py               # RFC-5322 + Threading + IMAP APPEND
+│       ├── pii.py                 # Regex-Redaction
+│       ├── logging_setup.py       # JSON-Formatter
+│       ├── provider_config.py     # Static+MX-Lookup für 10 IMAP-Provider
+│       └── status_writer.py       # /data/agent_status.json (Drafts-Ordner-Signal)
+├── webui/                         # Browser-UI-Service (FastAPI + Jinja2 + HTMX)
+│   ├── Dockerfile
+│   ├── docker-entrypoint.sh       # seedet /config beim ersten Start
+│   ├── prompts/context-seed.txt
+│   ├── static/{htmx.min.js,style.css}
+│   └── src/
+│       ├── main.py                # / + /save + /agent/{action} + /context/generate + /reset + /update/*
+│       ├── auth.py                # bcrypt + optionaler Login-Schutz
+│       ├── config_io.py           # .env read/write, get_missing_config
+│       ├── docker_ctrl.py         # Docker-SDK: start/stop/restart, pull, load, reset
+│       ├── llm_seed.py            # Sonnet-Call für context.md-Vorschlag
+│       ├── state_reader.py        # SQLite-Ro + agent_status.json-Ro
+│       └── templates/
+│           ├── base.html
+│           ├── index.html         # Setup-Formular mit section-weise Save-Buttons
+│           ├── _status_card.html
+│           └── ...
+├── deployment/                    # Kunden-Tarball-Templates
+│   ├── docker-compose.phase4.yml
+│   ├── README.phase4.md
+│   └── ...
+└── scripts/
+    ├── build-deployment-package.sh
+    └── install-autostart.sh
 ```
 
 ## GSD-Workflow

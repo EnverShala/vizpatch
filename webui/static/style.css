@@ -275,3 +275,58 @@ details.ki-helper button:disabled {
 .btn-danger:hover {
   background: #c82333;
 }
+
+.section-save {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #dee2e6;
+}
+
+.btn-section-save {
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-section-save:hover {
+  background: #545b62;
+}
+
+.save-inline-msg {
+  font-size: 0.85rem;
+  transition: opacity 0.3s;
+}
+
+.save-inline-msg .save-ok {
+  color: #155724;
+  font-weight: 500;
+}
+
+.save-inline-msg .save-err {
+  color: #721c24;
+  font-weight: 500;
+}
+
+.btn-save-all {
+  display: block;
+  background: #1e3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.85rem 2.5rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin: 1.5rem 0;
+}
+
+.btn-save-all:hover {
+  background: #2a5080;
+}

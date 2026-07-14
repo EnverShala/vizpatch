@@ -252,6 +252,84 @@ def test_save_password_change_wrong_current(client, tmp_path, monkeypatch):
     assert real_hash in env_file.read_text(encoding="utf-8")
 
 
+def test_section_save_htmx_returns_fragment(authed_client, tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("IMAP_USER=old@x.de\n", encoding="utf-8")
+    context_file = tmp_path / "context.md"
+    context_file.write_text("bestehender inhalt", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    # Nur die Anthropic-Section senden
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        headers={"HX-Request": "true"},
+        data={"anthropic_api_key": "sk-ant-new"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Gespeichert" in response.text
+    assert "save-ok" in response.text
+    # nur API-Key geschrieben, IMAP_USER unverändert, context.md unverändert
+    content = env_file.read_text(encoding="utf-8")
+    assert "ANTHROPIC_API_KEY=sk-ant-new" in content
+    assert "IMAP_USER=old@x.de" in content
+    assert context_file.read_text(encoding="utf-8") == "bestehender inhalt"
+
+
+def test_section_save_context_md_only(authed_client, tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("IMAP_USER=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n", encoding="utf-8")
+    context_file = tmp_path / "context.md"
+    context_file.write_text("alt", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        headers={"HX-Request": "true"},
+        data={"context_md": "neuer inhalt"},
+    )
+    assert response.status_code == 200
+    assert context_file.read_text(encoding="utf-8") == "neuer inhalt"
+    # .env unverändert
+    content = env_file.read_text(encoding="utf-8")
+    assert "IMAP_USER=u@x.de" in content
+    assert "ANTHROPIC_API_KEY=sk-ant-abc" in content
+
+
+def test_section_save_password_error_returns_html(authed_client, tmp_path, monkeypatch):
+    from src import auth
+    env_file = tmp_path / ".env"
+    real_hash = auth.hash_password("richtig")
+    env_file.write_text(f"WEBUI_USER=admin\nWEBUI_PASSWORD={real_hash}\n", encoding="utf-8")
+    context_file = tmp_path / "context.md"
+    context_file.write_text("", encoding="utf-8")
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
+    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    # Section-Save mit falschem aktuellen Passwort
+    from starlette.testclient import TestClient
+    from src.main import app
+    with TestClient(app) as client:
+        monkeypatch.delenv("WEBUI_USER", raising=False)
+        monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
+        response = client.post(
+            "/save",
+            auth=("admin", "richtig"),
+            headers={"HX-Request": "true"},
+            data={
+                "webui_user": "admin",
+                "webui_password_current": "falsch",
+                "webui_password_new": "neu",
+            },
+        )
+    assert response.status_code == 200
+    assert "save-err" in response.text
+    assert "falsch" in response.text.lower()
+    # Hash unverändert
+    assert real_hash in env_file.read_text(encoding="utf-8")
+
+
 def test_save_password_change_success(client, tmp_path, monkeypatch):
     from src import auth
     env_file = tmp_path / ".env"

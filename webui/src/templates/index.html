@@ -40,6 +40,10 @@
     <label for="webui_password_new">Passwort setzen <span class="hint-inline">(leer lassen = Login bleibt aus)</span></label>
     <input type="password" id="webui_password_new" name="webui_password_new" value="" autocomplete="new-password" placeholder="leer lassen = kein Login aktivieren">
     {% endif %}
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset" hx-target="#save-msg-webui" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-webui" class="save-inline-msg"></span>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -74,6 +78,10 @@
     <p class="hint">Drafts-Ordner wird beim ersten Poll automatisch erkannt (IMAP SPECIAL-USE oder Provider-Tabelle).</p>
     {% endif %}
 
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset" hx-target="#save-msg-imap" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-imap" class="save-inline-msg"></span>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -81,6 +89,10 @@
     <p class="password-hint">&#9432; API-Key leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
     <label for="anthropic_api_key">API-Key (ANTHROPIC_API_KEY)</label>
     <input type="password" id="anthropic_api_key" name="anthropic_api_key" value="" placeholder="**** (leer lassen = unverändert)">
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset" hx-target="#save-msg-anthropic" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-anthropic" class="save-inline-msg"></span>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -90,6 +102,10 @@
       Autostart aktiviert (AUTOSTART_ENABLED)
     </label>
     <p class="hint">Erfordert einmaliges <code>sudo ./install-autostart.sh enable</code> auf dem Host (siehe RUNBOOK)</p>
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset" hx-target="#save-msg-autostart" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-autostart" class="save-inline-msg"></span>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -106,9 +122,13 @@
 
     <label for="context_md">context.md-Inhalt (wird gespeichert)</label>
     <textarea id="context_md" name="context_md" rows="20">{{ context_md }}</textarea>
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset" hx-target="#save-msg-context" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-context" class="save-inline-msg"></span>
+    </div>
   </fieldset>
 
-  <button type="submit">Speichern</button>
+  <button type="submit" class="btn-save-all">Alles speichern</button>
 </form>
 
 <script>
