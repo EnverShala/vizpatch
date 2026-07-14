@@ -13,8 +13,9 @@
 | 2 | Deployment beim Kunden | Container läuft auf Kundenserver, echter Live-Betrieb, erste Drafts entstehen | PRE-02…05, DEP-01…06 | 4 | 🔧 Code fertig, Pre-Test ausstehend |
 | 3 | Tuning & Übergabe | Draft-Qualität ≥ 80 %, Betreiber nutzt selbständig | OP-01…05, OPS-01…05 | 5 | ⏳ Pending |
 | 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
+| 5 | Multi-LLM-Provider (v1.2) | WebUI-Dropdown zwischen Anthropic / OpenAI / Google Gemini, generischer `LLM_API_KEY` statt Provider-fest | LLM-01…04 (tbd) | 4 | 📋 Backlog — nach Esso-Rollout |
 
-**38 Requirements, 4 Phasen (v1). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
+**38 Requirements, 4 Phasen (v1) + Phase 5 (v1.2 Backlog). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
 
 ---
 
@@ -158,6 +159,33 @@ Plans:
 
 ---
 
+### Phase 5: Multi-LLM-Provider (v1.2 Backlog)
+
+**Goal:** Kunde wählt im WebUI zwischen Anthropic (Default), OpenAI und Google Gemini. Ein generisches `LLM_API_KEY`-Feld ersetzt das Provider-feste `ANTHROPIC_API_KEY`. Modell-Wahl passiert intern per Provider→Modellpaar-Mapping (Classify+Draft).
+**Mode:** mvp
+**Ziel-Aufwand:** ~5–7 h Vizionists
+**Depends on:** Phase 4 (WebUI + Config-Formular vorhanden), Esso-Rollout abgeschlossen (kein Regressions-Risiko für Live-Setup)
+**Motivation:** Kunden mit bestehendem OpenAI/Google-Budget können Vizpatch ohne zweiten Vertrag nutzen. Aktuell Anthropic-only ist nicht technisch, sondern historisch — Klassifikations- und Draft-Prompts sind simpel genug für alle drei Provider.
+
+**Success Criteria (Entwurf):**
+
+1. `LLM_PROVIDER`-Dropdown im WebUI-Formular (Anthropic | OpenAI | Google), API-Key-Feld heißt jetzt `LLM_API_KEY`
+2. Interner Adapter `llm_call(provider, model, prompt) -> str` routet zu jeweiligem SDK (`anthropic`, `openai`, `google-genai`)
+3. Modell-Defaults pro Provider hart verdrahtet: Anthropic→Haiku 4.5/Sonnet 4.6, OpenAI→GPT-4o-mini/GPT-4o, Google→Gemini 2.5 Flash/Pro
+4. Pre-Deployment-Test-Fixtures (14 `.eml`) erneut durchlaufen — je Provider ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5
+5. Zero-Config-Bootstrap: `docker-entrypoint.sh` seedet `.env` mit `LLM_PROVIDER=anthropic` als Default; alte `ANTHROPIC_API_KEY`-Configs werden beim Start migriert
+6. Doku: AVV-Hinweise pro Provider im WebUI-Setup-Hinweis (nicht 3 AVVs, sondern klarer Text "für den gewählten Provider ist ein AVV nötig")
+
+**Requirements mapped:** LLM-01…04 (bei Planung ergänzen)
+
+**Hauptrisiken:**
+
+- Prompt-Qualität streut über Provider → Pre-Test-Wiederholung ist Pflicht, ohne die kein Ship
+- OpenAI/Google-SDKs vergrößern Docker-Image (~5–10 MB) → akzeptabel
+- Config-Migration bricht bestehende Kunden-Installations → Migrations-Snippet in `docker-entrypoint.sh` (`ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
+
+---
+
 ## Estimation
 
 | Phase | Vizionists-Aufwand | Kunden-Beteiligung |
@@ -166,7 +194,8 @@ Plans:
 | Phase 2 | ~8–10 h (D-23 30–45 Min + D-25 15 Min + D-26 2–3 h + 2–4 h Vor-Test IONOS + 0.5–1 h Vor-Ort) | ~1 h vor Ort + ~30 Min Interview vorab (nur E-Mail+Passwort+Drafts-Ordner) |
 | Phase 3 | 0.5–1 Tag (verteilt) | 1 h Übergabe, ~30 Min Feedback pro Draft-Batch |
 | Phase 4 | 1.5–2 Tage | ~30 Min Erst-Konfig per WebUI vor Ort |
-| **Summe** | **~4.5–5 Werktage** | **~5.5 h** |
+| Phase 5 (v1.2) | ~5–7 h | 0 (optionales Upgrade) |
+| **Summe (v1)** | **~4.5–5 Werktage** | **~5.5 h** |
 
 **Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 4 (Web-UI) → Vor-Ort-Termin bei Esso Leonberg mit UI-Rollout. Woche 3 = Phase 3 (Tuning + Übergabe, teilweise parallel).
 
@@ -177,5 +206,6 @@ Plans:
 - Phase 2 setzt Phase 1 (fertiger Container) und PRE-01…05 voraus
 - Phase 4 setzt Phase 2 (Container + Deployment-Paket-Builder) voraus, kann vor Phase 3 laufen
 - Phase 3 setzt Phase 2 (Live-Betrieb) und ~1 Woche gesammelte Real-Drafts voraus; kann parallel zu Phase 4 laufen (Feedback aus Live-Betrieb informiert UI-Tuning)
+- Phase 5 (v1.2) setzt Phase 4 (WebUI-Formular) + abgeschlossenen Esso-Rollout voraus — kein Feature-Creep vor Live-Betrieb
 
 Preflight-Requirements (PRE-01…05) können teilweise parallel zu Phase 1 vom Kunden bearbeitet werden.
