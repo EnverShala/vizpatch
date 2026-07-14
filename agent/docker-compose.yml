@@ -30,7 +30,7 @@ services:
       - "${DOCKER_GID:-999}"
     volumes:
       - ./config:/config:rw
-      - ./docker-compose.yml:/compose/docker-compose.yml:ro
+      - .:/compose:ro
       - agent-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     logging:
