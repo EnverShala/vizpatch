@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=0.42,<1.0",
     "python-dotenv>=1.0,<2.0",
     "bcrypt>=4.2,<5.0",
+    "slowapi>=0.1.9,<1.0",
 ]
 
 [project.optional-dependencies]

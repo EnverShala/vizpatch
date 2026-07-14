@@ -28,6 +28,5 @@
   <div class="agent-buttons">
     <button hx-post="/agent/start" hx-target="#status-card" hx-swap="outerHTML" {% if configured is defined and not configured %}disabled title="Konfiguration unvollständig"{% endif %}>Start</button>
     <button hx-post="/agent/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
-    <button hx-post="/agent/restart" hx-target="#status-card" hx-swap="outerHTML" {% if configured is defined and not configured %}disabled title="Konfiguration unvollständig"{% endif %}>Restart</button>
   </div>
 </div>

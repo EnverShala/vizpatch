@@ -7,15 +7,39 @@ from pathlib import Path
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from . import auth, config_io, docker_ctrl, llm_seed, state_reader
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="Vizpatch WebUI", version="1.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="src/templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response
 
 
 @app.get("/healthz")
@@ -76,10 +100,10 @@ def agent_status(request: Request, user: str = Depends(auth.require_auth)):
 
 @app.post("/agent/{action}", response_class=HTMLResponse)
 def agent_action(request: Request, action: str, user: str = Depends(auth.require_auth)):
-    if action not in ("start", "stop", "restart"):
+    if action not in ("start", "stop"):
         raise HTTPException(status_code=400, detail="invalid action")
     missing = config_io.get_missing_config()
-    if missing and action in ("start", "restart"):
+    if missing and action == "start":
         status = docker_ctrl.get_agent_status()
         last_poll = state_reader.get_last_poll()
         return templates.TemplateResponse(
@@ -111,7 +135,9 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
 
 
 @app.post("/context/generate")
+@limiter.limit("10/minute")
 def context_generate(
+    request: Request,
     firma_input: str = Form(..., max_length=5000),
     user: str = Depends(auth.require_auth),
 ):
@@ -138,6 +164,7 @@ def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redi
 
 
 @app.post("/save")
+@limiter.limit("20/minute")
 def save(
     request: Request,
     imap_user: str | None = Form(None),

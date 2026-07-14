@@ -110,13 +110,12 @@ def test_agent_start_blocked_when_config_missing(authed_client, mocker, tmp_path
     assert "IMAP_USER" in response.text
 
 
-def test_agent_restart_blocked_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_restart_endpoint_removed(authed_client, mocker, tmp_path, monkeypatch):
+    """Restart-Endpoint wurde entfernt (Stop+Start reicht) — /agent/restart soll 400 liefern."""
     _mock_running_docker(mocker)
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
     response = authed_client.post("/agent/restart", auth=("admin", "pw"))
     assert response.status_code == 400
-    assert "Konfiguration unvollständig" in response.text
+    assert "invalid action" in response.text
 
 
 def test_agent_stop_allowed_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):

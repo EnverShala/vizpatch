@@ -24,3 +24,14 @@ def reset_docker_client_cache():
     docker_ctrl._client = None
     yield
     docker_ctrl._client = None
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    from src.main import limiter
+    from src import auth
+    limiter.reset()
+    auth._reset_login_tracking()
+    yield
+    limiter.reset()
+    auth._reset_login_tracking()
