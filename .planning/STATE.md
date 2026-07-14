@@ -70,18 +70,19 @@ progress:
 
 ## Next Action
 
-**Phase 4 ausführen — Web-UI (FastAPI + Jinja2 + HTMX + Docker-SDK, 2. Docker-Service):**
+**Zwei konkrete Todos vor dem Kundentermin Esso Leonberg (Reihenfolge festgelegt am 2026-07-14):**
 
-Plans stehen (5 Waves sequentiell, 04.01 → 04.05). Alle 4 BLOCKER + 8 WARNINGS aus Plan-Checker Iteration 1 behoben (Verification passed 2026-07-12 in Iteration 2).
+1. **Deployment-Paket v1.1.0 bauen:** `bash scripts/build-deployment-package.sh v1.1.0` → produziert `dist/deployment-paket-v1.1.0.tar.gz` mit Agent + WebUI + install-autostart.sh + RUNBOOK. Grundlage für Vor-Ort-Rollout.
+2. **Autostart auf echter Ubuntu-VM verifizieren:** Multipass oder Hyper-V, sudo install-autostart.sh enable + reboot. Grund: WSL-Autostart-Test am 2026-07-14 lief in Docker-Desktop-Bind-Mount-Cache-Bug (siehe Commit 2cfe60b + Memory `wsl_docker_desktop_bindmount.md`), muss auf nativem Linux nochmal grün laufen bevor Kunde.
+
+Erst wenn beide grün → Vor-Ort-Termin Esso Leonberg mit Browser-UI statt SSH-Setup.
+
+### Ältere Notizen zur Phase 4 (nur zur Historie)
 
 Kern-Artefakte:
 - `.planning/phases/04-web-ui-multi-kunde/04-CONTEXT.md` — D-27..D-44 Entscheidungen (FastAPI+Jinja2+HTMX, Docker-Socket + Basic-Auth, LLM-Seed via Sonnet 4.6, systemd via Post-Install-Skript, kein HTTPS in v1)
 - `.planning/phases/04-web-ui-multi-kunde/04-RESEARCH.md` — Stack-Versionen (FastAPI 0.139, docker 7.2, python-multipart 0.0.32), File-Struktur, Docker-Socket-GID-Passing, Update-Flow, Prompt-Template
 - `.planning/phases/04-web-ui-multi-kunde/04.01..05-PLAN.md` — je 3–5 Tasks mit read_first + acceptance_criteria
-
-Deployment-Paket v1.1.0 nach Phase-4-Abschluss bauen (`scripts/build-deployment-package.sh` erweitert in 04.05), dann Vor-Ort-Termin bei Esso Leonberg mit Browser-UI statt SSH-Setup.
-
-Einstieg: `/gsd:execute-phase 4` (beginnt mit Wave 1 = 04.01 Walking Skeleton).
 
 ## History
 
