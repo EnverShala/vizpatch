@@ -13,7 +13,7 @@
 | 2 | Deployment beim Kunden | Container läuft auf Kundenserver, echter Live-Betrieb, erste Drafts entstehen | PRE-02…05, DEP-01…06 | 4 | 🔧 Code fertig, Pre-Test ausstehend |
 | 3 | Tuning & Übergabe | Draft-Qualität ≥ 80 %, Betreiber nutzt selbständig | OP-01…05, OPS-01…05 | 5 | ⏳ Pending |
 | 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
-| 5 | Multi-LLM-Provider (v1.2) | WebUI-Dropdown zwischen Anthropic / OpenAI / Google Gemini, generischer `LLM_API_KEY` statt Provider-fest | LLM-01…04 (tbd) | 4 | 📋 Backlog — nach Esso-Rollout |
+| 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | WebUI-Dropdown Anthropic / OpenAI / Google Gemini, mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 
 **38 Requirements, 4 Phasen (v1) + Phase 5 (v1.2 Backlog). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
 
@@ -159,30 +159,53 @@ Plans:
 
 ---
 
-### Phase 5: Multi-LLM-Provider (v1.2 Backlog)
+### Phase 5: Multi-LLM, Multi-Agent & Verschlüsselung (v1.2)
 
-**Goal:** Kunde wählt im WebUI zwischen Anthropic (Default), OpenAI und Google Gemini. Ein generisches `LLM_API_KEY`-Feld ersetzt das Provider-feste `ANTHROPIC_API_KEY`. Modell-Wahl passiert intern per Provider→Modellpaar-Mapping (Classify+Draft).
+**Goal:** Der Betreiber verwaltet im WebUI mehrere Agenten (= Mail-Accounts) gleichzeitig: Agent-Dropdown (leer, solange kein Agent gespeichert ist), Anlegen/Bearbeiten/Löschen pro Agent, ein Docker-Container pro Agent. Pro Agent ist der LLM-Provider per Dropdown wählbar (Anthropic Default | OpenAI | Google Gemini) mit generischem `LLM_API_KEY`. Alle Secrets (IMAP-Passwort, API-Key) liegen verschlüsselt (Fernet) in den `.env`-Dateien; der Schlüssel liegt als `chmod 600`-Datei im Config-Volume. Bestehende Single-Agent-Installationen (Esso) werden beim ersten Start automatisch und verlustfrei migriert.
 **Mode:** mvp
-**Ziel-Aufwand:** ~5–7 h Vizionists
-**Depends on:** Phase 4 (WebUI + Config-Formular vorhanden), Esso-Rollout abgeschlossen (kein Regressions-Risiko für Live-Setup)
-**Motivation:** Kunden mit bestehendem OpenAI/Google-Budget können Vizpatch ohne zweiten Vertrag nutzen. Aktuell Anthropic-only ist nicht technisch, sondern historisch — Klassifikations- und Draft-Prompts sind simpel genug für alle drei Provider.
+**Ziel-Aufwand:** ~2–3 Werktage Vizionists
+**Depends on:** Phase 4 (WebUI + Config-Formular + Docker-SDK-Steuerung vorhanden), Esso-Rollout abgeschlossen (Migration wird gegen das Live-Setup-Layout getestet, kein Regressions-Risiko)
+**Motivation:** (a) Kunden mit bestehendem OpenAI/Google-Budget können Vizpatch ohne zweiten Vertrag nutzen. (b) Kunden mit mehreren Postfächern (info@, service@, zweiter Standort) brauchen mehrere Agenten unter einer UI. (c) Klartext-Secrets in `.env` sind bei Backups/Datei-Leaks ein vermeidbares Risiko.
 
-**Success Criteria (Entwurf):**
+**Success Criteria:**
 
-1. `LLM_PROVIDER`-Dropdown im WebUI-Formular (Anthropic | OpenAI | Google), API-Key-Feld heißt jetzt `LLM_API_KEY`
-2. Interner Adapter `llm_call(provider, model, prompt) -> str` routet zu jeweiligem SDK (`anthropic`, `openai`, `google-genai`)
-3. Modell-Defaults pro Provider hart verdrahtet: Anthropic→Haiku 4.5/Sonnet 4.6, OpenAI→GPT-4o-mini/GPT-4o, Google→Gemini 2.5 Flash/Pro
-4. Pre-Deployment-Test-Fixtures (14 `.eml`) erneut durchlaufen — je Provider ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5
-5. Zero-Config-Bootstrap: `docker-entrypoint.sh` seedet `.env` mit `LLM_PROVIDER=anthropic` als Default; alte `ANTHROPIC_API_KEY`-Configs werden beim Start migriert
-6. Doku: AVV-Hinweise pro Provider im WebUI-Setup-Hinweis (nicht 3 AVVs, sondern klarer Text "für den gewählten Provider ist ein AVV nötig")
+1. `LLM_PROVIDER`-Dropdown im Agent-Formular (Anthropic | OpenAI | Google), API-Key-Feld heißt `LLM_API_KEY`; interner Adapter `llm_call(...)` routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`) mit hart verdrahteten Modell-Defaults pro Provider (Classify+Draft-Paar)
+2. Agent-Dropdown im WebUI: leer bei frischer Installation; "Neuen Agent anlegen" erzeugt `/config/agents/<agent-id>/` mit eigener `.env` + `context.md`; Auswahl im Dropdown lädt das Formular für genau diesen Agenten; Löschen entfernt Config + Container + State nach Zwei-Stufen-Bestätigung
+3. Pro gespeichertem Agent startet/stoppt die WebUI einen eigenen Docker-Container (`vizpatch-agent-<agent-id>`) via Docker-SDK; Status-Kachel zeigt Zustand + letzten Poll je Agent; mind. 2 Agenten laufen parallel gegen 2 Test-Postfächer ohne Cross-Drafts
+4. Secrets stehen nur noch Fernet-verschlüsselt in den `.env`-Dateien (`enc:`-Prefix); Key-Datei wird beim ersten Start generiert (`chmod 600`, im Config-Volume); WebUI ver-/entschlüsselt transparent, Agent entschlüsselt beim Config-Load; Klartext-Legacy-Werte werden beim nächsten Save migriert
+5. Migration: bestehendes Single-Agent-Layout (`/config/.env` + `context.md`) wird beim ersten Start automatisch als Agent `default` übernommen (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`), der laufende Betrieb geht ohne Neukonfiguration weiter
+6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den gewählten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
 
-**Requirements mapped:** LLM-01…04 (bei Planung ergänzen)
+**Requirements mapped:** LLM-01, LLM-02, LLM-03, LLM-04, MA-01, MA-02, MA-03, MA-04, MA-05, SEC-01, SEC-02, SEC-03
+
+**Plans:** 6 plans (Wave 1: 05.01, 05.02 | Wave 2: 05.03, 05.04 | Wave 3: 05.05 | Wave 4: 05.06)
+
+Plans:
+**Wave 1**
+
+- [ ] 05.01-krypto-fundament-PLAN.md — Fernet-Krypto in Agent + WebUI + Phase-5-Dependencies + Versionsbump 1.2.0 (SEC-01)
+- [ ] 05.02-docker-multi-container-PLAN.md — Docker-SDK Multi-Container (Self-Inspection, create/list, Update-SDK-Loop) + Compose-Breaking-Change (MA-03, MA-04)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05.03-multi-llm-adapter-PLAN.md — Agent-LLM-Adapter + LLM_API_KEY/LLM_PROVIDER + Fernet-Decrypt beim Load (LLM-01, LLM-02, LLM-03, SEC-02)
+- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
+
+**Wave 3** *(blocked on 05.02 + 05.04)*
+
+- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Liste (MA-02, MA-04, LLM-01, LLM-04)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider + MA-05-Parallelbetrieb + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-05, SEC-03)
 
 **Hauptrisiken:**
 
 - Prompt-Qualität streut über Provider → Pre-Test-Wiederholung ist Pflicht, ohne die kein Ship
+- Migration bricht bestehende Kunden-Installation (Esso) → Migrations-Pfad wird gegen Kopie des Live-Layouts getestet, Rollback = altes Image + unverändertes Config-Backup
+- Dynamische Container pro Agent: WebUI erzeugt Container außerhalb von Compose → Naming/Labels/Volumes müssen sauber definiert sein, sonst Zombie-Container; `install-autostart.sh`/Reboot-Verhalten muss mehrere Agent-Container abdecken (`restart: unless-stopped`-Äquivalent via Docker-SDK-`restart_policy`)
+- Fernet-Key-Verlust = alle Secrets unlesbar → Key liegt im selben Config-Bind-Mount wie die `.env`s (Backup umfasst beides), Reset-Flow löscht Key mit
 - OpenAI/Google-SDKs vergrößern Docker-Image (~5–10 MB) → akzeptabel
-- Config-Migration bricht bestehende Kunden-Installations → Migrations-Snippet in `docker-entrypoint.sh` (`ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
 
 ---
 
@@ -194,7 +217,7 @@ Plans:
 | Phase 2 | ~8–10 h (D-23 30–45 Min + D-25 15 Min + D-26 2–3 h + 2–4 h Vor-Test IONOS + 0.5–1 h Vor-Ort) | ~1 h vor Ort + ~30 Min Interview vorab (nur E-Mail+Passwort+Drafts-Ordner) |
 | Phase 3 | 0.5–1 Tag (verteilt) | 1 h Übergabe, ~30 Min Feedback pro Draft-Batch |
 | Phase 4 | 1.5–2 Tage | ~30 Min Erst-Konfig per WebUI vor Ort |
-| Phase 5 (v1.2) | ~5–7 h | 0 (optionales Upgrade) |
+| Phase 5 (v1.2) | ~2–3 Werktage | 0 (optionales Upgrade) |
 | **Summe (v1)** | **~4.5–5 Werktage** | **~5.5 h** |
 
 **Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 4 (Web-UI) → Vor-Ort-Termin bei Esso Leonberg mit UI-Rollout. Woche 3 = Phase 3 (Tuning + Übergabe, teilweise parallel).
