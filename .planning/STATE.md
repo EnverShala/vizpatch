@@ -30,6 +30,7 @@ progress:
 | 2 — Deployment beim Kunden | ✅ Completed | 2026-07-11 | 2026-07-12 |
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
+| 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves, Plan-Checker passed) — Ausführung erst nach Esso-Rollout | — | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
@@ -84,6 +85,19 @@ Kern-Artefakte:
 - `.planning/phases/04-web-ui-multi-kunde/04-RESEARCH.md` — Stack-Versionen (FastAPI 0.139, docker 7.2, python-multipart 0.0.32), File-Struktur, Docker-Socket-GID-Passing, Update-Flow, Prompt-Template
 - `.planning/phases/04-web-ui-multi-kunde/04.01..05-PLAN.md` — je 3–5 Tasks mit read_first + acceptance_criteria
 
+## Phase-5-Plans (geplant 2026-07-15, Ausführung nach Esso-Rollout)
+
+| Plan | Was | Wave | Autonomous |
+|---|---|---|---|
+| 05.01 | Fernet-Krypto-Fundament (crypto.py Agent+WebUI, Key-Datei chmod 600, Deps openai/google-genai/cryptography, Version 1.2.0) | 1 | ja |
+| 05.02 | Docker-SDK Multi-Container (Self-Inspection, create/list pro agent_id, Update-SDK-Loop, Compose ohne statischen agent-Service) | 1 | ja |
+| 05.03 | LLM-Adapter im Agent (llm.py, LLM_PROVIDER/LLM_API_KEY, Fernet-Decrypt, classify+generate auf Adapter) | 2 | ja |
+| 05.04 | agents_io (per-Agent .env+context.md, Slug-Guard, rename/delete) + idempotente Migration Single→default | 2 | ja |
+| 05.05 | WebUI agent_id-Routing, /agents-CRUD, Agent-+Provider-Dropdown, Status-Liste, Multi-Agent-Zero-Reset | 3 | ja |
+| 05.06 | Verifikation: Modell-ID-Check, LLM-04-Fixtures je Provider (≥ 11/14), MA-05-Parallelbetrieb, Esso-Migrations-Abnahme, Paket v1.2.0 | 4 | nein (Checkpoints) |
+
+Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05-CONTEXT.md D-46..D-50, 05-RESEARCH.md, 05-PATTERNS.md, 6 PLAN.md). Requirements LLM-01…04, MA-01…05, SEC-01…03 in REQUIREMENTS.md.
+
 ## History
 
 - **2026-07-09** — Projekt initialisiert. Initialer Multi-Tenant-Plan.
@@ -101,4 +115,5 @@ Kern-Artefakte:
 - **2026-07-13** — Produkt umbenannt: **KEA / kea-tankstelle → Vizpatch**. Rename in aktivem Code (`agent/src/*.py` Logger-Namen, `agent/Dockerfile` User, `agent/docker-compose.yml` Image+Container-Name, `agent/pyproject.toml` Package-Name, `agent/README.md`), aktiver Planung (`CLAUDE.md`, `.planning/*`, Phase-4-Plans + CONTEXT + RESEARCH), Skripten (`build-deployment-package.sh`) und Deployment-Templates. Historische Docs (Phase 1/2, `research/SUMMARY-inboxzero-obsolete.md`) und `dist/deployment-paket-v1.0.0/` unangetastet. Details: `.planning/quick/20260712-rename-kea-to-vizpatch/`.
 - **2026-07-13** — Positionierung nachgeschärft: "für Tankstelle" aus Produkt-Titeln entfernt (Vizpatch ist branchen-agnostisch, Tankstelle nur erster Kunde). Drafts-Ordner nun `Vizpatch` (Enver hat ihn im Mail-Client manuell so angelegt). **DEL-08 unverändert public** (Repo `EnverShala/vizpatch` ist öffentlich — GHCR-Package damit ebenfalls anonym pullbar). **D-45 neu in Phase-4-CONTEXT**: bestätigt kein PAT-Setup beim Kunden, `pull_and_restart` ohne `auth_config`.
 - **2026-07-13** — Phase 4 Code vollständig implementiert (5 Plans, 5 Waves). Commits: 04.01 Walking Skeleton, 04.02 Basic-Auth+Konfig-Formular, 04.03 Steuerung+Status, 04.04 KI-Assistent, 04.05 Update+Autostart+Deployment-Paket. **59 Tests grün, 1 skipped (chmod Windows)**. webui/ hat FastAPI+Jinja2+HTMX+Docker-SDK, alle Endpoints (/, /save, /agent/{action}, /agent/status, /context/generate, /update/pull, /update/upload, /healthz). Deployment-Paket v1.1.0 Builder bereit (`bash scripts/build-deployment-package.sh v1.1.0`). Ausstehend: manueller Browser-Checkpoint vor Vor-Ort-Termin Esso Leonberg.
+- **2026-07-15** — Phase 5 komplett geplant (Scope erweitert von Multi-LLM-only auf Multi-LLM + Multi-Agent + Secrets-Verschlüsselung, Direktauftrag Betreiber). Roadmap + 12 neue Requirements (LLM/MA/SEC), 05-CONTEXT (D-46..D-50: ein Container pro Agent, /config/agents/<id>/-Layout, Fernet+Key-Datei ohne Master-Passwort, Provider pro Agent, Dropdown-Semantik), Research (SDK-Versionen verifiziert, OpenAI/Google-Modell-IDs LOW-confidence → Verifikations-Task), Pattern-Mapping (22 Dateien), 6 Pläne in 4 Waves. Plan-Checker Runde 1: 3 Blocker + 5 Warnings (context.md nicht agent-parametrisiert, rename_agent fehlte, /reset-Regression) → Revision → Runde 2 PASSED. Ausführung bewusst verschoben bis Esso-Rollout abgeschlossen.
 - **2026-07-14** — Phase-4-Nachtrag "Zero-Config-Overhaul + Live-Verification". Commits: `68d2a7a` (Zero-Config + bcrypt + UX-Overhaul, 27 Dateien), `c4986cd` (Drafts-Ordner Auto-Discovery via IMAP SPECIAL-USE, 10 Dateien), Section-Save-Buttons (in Arbeit). Kern-Änderungen: **(a)** WebUI startet ohne Vor-Config — `docker-entrypoint.sh` seedet `/config/.env` + `/config/context.md` beim ersten Start; **(b)** Login optional (Empty = kein Schutz + Warnbanner) mit bcrypt-Hashing + "Aktuelles/Neues Passwort"-Change-UX; **(c)** OWN_EMAIL_ADDRESS auto = IMAP_USER (Feld aus Formular entfernt); **(d)** Drafts-Ordner Auto-Discovery via RFC 6154 SPECIAL-USE (Fallback: provider_config); **(e)** Wait-for-Config-Loop im Agent (kein Restart-Loop bei leerer .env); **(f)** Danger-Zone / Zero-Reset-Button (löscht .env + context.md + state.db + Agent-Container); **(g)** Section-weise Save-Buttons (jedes Fieldset einzeln übernehmbar via HTMX, kein Page-Reload). **End-to-End-Test**: echte Test-Mail von privatem Gmail an IONOS-Postfach → Classify REPLY_NEEDED → Sonnet-Draft → APPEND in "Entwürfe" (via SPECIAL-USE detected) → im IONOS-Webmail sichtbar mit aktivem "Senden"-Button. **149 Tests grün** (63 agent + 86 webui + 3 neue Section-Save-Tests → 89 webui). Zombie-Container `kea-agent` (Prä-Rename) entfernt.

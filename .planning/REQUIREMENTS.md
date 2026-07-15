@@ -84,6 +84,31 @@
 
 ---
 
+## v1.2 Requirements (Phase 5 — Multi-LLM, Multi-Agent & Verschlüsselung)
+
+### Multi-LLM-Provider (LLM)
+
+- [ ] **LLM-01**: `LLM_PROVIDER`-Dropdown im WebUI-Agent-Formular (Anthropic Default | OpenAI | Google Gemini); API-Key-Feld generisch als `LLM_API_KEY` (masked); pro Agent unabhängig wählbar
+- [ ] **LLM-02**: Interner LLM-Adapter im Agent (`llm_call(provider, model, prompt, ...) -> str`) routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`); `classify.py` + `generate.py` nutzen nur noch den Adapter
+- [ ] **LLM-03**: Modell-Defaults pro Provider hart verdrahtet als Classify+Draft-Paar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI + Google → aktuelle Äquivalente, im Research verifiziert); kein Modell-Auswahlfeld im UI
+- [ ] **LLM-04**: Pre-Deployment-Fixtures (14 `.eml`) je Provider erneut durchlaufen: ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5; AVV-Hinweis pro gewähltem Provider im WebUI-Setup-Hinweis
+
+### Multi-Agent — mehrere Mail-Accounts (MA)
+
+- [ ] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
+- [ ] **MA-02**: Agent-Dropdown im WebUI — leer, wenn kein Agent gespeichert; "Neuen Agent anlegen"-Aktion; Auswahl lädt das Konfig-Formular des gewählten Agenten; Umbenennen + Löschen (Zwei-Stufen-Bestätigung: Config + Container + State)
+- [ ] **MA-03**: Ein Docker-Container pro Agent (`vizpatch-agent-<agent-id>`), von der WebUI via Docker-SDK erzeugt/gestartet/gestoppt, mit `restart_policy: unless-stopped` und Labels für Zuordnung; Agent-Code selbst bleibt Single-Account
+- [ ] **MA-04**: Getrennter State pro Agent — SQLite (`state.db`) + `agent_status.json` je Agent unter `/data/agents/<agent-id>/`; Status-Kachel + Start/Stop/Restart-Buttons je Agent im WebUI
+- [ ] **MA-05**: Paralleler Betrieb verifiziert — mind. 2 Agenten gegen 2 verschiedene Test-Postfächer gleichzeitig, jeder Draft landet im richtigen Postfach, keine Cross-Kontamination
+
+### Secrets-Verschlüsselung (SEC)
+
+- [ ] **SEC-01**: Fernet-Verschlüsselung (Python `cryptography`) für Secret-Werte in `.env`-Dateien (`IMAP_PASSWORD`, `LLM_API_KEY`) mit `enc:`-Prefix; Key-Datei im Config-Volume, auto-generiert beim ersten Start, `chmod 600`
+- [ ] **SEC-02**: WebUI ver-/entschlüsselt transparent (Save verschlüsselt, Formular-Anzeige bleibt masked); Agent-`config.py` entschlüsselt beim Laden; Klartext-Legacy-Werte werden erkannt und beim nächsten Save verschlüsselt (sanfte Migration)
+- [ ] **SEC-03**: Key-Handling dokumentiert — Key-Datei nie im Git, Backup-Hinweis (Config-Backup enthält Key + verschlüsselte `.env`s zusammen), Zero-Reset löscht Key mit; Schutzumfang ehrlich dokumentiert (Datei-/Backup-Leaks, nicht Root auf Host)
+
+---
+
 ## v2 Requirements (nach v1)
 
 - IMAP-IDLE statt Polling (niedrigere Latenz, weniger Rate-Limit-Risiko)
@@ -103,9 +128,9 @@
 - Bulk-Unsubscribe, Cold-Email-Blocker als separate Features
 - Auto-Send / Fully Autonomous Reply
 - Learning-Loops / Fine-Tuning
-- Mehrere Postfächer pro Instanz
+- Mehrere Postfächer pro Instanz *(→ ab v1.2 in Phase 5 als Multi-Agent, MA-01…05)*
 - Mobile App
-- Andere LLM-Provider als Anthropic in v1 (könnte v2 als Fallback ergänzt werden)
+- Andere LLM-Provider als Anthropic in v1 *(→ ab v1.2 in Phase 5, LLM-01…04)*
 
 ---
 
@@ -122,3 +147,6 @@
 | OPS-01 … OPS-05 | Phase 3 | Pending |
 | UI-01 … UI-05 | Phase 4 | ✅ Done (2026-07-13) |
 | UI-06 … UI-10 | Phase 4 (Nachtrag) | ✅ Done (2026-07-14) |
+| LLM-01 … LLM-04 | Phase 5 (v1.2) | Pending |
+| MA-01 … MA-05 | Phase 5 (v1.2) | Pending |
+| SEC-01 … SEC-03 | Phase 5 (v1.2) | Pending |

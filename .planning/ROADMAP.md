@@ -174,7 +174,7 @@ Plans:
 3. Pro gespeichertem Agent startet/stoppt die WebUI einen eigenen Docker-Container (`vizpatch-agent-<agent-id>`) via Docker-SDK; Status-Kachel zeigt Zustand + letzten Poll je Agent; mind. 2 Agenten laufen parallel gegen 2 Test-Postfächer ohne Cross-Drafts
 4. Secrets stehen nur noch Fernet-verschlüsselt in den `.env`-Dateien (`enc:`-Prefix); Key-Datei wird beim ersten Start generiert (`chmod 600`, im Config-Volume); WebUI ver-/entschlüsselt transparent, Agent entschlüsselt beim Config-Load; Klartext-Legacy-Werte werden beim nächsten Save migriert
 5. Migration: bestehendes Single-Agent-Layout (`/config/.env` + `context.md`) wird beim ersten Start automatisch als Agent `default` übernommen (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`), der laufende Betrieb geht ohne Neukonfiguration weiter
-6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den gewählten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
+6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den gewählten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
 
 **Requirements mapped:** LLM-01, LLM-02, LLM-03, LLM-04, MA-01, MA-02, MA-03, MA-04, MA-05, SEC-01, SEC-02, SEC-03
 
