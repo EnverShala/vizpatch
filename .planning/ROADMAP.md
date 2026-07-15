@@ -189,15 +189,15 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [ ] 05.03-multi-llm-adapter-PLAN.md — Agent-LLM-Adapter + LLM_API_KEY/LLM_PROVIDER + Fernet-Decrypt beim Load (LLM-01, LLM-02, LLM-03, SEC-02)
-- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
+- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht (.env + context.md + rename_agent) + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
 
 **Wave 3** *(blocked on 05.02 + 05.04)*
 
-- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Liste (MA-02, MA-04, LLM-01, LLM-04)
+- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + per-Agent context.md + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Liste + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider + MA-05-Parallelbetrieb + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-05, SEC-03)
+- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider (Gate ≥ 11/14) + MA-05-Parallelbetrieb + Migrations-Abnahme gegen Esso-Live-Layout-Kopie + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-01, MA-05, SEC-03)
 
 **Hauptrisiken:**
 
