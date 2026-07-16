@@ -8,12 +8,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from anthropic import Anthropic
-
 from dataclasses import replace
 
 from . import classify, generate, pii, state, status_writer
-from .config import Config, load_config
+from .config import Config, DecryptionError, load_config
 from .draft import build_reply_draft
 from .imap_client import ImapClient
 from .logging_setup import setup_logging
@@ -39,7 +37,7 @@ def _compute_since(config: Config) -> datetime:
     return min(first_run - timedelta(hours=1), datetime.now(timezone.utc) - timedelta(days=config.backfill_days))
 
 
-def _process_one(msg, config: Config, anthropic_client: Anthropic, logger: logging.Logger, imap: "ImapClient") -> None:
+def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient") -> None:
     """Process a single email: classify, generate draft if needed, append to Drafts."""
     message_id = msg.headers.get("message-id", [""])
     if isinstance(message_id, tuple):
@@ -58,7 +56,6 @@ def _process_one(msg, config: Config, anthropic_client: Anthropic, logger: loggi
         subject=msg.subject or "",
         body=body,
         config=config,
-        client=anthropic_client,
         logger=logger,
     )
 
@@ -100,7 +97,6 @@ def _process_one(msg, config: Config, anthropic_client: Anthropic, logger: loggi
         subject=msg.subject or "",
         body=body_for_llm,
         config=config,
-        client=anthropic_client,
         logger=logger,
         conversation_history=conversation_history,
     )
@@ -111,11 +107,11 @@ def _process_one(msg, config: Config, anthropic_client: Anthropic, logger: loggi
         own_display_name=config.own_display_name,
     )
 
-    # append to IMAP Drafts (client is passed in as arg; append happens outside)
+    # append to IMAP Drafts (append happens outside)
     return raw_bytes, message_id
 
 
-def _poll_once(config: Config, anthropic_client: Anthropic, logger: logging.Logger) -> None:
+def _poll_once(config: Config, logger: logging.Logger) -> None:
     since = _compute_since(config)
     with ImapClient(config, logger=logger) as imap:
         logger.info("poll_start", extra={"since": since.isoformat(), "folder": config.imap_inbox_folder})
@@ -123,7 +119,7 @@ def _poll_once(config: Config, anthropic_client: Anthropic, logger: logging.Logg
         for msg in imap.fetch_new_messages(since=since, own_address=config.own_email_address):
             count += 1
             try:
-                result = _process_one(msg, config, anthropic_client, logger, imap)
+                result = _process_one(msg, config, logger, imap)
                 if result is not None:
                     raw_bytes, message_id = result
                     imap.append_to_drafts(raw_bytes)
@@ -193,6 +189,12 @@ def _wait_for_config(logger: logging.Logger) -> Config:
     while not _shutdown:
         try:
             return load_config()
+        except DecryptionError:
+            # Übergangslösung (bis 05.02): ein Decrypt-Fehler bedeutet falscher/fehlender
+            # Fernet-Key, NICHT "noch nicht konfiguriert" — sofort sichtbarer Fehler statt
+            # stiller Endlosschleife (T-05-10). Ab 05.02 übernimmt die per-Agent-
+            # Fehler-Isolation im Multi-Account-Loop diese Rolle inkl. status_file-Anzeige.
+            raise
         except RuntimeError as e:
             logger.info(
                 "waiting_for_config",
@@ -231,12 +233,10 @@ def main() -> int:
 
     config = _resolve_drafts_folder(config, logger)
 
-    anthropic_client = Anthropic(api_key=config.anthropic_api_key)
-
     backoff_seconds = config.poll_interval_seconds
     while not _shutdown:
         try:
-            _poll_once(config, anthropic_client, logger)
+            _poll_once(config, logger)
             backoff_seconds = config.poll_interval_seconds  # reset on success
         except Exception as e:
             logger.exception("poll_cycle_failed", extra={"error": str(e)})

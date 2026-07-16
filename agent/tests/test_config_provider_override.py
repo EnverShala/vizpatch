@@ -13,7 +13,7 @@ BASE_ENV = {
     "IMAP_USER": "x@ionos.de",
     "IMAP_PASSWORD": "pw",
     "OWN_EMAIL_ADDRESS": "x@ionos.de",
-    "ANTHROPIC_API_KEY": "sk-ant-test",
+    "LLM_API_KEY": "sk-ant-test",
 }
 
 

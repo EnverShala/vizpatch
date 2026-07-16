@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .crypto import decrypt_value
 from .provider_config import resolve_imap_config
 
 
@@ -14,12 +15,46 @@ REQUIRED_ENV_VARS = [
     "IMAP_USER",
     "IMAP_PASSWORD",
     "OWN_EMAIL_ADDRESS",
-    "ANTHROPIC_API_KEY",
+    "LLM_API_KEY",
 ]
 
 # IMAP_DRAFTS_FOLDER ist nicht Pflicht: der Agent probiert Auto-Discovery
 # (IMAP SPECIAL-USE → provider_config → statischer Fallback "Drafts").
 # Nur wenn User explizit im WebUI setzt, wird der Wert respektiert.
+
+
+class DecryptionError(RuntimeError):
+    """Ein Fernet-Secret konnte nicht entschlüsselt werden (falscher/fehlender Key).
+
+    MUSS von _wait_for_config in main.py VOR dem generischen `except RuntimeError`
+    gefangen und durchgereicht werden (fail-fast statt stiller Retry-Endlosschleife).
+    """
+
+
+# Provisorisch (05-RESEARCH.md, Sektion "Call-Pattern pro Provider") — Modell-IDs für
+# OpenAI/Google werden vor Produktiv-Einsatz per client.models.list() verifiziert (Plan 05.06).
+MODEL_DEFAULTS: dict[str, dict[str, str]] = {
+    "anthropic": {"classify": "claude-haiku-4-5", "draft": "claude-sonnet-4-6"},
+    "openai": {"classify": "gpt-5-mini", "draft": "gpt-5.4"},
+    "google": {"classify": "gemini-2.5-flash-lite", "draft": "gemini-2.5-pro"},
+}
+
+
+def _resolve_model_defaults(provider: str) -> dict[str, str]:
+    """Liefert das Classify/Draft-Modellpaar für einen Provider (Fallback: Anthropic).
+
+    Kleiner privater Helper statt Inline-Monolith, damit 05.02 dieselbe Logik für
+    load_agent_config(agent_dir) wiederverwenden kann.
+    """
+    return MODEL_DEFAULTS.get(provider, MODEL_DEFAULTS["anthropic"])
+
+
+def _decrypt_or_raise(value: str) -> str:
+    """Entschlüsselt ein Fernet-Secret; übersetzt crypto.RuntimeError zu DecryptionError."""
+    try:
+        return decrypt_value(value)
+    except RuntimeError as e:
+        raise DecryptionError(str(e)) from e
 
 
 @dataclass(frozen=True)
@@ -42,7 +77,8 @@ class Config:
     own_display_name: str
 
     # LLM
-    anthropic_api_key: str
+    llm_provider: str
+    llm_api_key: str
     model_classify: str
     model_draft: str
     llm_max_tokens_draft: int
@@ -103,12 +139,18 @@ def load_config(env_file: str | None = None) -> Config:
     prompt_generate = (prompts_dir / "generate.txt").read_text(encoding="utf-8")
     context_md = context_file.read_text(encoding="utf-8") if context_file.exists() else ""
 
+    llm_provider = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
+    model_defaults = _resolve_model_defaults(llm_provider)
+
+    imap_password = _decrypt_or_raise(os.environ["IMAP_PASSWORD"])
+    llm_api_key = _decrypt_or_raise(os.environ["LLM_API_KEY"])
+
     return Config(
         imap_host=imap_cfg["host"],
         imap_port=imap_cfg["port"],
         imap_use_ssl=imap_cfg["ssl"],
         imap_user=os.environ["IMAP_USER"],
-        imap_password=os.environ["IMAP_PASSWORD"],
+        imap_password=imap_password,
         imap_drafts_folder=imap_cfg["drafts"],
         imap_drafts_folder_explicit=drafts_explicit,
         imap_sent_folder=imap_cfg["sent"],
@@ -117,9 +159,10 @@ def load_config(env_file: str | None = None) -> Config:
         backfill_days=int(os.getenv("BACKFILL_DAYS", "1")),
         own_email_address=os.environ["OWN_EMAIL_ADDRESS"],
         own_display_name=os.getenv("OWN_DISPLAY_NAME", ""),
-        anthropic_api_key=os.environ["ANTHROPIC_API_KEY"],
-        model_classify=os.getenv("MODEL_CLASSIFY", "claude-haiku-4-5"),
-        model_draft=os.getenv("MODEL_DRAFT", "claude-sonnet-4-6"),
+        llm_provider=llm_provider,
+        llm_api_key=llm_api_key,
+        model_classify=os.getenv("MODEL_CLASSIFY", model_defaults["classify"]),
+        model_draft=os.getenv("MODEL_DRAFT", model_defaults["draft"]),
         llm_max_tokens_draft=int(os.getenv("LLM_MAX_TOKENS_DRAFT", "600")),
         llm_temperature_draft=float(os.getenv("LLM_TEMPERATURE_DRAFT", "0.3")),
         enable_pii_redaction=os.getenv("ENABLE_PII_REDACTION", "true").lower() == "true",
