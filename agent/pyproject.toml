@@ -1,6 +1,6 @@
 [project]
 name = "vizpatch"
-version = "1.0.0"
+version = "1.2.0"
 description = "Vizpatch — schmaler KI-Email-Agent (IMAP + Anthropic) für eine Tankstelle"
 requires-python = ">=3.13"
 dependencies = [
@@ -8,6 +8,9 @@ dependencies = [
     "anthropic>=0.42,<1.0",
     "python-dotenv>=1.0,<2.0",
     "dnspython>=2.4,<3.0",
+    "cryptography>=49,<50",
+    "openai>=2.45,<3.0",
+    "google-genai>=2.11,<3.0",
 ]
 
 [project.optional-dependencies]
