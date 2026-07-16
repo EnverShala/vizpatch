@@ -1,11 +1,10 @@
-"""LLM-Klassifikation: REPLY_NEEDED vs. IGNORE via Anthropic Haiku."""
+"""LLM-Klassifikation: REPLY_NEEDED vs. IGNORE via den LLM-Adapter."""
 from __future__ import annotations
 
 import logging
 from typing import Literal, Optional
 
-from anthropic import Anthropic
-
+from . import llm
 from .config import Config
 
 
@@ -39,25 +38,24 @@ def classify_email(
     subject: str,
     body: str,
     config: Config,
-    client: Optional[Anthropic] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Classification:
-    """Classify an email as REPLY_NEEDED or IGNORE using Anthropic Haiku."""
+    """Classify an email as REPLY_NEEDED or IGNORE using den konfigurierten LLM-Provider."""
     logger = logger or logging.getLogger("vizpatch.classify")
-    client = client or Anthropic(api_key=config.anthropic_api_key)
 
     body_snippet = _extract_body_snippet(body)
     prompt = config.prompt_classify.format(
         **{"from": from_address, "subject": subject, "body_snippet": body_snippet}
     )
 
-    response = client.messages.create(
+    text = llm.llm_call(
+        provider=config.llm_provider,
+        api_key=config.llm_api_key,
         model=config.model_classify,
+        prompt=prompt,
         max_tokens=20,
         temperature=0.0,
-        messages=[{"role": "user", "content": prompt}],
     )
-    text = response.content[0].text if response.content else ""
     classification = _parse_response(text)
 
     logger.info(
