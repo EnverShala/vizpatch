@@ -18,4 +18,9 @@ if [ ! -e "$CONFIG_DIR/context.md" ]; then
   touch "$CONFIG_DIR/context.md"
 fi
 
+# Multi-Agent-Migration (MA-01, D-47): bestehendes Single-Agent-Layout wird idempotent
+# nach agents/default ueberfuehrt, bevor die erste Route bedient wird. No-Op bei
+# frischer/leerer Config (Guard in migration.py verhindert Phantom-Agenten, D-50).
+python3 -c "from src.migration import migrate; migrate()"
+
 exec "$@"
