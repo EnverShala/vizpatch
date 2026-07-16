@@ -1,154 +1,215 @@
-import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
-from docker.errors import NotFound
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS processed_emails (
-  message_id TEXT PRIMARY KEY,
-  uid INTEGER NOT NULL,
-  from_address TEXT,
-  subject TEXT,
-  classification TEXT NOT NULL,
-  draft_created INTEGER NOT NULL,
-  error_message TEXT,
-  processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"""
+def _setup_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
 
 
 def _mock_running_docker(mocker):
     mock_container = MagicMock()
     mock_container.status = "running"
-    mock_container.attrs = {"State": {"StartedAt": "2026-07-12T10:00:00Z"}}
+    mock_container.attrs = {"State": {"StartedAt": "2026-07-16T10:00:00Z"}}
     mock_client = MagicMock()
     mock_client.containers.get.return_value = mock_container
     mocker.patch("docker.from_env", return_value=mock_client)
     return mock_client, mock_container
 
 
-def test_agent_status_requires_auth(authed_client, mocker):
-    _mock_running_docker(mocker)
-    response = authed_client.get("/agent/status")
+# --- POST /agents (create) ---
+
+def test_create_agent_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post("/agents", data={"name_or_email": "x"})
     assert response.status_code == 401
 
 
-def test_agent_status_returns_status_card(authed_client, mocker):
+def test_create_agent_creates_directory_disabled_no_docker(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    mock_client = MagicMock()
+    mocker.patch("docker.from_env", return_value=mock_client)
+    response = authed_client.post(
+        "/agents",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"name_or_email": "Esso Leonberg"},
+    )
+    assert response.status_code == 303
+    assert "agent_id=esso-leonberg" in response.headers.get("location", "")
+    env_content = (tmp_path / "config" / "agents" / "esso-leonberg" / ".env").read_text(encoding="utf-8")
+    assert "AGENT_ENABLED=false" in env_content
+    mock_client.containers.get.assert_not_called()
+    mock_client.containers.run.assert_not_called()
+
+
+# --- POST /agents/{agent_id}/start|stop (flag toggle) ---
+
+def test_agent_start_calls_set_agent_enabled_true(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_running_docker(mocker)
-    response = authed_client.get("/agent/status", auth=("admin", "pw"))
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
+    spy = mocker.spy(agents_io, "set_agent_enabled")
+    response = authed_client.post("/agents/info/start", auth=("admin", "pw"))
     assert response.status_code == 200
+    spy.assert_called_once_with("info", True)
+    assert agents_io.get_agent_enabled("info") is True
+
+
+def test_agent_stop_calls_set_agent_enabled_false(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _mock_running_docker(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "true"})
+    spy = mocker.spy(agents_io, "set_agent_enabled")
+    response = authed_client.post("/agents/info/stop", auth=("admin", "pw"))
+    assert response.status_code == 200
+    spy.assert_called_once_with("info", False)
+    assert agents_io.get_agent_enabled("info") is False
+
+
+def test_agent_start_response_mentions_next_cycle_and_status_card(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _mock_running_docker(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
+    response = authed_client.post("/agents/info/start", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "wirkt ab dem nächsten Poll-Zyklus" in response.text
     assert 'id="status-card"' in response.text
-    assert 'hx-get="/agent/status"' in response.text
-    assert "running" in response.text
 
 
-def test_agent_start_action(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_flag_toggle_invalid_action(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
+    response = authed_client.post("/agents/info/foo", auth=("admin", "pw"))
+    assert response.status_code == 400
+
+
+def test_agent_flag_toggle_invalid_agent_id_returns_400(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post("/agents/Invalid_ID!/start", auth=("admin", "pw"))
+    assert response.status_code == 400
+
+
+# --- POST /agents/{agent_id}/delete ---
+
+def test_delete_agent_requires_confirmation_word(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
+    response = authed_client.post(
+        "/agents/info/delete",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"confirmation": "falsch"},
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers.get("location", "")
+    assert (tmp_path / "config" / "agents" / "info").exists()
+
+
+def test_delete_agent_with_correct_confirmation_removes_directory(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
+    response = authed_client.post(
+        "/agents/info/delete",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"confirmation": "LÖSCHEN"},
+    )
+    assert response.status_code == 303
+    assert not (tmp_path / "config" / "agents" / "info").exists()
+
+
+def test_delete_agent_invalid_id_returns_400(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post(
+        "/agents/Invalid_ID!/delete",
+        auth=("admin", "pw"),
+        data={"confirmation": "LÖSCHEN"},
+    )
+    assert response.status_code == 400
+
+
+# --- POST /agents/{agent_id}/rename ---
+
+def test_rename_agent_moves_config_directory(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("alt", {"AGENT_ENABLED": "false"})
+    response = authed_client.post(
+        "/agents/alt/rename",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"new_name": "Neu"},
+    )
+    assert response.status_code == 303
+    assert "agent_id=neu" in response.headers.get("location", "")
+    assert not (tmp_path / "config" / "agents" / "alt").exists()
+    assert (tmp_path / "config" / "agents" / "neu").exists()
+
+
+def test_rename_agent_collision_returns_error_response(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("alt", {"AGENT_ENABLED": "false"})
+    mocker.patch("src.agents_io.rename_agent", side_effect=ValueError("agent already exists: 'neu'"))
+    response = authed_client.post(
+        "/agents/alt/rename",
+        auth=("admin", "pw"),
+        data={"new_name": "Neu"},
+    )
+    assert response.status_code == 400
+
+
+# --- GET /agents/status ---
+
+def test_agents_status_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/agents/status")
+    assert response.status_code == 401
+
+
+def test_agents_status_lists_all_agents(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _mock_running_docker(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("agent-a", {"AGENT_ENABLED": "true"})
+    agents_io.write_env("agent-b", {"AGENT_ENABLED": "false"})
+    response = authed_client.get("/agents/status", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "agent-a" in response.text
+    assert "agent-b" in response.text
+    assert 'hx-post="/agents/agent-a/stop"' in response.text
+    assert 'hx-post="/agents/agent-b/start"' in response.text
+
+
+# --- POST /agent/{action} (globale Admin-Route, Phase-4-Umfang, bleibt bestehen) ---
+
+def test_global_agent_start_action_still_works(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     mock_client, mock_container = _mock_running_docker(mocker)
-    _write_full_config(tmp_path, monkeypatch)
     response = authed_client.post("/agent/start", auth=("admin", "pw"))
     assert response.status_code == 200
     mock_container.start.assert_called_once()
-    assert "status-card" in response.text
 
 
-def test_agent_invalid_action(authed_client, mocker):
-    _mock_running_docker(mocker)
-    response = authed_client.post("/agent/foo", auth=("admin", "pw"))
-    assert response.status_code == 400
-
-
-def test_index_shows_status_card(authed_client, mocker, tmp_path, monkeypatch):
-    _mock_running_docker(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
-    response = authed_client.get("/", auth=("admin", "pw"))
-    assert response.status_code == 200
-    assert 'id="status-card"' in response.text
-    assert '<script src="/static/htmx.min.js"' in response.text
-
-
-def test_status_shows_last_poll(authed_client, mocker, tmp_path, monkeypatch):
-    _mock_running_docker(mocker)
-    db = tmp_path / "state.db"
-    conn = sqlite3.connect(str(db))
-    conn.executescript(SCHEMA)
-    conn.execute("INSERT INTO processed_emails VALUES ('id1', 1, 'a@x.de', 'Sub', 'REPLY_NEEDED', 1, NULL, '2026-07-13 09:30:00')")
-    conn.commit()
-    conn.close()
-    monkeypatch.setenv("WEBUI_STATE_DB", str(db))
-    response = authed_client.get("/agent/status", auth=("admin", "pw"))
-    assert response.status_code == 200
-    assert "2026-07-13" in response.text
-
-
-def _write_full_config(tmp_path, monkeypatch):
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        "IMAP_USER=u@x.de\nIMAP_PASSWORD=pw\nIMAP_DRAFTS_FOLDER=Drafts\n"
-        "OWN_EMAIL_ADDRESS=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n",
-        encoding="utf-8",
-    )
-    context_file = tmp_path / "context.md"
-    context_file.write_text("Inhalt", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
-
-
-def test_agent_start_blocked_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
-    _mock_running_docker(mocker)
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
-    response = authed_client.post("/agent/start", auth=("admin", "pw"))
-    assert response.status_code == 400
-    assert "Konfiguration unvollständig" in response.text
-    assert "IMAP_USER" in response.text
-
-
-def test_agent_restart_endpoint_removed(authed_client, mocker, tmp_path, monkeypatch):
-    """Restart-Endpoint wurde entfernt (Stop+Start reicht) — /agent/restart soll 400 liefern."""
-    _mock_running_docker(mocker)
-    response = authed_client.post("/agent/restart", auth=("admin", "pw"))
-    assert response.status_code == 400
-    assert "invalid action" in response.text
-
-
-def test_agent_stop_allowed_when_config_missing(authed_client, mocker, tmp_path, monkeypatch):
+def test_global_agent_stop_action_still_works(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     mock_client, mock_container = _mock_running_docker(mocker)
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
     response = authed_client.post("/agent/stop", auth=("admin", "pw"))
     assert response.status_code == 200
     mock_container.stop.assert_called_once()
 
 
-def test_agent_start_succeeds_when_configured(authed_client, mocker, tmp_path, monkeypatch):
-    mock_client, mock_container = _mock_running_docker(mocker)
-    _write_full_config(tmp_path, monkeypatch)
-    response = authed_client.post("/agent/start", auth=("admin", "pw"))
-    assert response.status_code == 200
-    mock_container.start.assert_called_once()
-
-
-def test_status_card_disables_buttons_when_incomplete(authed_client, mocker, tmp_path, monkeypatch):
+def test_global_agent_invalid_action_returns_400(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_running_docker(mocker)
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "missing.env"))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(tmp_path / "missing.md"))
-    response = authed_client.get("/agent/status", auth=("admin", "pw"))
-    assert response.status_code == 200
-    assert "disabled" in response.text
-    assert "gesperrt" in response.text
-
-
-def test_status_card_enables_buttons_when_configured(authed_client, mocker, tmp_path, monkeypatch):
-    _mock_running_docker(mocker)
-    _write_full_config(tmp_path, monkeypatch)
-    response = authed_client.get("/agent/status", auth=("admin", "pw"))
-    assert response.status_code == 200
-    assert "disabled" not in response.text
-    assert "gesperrt" not in response.text
+    response = authed_client.post("/agent/foo", auth=("admin", "pw"))
+    assert response.status_code == 400
