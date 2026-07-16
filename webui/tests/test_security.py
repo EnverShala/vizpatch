@@ -10,20 +10,25 @@ def _mock_docker_running(mocker):
     mocker.patch("docker.from_env", return_value=mock_client)
 
 
-def test_context_generate_rate_limited_after_10_calls(authed_client, mocker):
+def test_context_generate_rate_limited_after_10_calls(authed_client, mocker, tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
     _mock_docker_running(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-ant-real-key", "LLM_PROVIDER": "anthropic"})
     mocker.patch("src.llm_seed.generate", return_value="# Seed")
     for _ in range(10):
         r = authed_client.post(
             "/context/generate",
             auth=("admin", "pw"),
-            data={"firma_input": "Tanke"},
+            data={"agent_id": "info", "firma_input": "Tanke"},
         )
         assert r.status_code == 200
     blocked = authed_client.post(
         "/context/generate",
         auth=("admin", "pw"),
-        data={"firma_input": "Tanke"},
+        data={"agent_id": "info", "firma_input": "Tanke"},
     )
     assert blocked.status_code == 429
 
