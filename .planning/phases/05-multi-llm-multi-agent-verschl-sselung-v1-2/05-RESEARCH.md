@@ -513,7 +513,11 @@ Der bisherige `agent/docker-compose.yml` enthält einen statischen `agent:`-Serv
 | A4 | AVV/DPA-Aussagen zu OpenAI (30-Tage-Default-Retention, ZDR nur Enterprise) und Google (nur bezahlter Tier ohne Training) sind aktuell (Stand Recherche 2026-07-15) | DSGVO/AVV je Provider | Retention-Policies ändern sich — Betreiber-Doku sollte auf die jeweilige Live-Policy-Seite verlinken statt die Aussage hart einzufrieren. Kein technisches Risiko, aber ein Compliance-Risiko wenn veraltet zitiert. |
 | A5 | Named-Volume-Referenzierung per reinem Namen (ohne Host-Pfad) funktioniert identisch für SDK-erzeugte Container wie für Compose-erzeugte | Docker-SDK: dynamische Agent-Container | Gut etabliertes Docker-Engine-API-Verhalten (Volume-Treiber ist transparent für Named Volumes) — Risiko gering, aber ungetestet in DIESEM Projekt-Kontext, sollte im ersten MA-03-Task real verifiziert werden (nicht nur gegen Mock). |
 
-## Open Questions
+## Open Questions (RESOLVED — alle drei durch die Pläne beantwortet, Stand Plan-Revision 4)
+
+> Q1 → 05.06 Task 1 (Checkpoint: `client.models.list()` je Provider mit echtem Key, MODEL_DEFAULTS ggf. anpassen).
+> Q2 → 05.04 (Root-`.env` bleibt als reine WebUI-Settings-Datei; Agent-Keys ziehen nach `agents/default/.env`).
+> Q3 → 05.04 Task 1 (`slugify` mit `-2`/`-3`-Kollisions-Suffix gegen `list_agent_ids()`).
 
 1. **Exakte OpenAI/Google-Modell-IDs für Produktiv-Einsatz**
    - Was wir wissen: SDK-Call-Pattern ist sicher, Modell-Familie (mini/flash-lite für Classify, mid/pro für Draft) ist richtig gewählt.

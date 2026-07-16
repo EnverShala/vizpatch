@@ -91,7 +91,7 @@
 - [ ] **LLM-01**: Generisches API-Key-Feld `LLM_API_KEY` (masked) im WebUI-Agent-Formular, Label „API-Key (Anthropic / OpenAI / Google)"; Provider wird beim Save aus dem Key-Prefix autodetektiert (`sk-ant-` → Anthropic, `AIza` → Google, sonst `sk-` → OpenAI; kein Treffer → Fehlermeldung) und als `LLM_PROVIDER` in die Agent-`.env` geschrieben — kein Provider-Dropdown (D-51); pro Agent unabhängig
 - [ ] **LLM-02**: Interner LLM-Adapter im Agent (`llm_call(provider, model, prompt, ...) -> str`) routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`); `classify.py` + `generate.py` nutzen nur noch den Adapter
 - [ ] **LLM-03**: Modell-Defaults pro Provider hart verdrahtet als Classify+Draft-Paar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI + Google → aktuelle Äquivalente, im Research verifiziert); kein Modell-Auswahlfeld im UI
-- [ ] **LLM-04**: Pre-Deployment-Fixtures (14 `.eml`) je Provider erneut durchlaufen: ≥ 8/10 korrekt klassifiziert, Ø Draft-Qualität ≥ 3.5/5; AVV-Hinweis pro gewähltem Provider im WebUI-Setup-Hinweis
+- [ ] **LLM-04**: Pre-Deployment-Fixtures (14 `.eml`) je Provider erneut durchlaufen: ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; AVV-Hinweis pro erkanntem Provider im WebUI-Setup-Hinweis
 
 ### Multi-Agent — mehrere Mail-Accounts (MA)
 

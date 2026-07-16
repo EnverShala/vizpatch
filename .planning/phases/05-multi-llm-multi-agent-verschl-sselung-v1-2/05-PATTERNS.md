@@ -187,7 +187,7 @@ def reset_all() -> dict:
             result["state_db_error"] = str(e)
     return result
 ```
-→ `delete_agent(agent_id)` verwendet dasselbe Result-Dict-Muster, aber löscht das ganze `/config/agents/<id>/`-Verzeichnis (`shutil.rmtree`) statt einzelne Dateien zu leeren, UND ruft zusätzlich `docker_ctrl.stop_and_remove_agent(agent_id)` (analog zu `main.py` Route `/reset`, Zeile 254: `docker_ctrl.stop_and_remove_agent()` VOR `config_io.reset_all()`).
+→ `delete_agent(agent_id)` verwendet dasselbe Result-Dict-Muster, aber löscht das ganze `/config/agents/<id>/`-Verzeichnis (`shutil.rmtree`) statt einzelne Dateien zu leeren. ~~UND ruft zusätzlich `docker_ctrl.stop_and_remove_agent(agent_id)`~~ **Addendum-Korrektur (D-46): delete_agent ruft KEIN Docker** — es setzt vorher nur `AGENT_ENABLED=false` (best-effort); der eine Agent-Container entdeckt das Verschwinden des Agenten selbst ab dem nächsten Zyklus. Nur der globale Zero-Reset (`/reset`, Plan 05.05 Task 4) stoppt den Container via parameterlosem Phase-4-`docker_ctrl.stop_and_remove_agent()`.
 
 ---
 
