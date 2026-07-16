@@ -161,7 +161,7 @@ Plans:
 
 ### Phase 5: Multi-LLM, Multi-Agent & Verschlüsselung (v1.2)
 
-**Goal:** Der Betreiber verwaltet im WebUI mehrere Agenten (= Mail-Accounts) gleichzeitig: Agent-Dropdown (leer, solange kein Agent gespeichert ist), Anlegen/Bearbeiten/Löschen pro Agent, ein Docker-Container pro Agent. Pro Agent ist der LLM-Provider per Dropdown wählbar (Anthropic Default | OpenAI | Google Gemini) mit generischem `LLM_API_KEY`. Alle Secrets (IMAP-Passwort, API-Key) liegen verschlüsselt (Fernet) in den `.env`-Dateien; der Schlüssel liegt als `chmod 600`-Datei im Config-Volume. Bestehende Single-Agent-Installationen (Esso) werden beim ersten Start automatisch und verlustfrei migriert.
+**Goal:** Der Betreiber verwaltet im WebUI mehrere Agenten (= Mail-Accounts) gleichzeitig: Agent-Dropdown (leer, solange kein Agent gespeichert ist), Anlegen/Bearbeiten/Löschen pro Agent, Start/Stop pro Agent per Aktiv-Flag — alle Agenten laufen in **einem** Agent-Container (Multi-Account-Poll-Loop, kein Container pro Agent). Pro Agent ist der LLM-Provider per Dropdown wählbar (Anthropic Default | OpenAI | Google Gemini) mit genau einem generischen `LLM_API_KEY`. Alle Secrets (IMAP-Passwort, API-Key) liegen verschlüsselt (Fernet) in den `.env`-Dateien; der Schlüssel liegt als `chmod 600`-Datei im Config-Volume. Bestehende Single-Agent-Installationen (Esso) werden beim ersten Start automatisch und verlustfrei migriert.
 **Mode:** mvp
 **Ziel-Aufwand:** ~2–3 Werktage Vizionists
 **Depends on:** Phase 4 (WebUI + Config-Formular + Docker-SDK-Steuerung vorhanden), Esso-Rollout abgeschlossen (Migration wird gegen das Live-Setup-Layout getestet, kein Regressions-Risiko)
@@ -170,40 +170,40 @@ Plans:
 **Success Criteria:**
 
 1. `LLM_PROVIDER`-Dropdown im Agent-Formular (Anthropic | OpenAI | Google), API-Key-Feld heißt `LLM_API_KEY`; interner Adapter `llm_call(...)` routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`) mit hart verdrahteten Modell-Defaults pro Provider (Classify+Draft-Paar)
-2. Agent-Dropdown im WebUI: leer bei frischer Installation; "Neuen Agent anlegen" erzeugt `/config/agents/<agent-id>/` mit eigener `.env` + `context.md`; Auswahl im Dropdown lädt das Formular für genau diesen Agenten; Löschen entfernt Config + Container + State nach Zwei-Stufen-Bestätigung
-3. Pro gespeichertem Agent startet/stoppt die WebUI einen eigenen Docker-Container (`vizpatch-agent-<agent-id>`) via Docker-SDK; Status-Kachel zeigt Zustand + letzten Poll je Agent; mind. 2 Agenten laufen parallel gegen 2 Test-Postfächer ohne Cross-Drafts
+2. Agent-Dropdown im WebUI: leer bei frischer Installation; "Neuen Agent anlegen" erzeugt `/config/agents/<agent-id>/` mit eigener `.env` + `context.md`; Auswahl im Dropdown lädt das Formular für genau diesen Agenten; Löschen entfernt Config + State nach Zwei-Stufen-Bestätigung
+3. Ein einziger Agent-Container verarbeitet pro Poll-Zyklus alle Agenten mit gesetztem Aktiv-Flag (Fehler eines Agenten isoliert, andere laufen weiter); Start/Stop-Button je Agent schreibt nur das Aktiv-Flag (wirkt ab nächstem Zyklus, ohne Container-Restart); Status-Übersicht listet alle Agenten mit Läuft/Gestoppt + letztem Poll + eigenem Start/Stop-Button; mind. 2 Agenten laufen parallel gegen 2 Test-Postfächer ohne Cross-Drafts
 4. Secrets stehen nur noch Fernet-verschlüsselt in den `.env`-Dateien (`enc:`-Prefix); Key-Datei wird beim ersten Start generiert (`chmod 600`, im Config-Volume); WebUI ver-/entschlüsselt transparent, Agent entschlüsselt beim Config-Load; Klartext-Legacy-Werte werden beim nächsten Save migriert
 5. Migration: bestehendes Single-Agent-Layout (`/config/.env` + `context.md`) wird beim ersten Start automatisch als Agent `default` übernommen (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`), der laufende Betrieb geht ohne Neukonfiguration weiter
 6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den gewählten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
 
 **Requirements mapped:** LLM-01, LLM-02, LLM-03, LLM-04, MA-01, MA-02, MA-03, MA-04, MA-05, SEC-01, SEC-02, SEC-03
 
-**Plans:** 6 plans (Wave 1: 05.01, 05.02 | Wave 2: 05.03, 05.04 | Wave 3: 05.05 | Wave 4: 05.06)
+**Plans:** 6 plans (Wave 1: 05.01 | Wave 2: 05.03, 05.04 | Wave 3: 05.02, 05.05 | Wave 4: 05.06)
 
 Plans:
 **Wave 1**
 
 - [ ] 05.01-krypto-fundament-PLAN.md — Fernet-Krypto in Agent + WebUI + Phase-5-Dependencies + Versionsbump 1.2.0 (SEC-01)
-- [ ] 05.02-docker-multi-container-PLAN.md — Docker-SDK Multi-Container (Self-Inspection, create/list, Update-SDK-Loop) + Compose-Breaking-Change (MA-03, MA-04)
 
 **Wave 2** *(blocked on Wave 1)*
 
 - [ ] 05.03-multi-llm-adapter-PLAN.md — Agent-LLM-Adapter + LLM_API_KEY/LLM_PROVIDER + Fernet-Decrypt beim Load (LLM-01, LLM-02, LLM-03, SEC-02)
-- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht (.env + context.md + rename_agent) + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
+- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht (.env + context.md + AGENT_ENABLED-Flag + rename_agent, docker-frei) + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
 
-**Wave 3** *(blocked on 05.02 + 05.04)*
+**Wave 3** *(05.02 blocked on 05.03; 05.05 blocked on 05.04)*
 
-- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + per-Agent context.md + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Liste + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
+- [ ] 05.02-agent-multi-account-loop-PLAN.md — EIN Agent-Container wird Multi-Account: per-Zyklus-Discovery aus /config/agents/*/, Aktiv-Flag-Filter, Fehler-Isolation + IMAP-Timeout pro Agent, per-Agent-State + last_cycle-Heartbeat, Idle-Wait bei 0 Agenten (MA-03, MA-04)
+- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Flag-basiertes Start/Stop + per-Agent context.md + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Übersicht aller Agenten + globale Docker-Admin-Buttons + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider (Gate ≥ 11/14) + MA-05-Parallelbetrieb + Migrations-Abnahme gegen Esso-Live-Layout-Kopie + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-01, MA-05, SEC-03)
+- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider (Gate ≥ 11/14) + MA-05-Parallelbetrieb im Ein-Container-Modell inkl. Fehler-Isolations-Check + Migrations-Abnahme gegen Esso-Live-Layout-Kopie + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-01, MA-05, SEC-03)
 
 **Hauptrisiken:**
 
 - Prompt-Qualität streut über Provider → Pre-Test-Wiederholung ist Pflicht, ohne die kein Ship
 - Migration bricht bestehende Kunden-Installation (Esso) → Migrations-Pfad wird gegen Kopie des Live-Layouts getestet, Rollback = altes Image + unverändertes Config-Backup
-- Dynamische Container pro Agent: WebUI erzeugt Container außerhalb von Compose → Naming/Labels/Volumes müssen sauber definiert sein, sonst Zombie-Container; `install-autostart.sh`/Reboot-Verhalten muss mehrere Agent-Container abdecken (`restart: unless-stopped`-Äquivalent via Docker-SDK-`restart_policy`)
+- Multi-Account-Loop in einem Prozess: ein hängender Agent (IMAP-Timeout) verzögert den Zyklus für alle → Timeouts pro Agent + Fehler-Isolation Pflicht; Poll-Zyklus-Dauer wächst linear mit Agenten-Zahl (bei 5-Min-Intervall unkritisch, dokumentieren)
 - Fernet-Key-Verlust = alle Secrets unlesbar → Key liegt im selben Config-Bind-Mount wie die `.env`s (Backup umfasst beides), Reset-Flow löscht Key mit
 - OpenAI/Google-SDKs vergrößern Docker-Image (~5–10 MB) → akzeptabel
 

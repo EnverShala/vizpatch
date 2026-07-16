@@ -1,5 +1,29 @@
 # Phase 5: Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) — Research
 
+> ## ⚠ Addendum 2026-07-16 — Architektur-Korrektur (neues D-46)
+>
+> Der Nutzer hat "ein Container pro Agent" ausdrücklich abgelehnt. Neues D-46 (siehe 05-CONTEXT.md):
+> **EIN Agent-Container** (bestehender Compose-Service) mit **Multi-Account-Poll-Loop** und
+> **Aktiv-Flag `AGENT_ENABLED`** pro Agent. Damit sind folgende Abschnitte dieses Dokuments **OBSOLET
+> und dürfen NICHT mehr referenziert werden**:
+>
+> - Sektion "Docker-SDK: dynamische Agent-Container (MA-01…05)" komplett (Self-Inspection,
+>   `_self_mounts`/`_resolve_mount_ref`, `create_or_replace_agent_container`, `list_agent_containers`,
+>   Labels `vizpatch.managed`/`vizpatch.agent-id`)
+> - "Kollision mit Compose-verwaltetem agent-Service — Empfehlung: entfernen" (der Service BLEIBT)
+> - "Update-Flow muss umgebaut werden" (Update bleibt Compose-basiert wie Phase 4)
+> - Migrations-Schritte 5+6 (alten Container stoppen / neuen SDK-Container erzeugen) — Migration ist
+>   jetzt docker-frei; stattdessen wird `AGENT_ENABLED=true` in `agents/default/.env` gesetzt
+> - Pitfalls 1 (Volume-Namespacing) und 4 (pull_and_restart-Umbau) sowie Assumptions A3/A5
+>
+> **Weiterhin gültig:** LLM-SDKs/Modell-Defaults, Fernet-Sektion, DSGVO/AVV-Tabelle, Pitfalls 2/3/5/6/7,
+> Erweiterungspunkte-Tabelle für webui (config_io/state_reader/main.py/Templates), Migrations-Schritte 1–4
+> inkl. Backup. Die Env-Var-Overrides (`AGENT_ENV_FILE`, `CONTEXT_FILE`, `STATE_DB`, `AGENT_STATUS_FILE`)
+> werden nicht mehr per Container gesetzt, sondern als loop-interne Parameter genutzt: `load_agent_config
+> (agent_id, agent_dir)` liest via `dotenv_values` (KEINE os.environ-Mutation) und leitet Pfade aus
+> agent_id/agent_dir ab (siehe Plan 05.02-agent-multi-account-loop).
+
+
 **Researched:** 2026-07-15
 **Domain:** Multi-Provider-LLM-Adapter (Anthropic/OpenAI/Google) + dynamische Docker-SDK-Container-Orchestrierung + Fernet-Secrets-Verschlüsselung + Config/State-Migration
 **Confidence:** MEDIUM-HIGH (Stack/Crypto/Docker-SDK-Patterns HIGH verifiziert; LLM-Modell-IDs für OpenAI/Google LOW-MEDIUM — Web-Recherche zu aktuellen Modellnamen liefert widersprüchliche Ergebnisse, siehe Assumptions Log)

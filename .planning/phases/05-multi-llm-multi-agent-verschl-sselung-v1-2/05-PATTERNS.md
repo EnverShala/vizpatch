@@ -1,5 +1,21 @@
 # Phase 5: Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) - Pattern Map
 
+> ## ⚠ Addendum 2026-07-16 — Architektur-Korrektur (neues D-46)
+>
+> Neues D-46 (05-CONTEXT.md): EIN Agent-Container mit Multi-Account-Loop + `AGENT_ENABLED`-Flag —
+> KEIN Container pro Agent. Damit sind in dieser Pattern-Map **obsolet**: die Zeile/Sektion
+> `webui/tests/test_docker_ctrl_multi_agent.py`, die docker_ctrl.py-Erweiterungs-Sektion
+> (Self-Inspection/`create_or_replace_agent_container`/Update-Flow-Umbau) und alle Verweise auf
+> RESEARCH.md Zeilen 268-346. `webui/src/docker_ctrl.py` bleibt auf Phase-4-Stand (globales
+> Start/Stop/Restart/Update des einen agent-Service).
+>
+> **Weiterhin gültig:** alle übrigen Pattern-Zuweisungen (llm.py, crypto.py, agents_io.py,
+> migration.py, state_reader.py, main.py-Routen, Templates, Test-Idiome). Neu hinzu kommt der
+> Multi-Account-Loop in `agent/src/main.py` (Analog: bestehende `_poll_once`/`_wait_for_config`-Struktur,
+> außen ergänzt um Agenten-Discovery + Fehler-Isolation — siehe Plan 05.02-agent-multi-account-loop)
+> sowie `agents_io.set_agent_enabled` (Analog: write_env-Line-Parser).
+
+
 **Mapped:** 2026-07-15
 **Files analyzed:** 22 (11 neu, 11 geändert)
 **Analogs found:** 20 / 22
