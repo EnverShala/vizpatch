@@ -1,12 +1,11 @@
-"""LLM-Draft-Generation via Anthropic Sonnet."""
+"""LLM-Draft-Generation via den LLM-Adapter."""
 from __future__ import annotations
 
 import logging
 import re
 from typing import Optional
 
-from anthropic import Anthropic
-
+from . import llm
 from .config import Config
 
 
@@ -49,13 +48,11 @@ def generate_draft_text(
     subject: str,
     body: str,
     config: Config,
-    client: Optional[Anthropic] = None,
     logger: Optional[logging.Logger] = None,
     conversation_history: list | None = None,
 ) -> str:
-    """Generate a reply draft text using Anthropic Sonnet, injecting context.md."""
+    """Generate a reply draft text via den konfigurierten LLM-Provider, injecting context.md."""
     logger = logger or logging.getLogger("vizpatch.generate")
-    client = client or Anthropic(api_key=config.anthropic_api_key)
 
     company_name = _extract_company_name(config.context_md)
     history_block = _build_history_block(conversation_history or [])
@@ -70,13 +67,14 @@ def generate_draft_text(
         }
     )
 
-    response = client.messages.create(
+    draft = llm.llm_call(
+        provider=config.llm_provider,
+        api_key=config.llm_api_key,
         model=config.model_draft,
+        prompt=prompt,
         max_tokens=config.llm_max_tokens_draft,
         temperature=config.llm_temperature_draft,
-        messages=[{"role": "user", "content": prompt}],
     )
-    draft = response.content[0].text if response.content else ""
 
     logger.info(
         "draft_generated",

@@ -23,12 +23,11 @@ def test_generate_includes_history_in_prompt(mock_config, mock_anthropic_generat
         subject="Re: Waschanlage-Termin",
         body="Und wie läuft das ab?",
         config=mock_config,
-        client=mock_anthropic_generate,
         conversation_history=[msg],
     )
 
-    call_args = mock_anthropic_generate.messages.create.call_args
-    prompt = call_args.kwargs["messages"][0]["content"]
+    call_args = mock_anthropic_generate.call_args
+    prompt = call_args.kwargs["prompt"]
     assert "Bisheriger Gesprächsverlauf" in prompt
     assert "Waschanlage-Termin" in prompt
 
@@ -40,12 +39,11 @@ def test_generate_empty_history_no_none_in_prompt(mock_config, mock_anthropic_ge
         subject="Frage",
         body="Test",
         config=mock_config,
-        client=mock_anthropic_generate,
         conversation_history=[],
     )
 
-    call_args = mock_anthropic_generate.messages.create.call_args
-    prompt = call_args.kwargs["messages"][0]["content"]
+    call_args = mock_anthropic_generate.call_args
+    prompt = call_args.kwargs["prompt"]
     # Slice zwischen den History-Abschnittmarkern
     start = prompt.find("# Bisheriger")
     end = prompt.find("# Eingehende")
@@ -60,7 +58,6 @@ def test_generate_no_history_parameter_backward_compat(mock_config, mock_anthrop
         subject="Frage",
         body="Wie sind die Öffnungszeiten?",
         config=mock_config,
-        client=mock_anthropic_generate,
     )
     # Kein Fehler, Ergebnis ist ein String
     assert isinstance(result, str)

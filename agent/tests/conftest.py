@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -39,7 +38,8 @@ def mock_config(tmp_path: Path) -> Config:
         backfill_days=1,
         own_email_address="test@example.com",
         own_display_name="Test User",
-        anthropic_api_key="sk-ant-test",
+        llm_provider="anthropic",
+        llm_api_key="sk-ant-test",
         model_classify="claude-haiku-4-5",
         model_draft="claude-sonnet-4-6",
         llm_max_tokens_draft=600,
@@ -55,29 +55,23 @@ def mock_config(tmp_path: Path) -> Config:
     )
 
 
-class _FakeMessagesResponse:
-    def __init__(self, text: str):
-        self.content = [MagicMock(text=text)]
+@pytest.fixture
+def mock_anthropic_classify_reply_needed(mocker):
+    """Patcht llm.llm_call für classify_email — ersetzt frühere Anthropic-Client-Injection."""
+    return mocker.patch("src.classify.llm.llm_call", return_value="REPLY_NEEDED")
 
 
 @pytest.fixture
-def mock_anthropic_classify_reply_needed():
-    client = MagicMock()
-    client.messages.create.return_value = _FakeMessagesResponse("REPLY_NEEDED")
-    return client
+def mock_anthropic_classify_ignore(mocker):
+    return mocker.patch("src.classify.llm.llm_call", return_value="IGNORE")
 
 
 @pytest.fixture
-def mock_anthropic_classify_ignore():
-    client = MagicMock()
-    client.messages.create.return_value = _FakeMessagesResponse("IGNORE")
-    return client
-
-
-@pytest.fixture
-def mock_anthropic_generate():
-    client = MagicMock()
-    client.messages.create.return_value = _FakeMessagesResponse(
-        "Sehr geehrter Kunde,\n\nvielen Dank für Ihre Anfrage.\nWir haben Mo–Fr von 8 bis 20 Uhr geöffnet.\n\nMit freundlichen Grüßen\nMax Muster"
+def mock_anthropic_generate(mocker):
+    return mocker.patch(
+        "src.generate.llm.llm_call",
+        return_value=(
+            "Sehr geehrter Kunde,\n\nvielen Dank für Ihre Anfrage.\n"
+            "Wir haben Mo–Fr von 8 bis 20 Uhr geöffnet.\n\nMit freundlichen Grüßen\nMax Muster"
+        ),
     )
-    return client
