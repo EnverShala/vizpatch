@@ -27,8 +27,9 @@ Schmaler Docker-Container, der eingehende E-Mails per IMAP polt, mit LLM klassif
    ```
    cp deployment/kunde-env.example .env
    chmod 600 .env
-   nano .env   # IMAP_USER, IMAP_PASSWORD, IMAP_DRAFTS_FOLDER, OWN_EMAIL_ADDRESS, ANTHROPIC_API_KEY eintragen
+   nano .env   # IMAP_USER, IMAP_PASSWORD, IMAP_DRAFTS_FOLDER, OWN_EMAIL_ADDRESS, LLM_API_KEY eintragen
    ```
+   Hinweis: Bei manueller `.env`-Bearbeitung (ohne WebUI) bleiben `IMAP_PASSWORD`/`LLM_API_KEY` als Klartext gültig — der Agent akzeptiert sowohl Klartext als auch von der WebUI Fernet-verschlüsselte Werte (`enc:<token>`, siehe unten).
 
 4. `context.md` aus Vorlage erstellen:
    ```
@@ -58,6 +59,14 @@ Schmaler Docker-Container, der eingehende E-Mails per IMAP polt, mit LLM klassif
 | Backup des State-DB | Volume `agent-data` sichern (enthält `state.db`) |
 
 Der Agent startet nach jedem Server-Reboot automatisch (`restart: unless-stopped`).
+
+## Multi-LLM-Provider (ab v1.2.0)
+
+`LLM_PROVIDER` (`anthropic` | `openai` | `google`) + `LLM_API_KEY` ersetzen das frühere feste `ANTHROPIC_API_KEY`-Feld. Pro Provider ist ein festes Classify-/Draft-Modellpaar in `agent/src/config.py MODEL_DEFAULTS` hinterlegt (kein Modell-Auswahlfeld im UI). Overrides ohne Code-Deploy: `MODEL_CLASSIFY` / `MODEL_DRAFT` in der `.env`. Beim Einsatz über die WebUI wird `LLM_PROVIDER` automatisch aus dem Key-Präfix abgeleitet (`sk-ant-` → Anthropic, `AIza` → Google, sonst `sk-` → OpenAI) — im manuellen `.env`-Setup muss `LLM_PROVIDER` selbst gesetzt werden.
+
+## Mehrere Agenten (Multi-Account)
+
+Ein Agent-Container kann mehrere Postfächer/Kunden-Konfigurationen parallel bedienen: pro Agent ein Verzeichnis unter `/config/agents/<agent-id>/` (`.env` + `context.md`), eigener State unter `/data/agents/<agent-id>/`. Das Flag `AGENT_ENABLED=true|false` in der jeweiligen Agent-`.env` steuert, ob dieser Agent im nächsten Poll-Zyklus verarbeitet wird — ohne Container-Neustart. Details (inkl. Fehler-Isolation, Zyklusdauer, Migration vom Single-Agent-Layout) siehe `deployment/README.phase4.md`, Abschnitt "Mehrere Agenten (Multi-Account, ab v1.2.0)".
 
 ## Wo landen die Drafts?
 

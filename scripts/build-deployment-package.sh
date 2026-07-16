@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 # scripts/build-deployment-package.sh
-# Erzeugt ein Deployment-Paket v1.1.0 für USB-Delivery zum Kunden (Agent + WebUI).
+# Erzeugt ein Deployment-Paket v1.2.0 für USB-Delivery zum Kunden (Agent + WebUI).
 # Voraussetzung: Docker + Docker Compose Plugin auf dem Build-Host (Vizionists-Laptop).
 #
 # Aufruf: bash scripts/build-deployment-package.sh [VERSION]
-#   VERSION default: v1.1.0 (Semver-Tag)
+#   VERSION default: v1.2.0 (Semver-Tag)
+#
+# v1.2.0 (Phase 5): Multi-LLM (agent/src/llm.py), Multi-Agent-Loop (Ein-Container-Modell,
+# /config/agents/<id>/) und Fernet-Verschlüsselung (agent/src/crypto.py, webui/src/crypto.py).
+# Die neuen Agent-Module (llm.py, crypto.py) und WebUI-Module (crypto.py, agents_io.py,
+# migration.py) werden NICHT einzeln kopiert — sie liegen unter agent/src/ bzw. webui/src/
+# und landen automatisch im Docker-Image via `COPY src/` im jeweiligen Dockerfile (siehe
+# docker build weiter unten), genau wie alle bestehenden Module.
 #
 # Ergebnis: dist/deployment-paket-<VERSION>/
-#   vizpatch-<VERSION>.tar                 Agent-Image-Tarball
+#   vizpatch-<VERSION>.tar                 Agent-Image-Tarball (inkl. llm.py, crypto.py)
 #   vizpatch-<VERSION>.tar.sha256          SHA256-Checksum Agent
-#   vizpatch-webui-<VERSION>.tar           WebUI-Image-Tarball
+#   vizpatch-webui-<VERSION>.tar           WebUI-Image-Tarball (inkl. crypto.py, agents_io.py, migration.py)
 #   vizpatch-webui-<VERSION>.tar.sha256    SHA256-Checksum WebUI
-#   docker-compose.yml                     Compose-Datei für den Kundenserver (beide Services)
-#   README.md                              Setup-Anleitung (Phase 4)
+#   docker-compose.yml                     Compose-Datei für den Kundenserver (weiterhin 2 Services: agent + webui)
+#   README.md                              Setup-Anleitung (Phase 4/5, SEC-03 + Multi-Agent)
 #   prompts/                               classify.txt + generate.txt + context-seed.txt
 #   deployment/                            Konfigurationsvorlagen
 #   scripts/                               install-autostart.sh
@@ -21,7 +28,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-v1.1.0}"
+VERSION="${1:-v1.2.0}"
 AGENT_IMAGE_TAG="vizpatch:${VERSION}"
 WEBUI_IMAGE_TAG="vizpatch-webui:${VERSION}"
 DIST_DIR="dist/deployment-paket-${VERSION}"

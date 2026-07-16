@@ -6,7 +6,8 @@ IMAP_PASSWORD=<ionos-app-password>       # aus IONOS Kundencenter -> E-Mail -> A
 IMAP_DRAFTS_FOLDER=Vizpatch     # Manuell im Mail-Client angelegt (Enver 2026-07-13)
 OWN_EMAIL_ADDRESS=shala@vizionists.com
 
-ANTHROPIC_API_KEY=<sk-ant-xxx>
+LLM_PROVIDER=anthropic
+LLM_API_KEY=<sk-ant-xxx>
 
 # IONOS ist in der statischen Provider-Tabelle — kein Override nötig.
 # Auto-Detect liefert: imap.ionos.de:993 SSL, Sent="Sent".

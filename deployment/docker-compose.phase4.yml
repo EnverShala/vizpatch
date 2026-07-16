@@ -1,6 +1,6 @@
 services:
   agent:
-    image: vizpatch:v1.1.0
+    image: vizpatch:v1.2.0
     container_name: vizpatch-agent
     restart: unless-stopped
     # Startet immer mit — wartet im Wait-for-Config-Loop bis /config/.env
@@ -16,7 +16,7 @@ services:
         max-file: "3"
 
   webui:
-    image: vizpatch-webui:v1.1.0
+    image: vizpatch-webui:v1.2.0
     container_name: vizpatch-webui
     restart: unless-stopped
     environment:

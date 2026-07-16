@@ -7,8 +7,11 @@ IMAP_PASSWORD=<app-password-oder-mail-password>
 IMAP_DRAFTS_FOLDER=<KI-Entwürfe>   # Wird automatisch angelegt falls nicht vorhanden
 OWN_EMAIL_ADDRESS=<info@tankstelle-name.de>  # Meistens identisch zu IMAP_USER
 
-# Anthropic API-Key (Vizionists stellt aus Business-Account)
-ANTHROPIC_API_KEY=<sk-ant-xxx>
+# LLM-Provider + API-Key (Vizionists stellt aus Business-Account)
+# LLM_PROVIDER: anthropic | openai | google (Vizpatch-WebUI leitet dies automatisch
+# aus dem Key-Präfix ab — bei manueller .env-Bearbeitung ohne WebUI selbst setzen)
+LLM_PROVIDER=anthropic
+LLM_API_KEY=<sk-ant-xxx>
 
 # ==== OPTIONAL — Nur setzen wenn Auto-Detect fehlschlägt ====
 # Der Agent erkennt IMAP-Host aus der E-Mail-Domain automatisch.
