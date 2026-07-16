@@ -14,16 +14,28 @@ from .config import Config
 
 
 class ImapClient:
-    def __init__(self, config: Config, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        config: Config,
+        logger: Optional[logging.Logger] = None,
+        timeout: Optional[float] = None,
+    ):
+        """timeout: Socket-Timeout in Sekunden für die IMAP-Verbindung (T-05-29).
+
+        Begrenzt einen hängenden Agenten im Multi-Account-Zyklus, damit dieser nicht
+        die Verarbeitung der übrigen Agenten blockiert. LLM-SDKs bringen ihre eigenen
+        HTTP-Timeouts mit — dieser Parameter betrifft ausschließlich die IMAP-Socket-Ebene.
+        """
         self.config = config
         self.logger = logger or logging.getLogger("vizpatch.imap")
+        self.timeout = timeout
         self._mailbox: Optional[MailBox] = None
 
     def __enter__(self) -> "ImapClient":
         if self.config.imap_use_ssl:
-            self._mailbox = MailBox(host=self.config.imap_host, port=self.config.imap_port)
+            self._mailbox = MailBox(host=self.config.imap_host, port=self.config.imap_port, timeout=self.timeout)
         else:
-            self._mailbox = MailBoxUnencrypted(host=self.config.imap_host, port=self.config.imap_port)
+            self._mailbox = MailBoxUnencrypted(host=self.config.imap_host, port=self.config.imap_port, timeout=self.timeout)
         self._mailbox.login(self.config.imap_user, self.config.imap_password, initial_folder=self.config.imap_inbox_folder)
         self.logger.info("imap_connected", extra={"host": self.config.imap_host, "user": self.config.imap_user})
         return self

@@ -2,16 +2,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional
 
 from dataclasses import replace
 
 from . import classify, generate, pii, state, status_writer
-from .config import Config, DecryptionError, load_config
+from .config import Config, DecryptionError, discover_agents, load_agent_config
 from .draft import build_reply_draft
 from .imap_client import ImapClient
 from .logging_setup import setup_logging
@@ -24,6 +26,18 @@ def _handle_sigterm(signum, frame):
     global _shutdown
     logging.getLogger("vizpatch").info("shutdown_requested", extra={"signal": signum})
     _shutdown = True
+
+
+class _AgentLoggerAdapter(logging.LoggerAdapter):
+    """LoggerAdapter, der self.extra (agent_id) mit Call-Site-extra MERGT statt es zu
+    verwerfen (Python-Default-process() überschreibt sonst kwargs["extra"] komplett).
+    Damit trägt JEDER Log-Record der Agent-Verarbeitung die agent_id (T-05-30).
+    """
+
+    def process(self, msg, kwargs):
+        extra = kwargs.get("extra") or {}
+        kwargs["extra"] = {**self.extra, **extra}
+        return msg, kwargs
 
 
 def _compute_since(config: Config) -> datetime:
@@ -111,9 +125,13 @@ def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient"
     return raw_bytes, message_id
 
 
+def _imap_timeout_seconds() -> float:
+    return float(os.getenv("IMAP_TIMEOUT_SECONDS", "60"))
+
+
 def _poll_once(config: Config, logger: logging.Logger) -> None:
     since = _compute_since(config)
-    with ImapClient(config, logger=logger) as imap:
+    with ImapClient(config, logger=logger, timeout=_imap_timeout_seconds()) as imap:
         logger.info("poll_start", extra={"since": since.isoformat(), "folder": config.imap_inbox_folder})
         count = 0
         for msg in imap.fetch_new_messages(since=since, own_address=config.own_email_address):
@@ -143,68 +161,152 @@ def _poll_once(config: Config, logger: logging.Logger) -> None:
 CONFIG_WAIT_SECONDS = 30
 
 
-def _resolve_drafts_folder(config: Config, logger: logging.Logger) -> Config:
-    """Resolution-Chain für den Drafts-Ordner:
+def _agent_data_root() -> Path:
+    return Path(os.getenv("AGENT_DATA_ROOT", "/data"))
+
+
+def _status_file_for(agent_id: str) -> Path:
+    return _agent_data_root() / "agents" / agent_id / "agent_status.json"
+
+
+# Drafts-Resolution-Cache: agent_id -> (env_mtime, folder, detection_source).
+# Verhindert, dass jeder Poll-Zyklus erneut per IMAP-Verbindung probt — Invalidierung
+# erfolgt anhand der mtime der Agent-.env-Datei (ändert sich z.B. bei explizitem
+# IMAP_DRAFTS_FOLDER-Save im WebUI).
+_drafts_cache: dict[str, tuple[float, str, str]] = {}
+
+
+def _resolve_drafts_folder(
+    config: Config, agent_dir: Path, status_file: Path, logger: logging.Logger
+) -> Config:
+    """Resolution-Chain für den Drafts-Ordner (pro Agent):
       1. User hat IMAP_DRAFTS_FOLDER explizit gesetzt → respektieren
-      2. IMAP SPECIAL-USE Auto-Discovery (\\Drafts-Flag)
+      2. IMAP SPECIAL-USE Auto-Discovery (\\Drafts-Flag), Ergebnis pro agent_id gecacht
       3. Statischer Provider-Default (bereits in config.imap_drafts_folder)
-      4. Als Fallback bleibt der Provider-Default; Fehler wird notiert
-    Schreibt das Ergebnis in /data/agent_status.json (für WebUI).
+    Schreibt das Ergebnis in die STATUS-DATEI DIESES Agenten.
     """
     if config.imap_drafts_folder_explicit:
-        logger.info("drafts_folder_source_explicit", extra={"folder": config.imap_drafts_folder})
         status_writer.write_status(
             drafts_folder=config.imap_drafts_folder,
             detection_source="explicit",
+            status_file=status_file,
         )
         return config
 
+    env_path = agent_dir / ".env"
+    try:
+        env_mtime = env_path.stat().st_mtime
+    except OSError:
+        env_mtime = 0.0
+
+    cached = _drafts_cache.get(config.agent_id)
+    if cached is not None and cached[0] == env_mtime:
+        _, folder, source = cached
+        status_writer.write_status(drafts_folder=folder, detection_source=source, status_file=status_file)
+        return replace(config, imap_drafts_folder=folder)
+
     detected: str | None = None
     try:
-        with ImapClient(config, logger=logger) as imap:
+        with ImapClient(config, logger=logger, timeout=_imap_timeout_seconds()) as imap:
             detected = imap.detect_drafts_folder()
     except Exception as e:
-        logger.warning("drafts_folder_probe_failed", extra={"error": str(e)})
+        logger.warning("drafts_folder_probe_failed", extra={"error": str(e), "agent_id": config.agent_id})
 
     if detected:
-        logger.info("drafts_folder_source_special_use", extra={"folder": detected})
-        status_writer.write_status(drafts_folder=detected, detection_source="special-use")
-        return replace(config, imap_drafts_folder=detected)
+        folder, source = detected, "special-use"
+    else:
+        folder, source = config.imap_drafts_folder, "provider"
 
-    # Fallback: provider_config-Wert (bereits in config.imap_drafts_folder)
-    logger.info("drafts_folder_source_provider_default", extra={"folder": config.imap_drafts_folder})
+    _drafts_cache[config.agent_id] = (env_mtime, folder, source)
+    logger.info("drafts_folder_resolved", extra={"folder": folder, "source": source, "agent_id": config.agent_id})
+    status_writer.write_status(drafts_folder=folder, detection_source=source, status_file=status_file)
+    return replace(config, imap_drafts_folder=folder)
+
+
+def _fail_agent(agent_id: str, status_file: Path, logger: logging.Logger, error: Exception) -> None:
+    """Loggt + isoliert einen fehlgeschlagenen Agenten: error + last_cycle in DESSEN
+    status_file, kein Re-Raise — der Gesamt-Zyklus läuft für die übrigen Agenten weiter
+    (T-05-29/T-05-30/T-05-10, MA-03).
+    """
+    logger.error("agent_cycle_failed", extra={"agent_id": agent_id, "error": str(error)})
     status_writer.write_status(
-        drafts_folder=config.imap_drafts_folder,
-        detection_source="provider",
+        error=str(error),
+        status_file=status_file,
+        last_cycle=datetime.now(timezone.utc).isoformat(),
     )
-    return config
 
 
-def _wait_for_config(logger: logging.Logger) -> Config:
-    """Wartet in einer Schleife bis /config/.env vollständig ist.
-    Kein Crash / kein Restart-Loop bei leerer Zero-Config-Installation —
-    Agent kann sofort mit Compose hochgezogen werden und "wacht auf"
-    sobald der Betreiber im WebUI-Formular gespeichert hat.
+def _run_cycle(logger: logging.Logger) -> None:
+    """Ein Poll-Zyklus: verarbeitet ALLE Agenten unter AGENTS_CONFIG_ROOT sequentiell.
+
+    discover_agents() wird INNERHALB des Zyklus aufgerufen (frisch pro Durchlauf) —
+    ein neuer/aktivierter Agent wird ohne Container-Restart ab dem nächsten Zyklus
+    verarbeitet. Ein Fehler EINES Agenten (Auth/IMAP/LLM/Decrypt, inkl. Timeout) wird
+    geloggt + isoliert; die übrigen Agenten laufen im selben Zyklus weiter.
+    """
+    for agent_id, agent_dir in discover_agents():
+        if _shutdown:
+            return
+
+        agent_logger = _AgentLoggerAdapter(logger, {"agent_id": agent_id})
+        status_file = _status_file_for(agent_id)
+
+        try:
+            cfg = load_agent_config(agent_id, agent_dir)
+            if not cfg.agent_enabled:
+                agent_logger.debug("agent_disabled_skip", extra={"agent_id": agent_id})
+                continue
+            state.init_db(cfg.state_db)
+            cfg = _resolve_drafts_folder(cfg, agent_dir, status_file, agent_logger)
+            _poll_once(cfg, agent_logger)
+        except DecryptionError as e:
+            _fail_agent(agent_id, status_file, agent_logger, e)
+            continue
+        except RuntimeError as e:
+            _fail_agent(agent_id, status_file, agent_logger, e)
+            continue
+        except Exception as e:
+            _fail_agent(agent_id, status_file, agent_logger, e)
+            continue
+        else:
+            status_writer.write_status(
+                drafts_folder=cfg.imap_drafts_folder,
+                detection_source="ok",
+                error=None,
+                status_file=status_file,
+                last_cycle=datetime.now(timezone.utc).isoformat(),
+            )
+
+
+def _wait_for_agents(logger: logging.Logger) -> None:
+    """Wartet idle, solange KEIN Agent existiert, dessen Config ladbar UND aktiv ist.
+
+    Generalisiert die alte Single-Config-Wait-Loop: 0 konfigurierte/aktive Agenten
+    bedeuten "warten", nicht "crashen" — der Container kann sofort mit Compose
+    hochgezogen werden, bevor im WebUI der erste Agent angelegt wurde.
     """
     while not _shutdown:
-        try:
-            return load_config()
-        except DecryptionError:
-            # Übergangslösung (bis 05.02): ein Decrypt-Fehler bedeutet falscher/fehlender
-            # Fernet-Key, NICHT "noch nicht konfiguriert" — sofort sichtbarer Fehler statt
-            # stiller Endlosschleife (T-05-10). Ab 05.02 übernimmt die per-Agent-
-            # Fehler-Isolation im Multi-Account-Loop diese Rolle inkl. status_file-Anzeige.
-            raise
-        except RuntimeError as e:
-            logger.info(
-                "waiting_for_config",
-                extra={"reason": str(e), "retry_in_seconds": CONFIG_WAIT_SECONDS},
-            )
-            slept = 0
-            while slept < CONFIG_WAIT_SECONDS and not _shutdown:
-                time.sleep(min(5, CONFIG_WAIT_SECONDS - slept))
-                slept += 5
-    raise SystemExit(0)
+        agents = discover_agents()
+        ready = 0
+        for agent_id, agent_dir in agents:
+            try:
+                cfg = load_agent_config(agent_id, agent_dir)
+            except (DecryptionError, RuntimeError):
+                continue
+            if cfg.agent_enabled:
+                ready += 1
+
+        if ready > 0:
+            return
+
+        logger.info(
+            "waiting_for_agents",
+            extra={"found": len(agents), "active": ready, "retry_in_seconds": CONFIG_WAIT_SECONDS},
+        )
+        slept = 0
+        while slept < CONFIG_WAIT_SECONDS and not _shutdown:
+            time.sleep(min(5, CONFIG_WAIT_SECONDS - slept))
+            slept += 5
 
 
 def main() -> int:
@@ -215,30 +317,22 @@ def main() -> int:
     setup_logging("INFO")
     boot_logger = logging.getLogger("vizpatch")
 
-    try:
-        config = _wait_for_config(boot_logger)
-    except SystemExit:
+    _wait_for_agents(boot_logger)
+    if _shutdown:
         return 0
 
-    logger = setup_logging(config.log_level)
-    logger.info(
-        "startup",
-        extra={
-            "imap_host": config.imap_host,
-            "imap_user": config.imap_user,
-            "poll_interval_seconds": config.poll_interval_seconds,
-        },
-    )
-    state.init_db(config.state_db)
+    logger = setup_logging(os.getenv("LOG_LEVEL", "INFO"))
+    poll_interval_seconds = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
+    logger.info("startup", extra={"poll_interval_seconds": poll_interval_seconds})
 
-    config = _resolve_drafts_folder(config, logger)
-
-    backoff_seconds = config.poll_interval_seconds
+    backoff_seconds = poll_interval_seconds
     while not _shutdown:
         try:
-            _poll_once(config, logger)
-            backoff_seconds = config.poll_interval_seconds  # reset on success
+            _run_cycle(logger)
+            backoff_seconds = poll_interval_seconds  # reset on success
         except Exception as e:
+            # Sollte praktisch nie greifen (jeder Agent ist per try/except isoliert) —
+            # verbleibende Absicherung gegen Fehler AUSSERHALB der Agent-Schleife selbst.
             logger.exception("poll_cycle_failed", extra={"error": str(e)})
             backoff_seconds = min(backoff_seconds * 2, 3600)
 
