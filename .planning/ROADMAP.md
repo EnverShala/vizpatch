@@ -14,8 +14,11 @@
 | 3 | Tuning & Übergabe | Draft-Qualität ≥ 80 %, Betreiber nutzt selbständig | OP-01…05, OPS-01…05 | 5 | ⏳ Pending |
 | 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
 | 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
+| 6 | Schreibstil-Adaption pro Agent (v1.3) | Automatische Stil-Extraktion aus dem Gesendet-Ordner beim Agent-Setup (style.md pro Agent), Re-Learn-Button, Prompt-Hierarchie context.md > style.md | STY-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
+| 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
+| 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase 7 |
 
-**38 Requirements, 4 Phasen (v1) + Phase 5 (v1.2 Backlog). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
+**38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
 
 ---
 
@@ -209,6 +212,84 @@ Plans:
 
 ---
 
+### Phase 6: Schreibstil-Adaption pro Agent (v1.3)
+
+**Goal:** Jeder Agent übernimmt automatisch den Schreibstil des Postfachbesitzers — dem Firmen-Kontext getreu. Beim Agent-Setup (erster erfolgreicher IMAP-Connect) extrahiert ein einmaliger LLM-Lauf aus den letzten ~30 Mails des Gesendet-Ordners ein Stil-Profil (`/config/agents/<id>/style.md`: Anrede, Du/Sie, Grußformel, Satzlänge, Formalität, typische Wendungen). Das Profil wird bei jedem Draft zusätzlich zu `context.md` injiziert — mit fester Prompt-Hierarchie: **context.md bestimmt WAS gesagt wird (fachlich führend), style.md nur WIE**. Im WebUI ist das Profil pro Agent sichtbar, editierbar und per „Schreibstil neu lernen"-Button neu generierbar. Kein Learning-Loop: einmalige Extraktion beim Setup (Default an) + manuelles Re-Learn — konform zum Nicht-Ziel „kein Fine-Tuning".
+**Mode:** mvp
+**Ziel-Aufwand:** ~1–1.5 Werktage Vizionists
+**Depends on:** Phase 5 (per-Agent-Layout `/config/agents/<id>/`, LLM-Adapter, agents_io)
+**Motivation:** Drafts klingen nach dem Betreiber statt nach generischem LLM-Ton — direkter Qualitätshebel auf die Ø-Draft-Bewertung, ohne dass der Kunde etwas konfigurieren muss.
+
+**Success Criteria:**
+
+1. Beim Anlegen eines Agenten mit gültigem IMAP-Zugang entsteht automatisch `style.md` aus den letzten N gesendeten Mails (Default 30, `STYLE_SAMPLE_COUNT`; Gesendet-Ordner via SPECIAL-USE `\Sent` + Provider-Config-Fallback, analog Drafts-Erkennung); leerer/fehlender Gesendet-Ordner → Agent läuft ohne `style.md` weiter (graceful, Hinweis im WebUI)
+2. `generate.py` injiziert `style.md` (falls vorhanden) zusätzlich zu `context.md` mit dokumentierter Hierarchie; A/B-Nachweis: Draft mit vs. ohne Stil-Profil unterscheidet sich sichtbar im Ton, nicht im Fach-Inhalt
+3. PII-Redaction läuft auch über die Gesendet-Mails, BEVOR sie ans LLM gehen (gleiches `pii.py`-Regime wie beim Klassifizieren)
+4. WebUI: `style.md`-Fieldset pro Agent (editierbar, Section-Save) + „Schreibstil neu lernen"-Button mit Bestätigung (überschreibt das Profil); Feature abschaltbar (`ENABLE_STYLE_ADAPTION`, Default `true`)
+5. Bestehende Agenten ohne `style.md` (migrierte Esso-Installation) funktionieren unverändert; Stil-Lernen dort per Button nachholbar
+
+**Requirements mapped:** STY-01, STY-02, STY-03, STY-04, STY-05
+
+**Hauptrisiken:**
+
+- Gesendet-Ordner-Name providerabhängig (wie Drafts) → SPECIAL-USE + Provider-Config-Fallback, gleiche Mechanik wie Phase 4
+- Stil-Profil übersteuert Fach-Kontext (z. B. lockerer Ton bei Beschwerden) → Prompt-Hierarchie explizit testen (Fixture-Fälle)
+- Gesendet-Ordner enthält wenig/untypische Mails (Weiterleitungen, Ein-Wort-Antworten) → Extraktion filtert auf echte Antwort-Mails, Mindestanzahl sonst Hinweis statt schlechtem Profil
+
+---
+
+### Phase 7: Agenten-Chat im WebUI (v1.3)
+
+**Goal:** Das WebUI bekommt einen Chat-Bereich pro Agent: Der Betreiber chattet mit einem LLM-Assistenten, der `context.md`, `style.md` und den Agent-Status (letzte Polls, Drafts-Ordner, Fehler) kennt — für Fragen („warum hat Mail X keinen Draft bekommen?"), Umformulierungen und Kontext-Pflege („ergänze die Öffnungszeiten"). Antworten streamen (SSE), der Chat nutzt den LLM-Provider des gewählten Agenten über denselben Adapter wie der Agent selbst. Architektur bewusst so geschnitten, dass Phase 8 (Outlook) den Chat als dünne Hülle wiederverwendet (Chat-UI als eigenständiges, einbettbares Partial + saubere `/chat`-API).
+**Mode:** mvp
+**Ziel-Aufwand:** ~1.5–2 Werktage Vizionists
+**Depends on:** Phase 5 (LLM-Adapter, Multi-Agent-Layout); nutzt style.md aus Phase 6, falls vorhanden
+**Motivation:** Betreiber bekommen einen direkten Draht zum Agenten statt nur Formulare — Support-Fragen und context.md-Pflege werden Self-Service.
+
+**Success Criteria:**
+
+1. Chat-UI im WebUI (HTMX + SSE-Streaming), pro Agent auswählbar, auth-geschützt wie alle Routen; Chat-Verlauf lebt in der Browser-Session (keine neue DB), Reset-Button vorhanden
+2. System-Prompt injiziert `context.md` + `style.md` + kompakten Agent-Status; Chat beantwortet nachweislich Fragen zu Konfiguration und letzten Verarbeitungs-Ergebnissen
+3. Chat-Backend ruft den LLM über den Phase-5-Adapter mit Provider/Key des gewählten Agenten (kein zweiter Anthropic-Sonderweg); Prompt-Injection-Anker wie beim Context-Seed-Assistenten
+4. Kosten-/Missbrauchs-Schutz: Rate-Limit pro Minute, max-Tokens-Deckel, Verlaufs-Trunkierung dokumentiert
+5. Chat-Frontend ist als einbettbares Partial gebaut (eigene Route ohne WebUI-Chrome) — nachweisbar durch Einbettung in einer nackten Test-HTML-Seite (Vorarbeit Phase 8)
+
+**Requirements mapped:** CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05
+
+**Hauptrisiken:**
+
+- Streaming (SSE) durch HTMX/Uvicorn sauber verdrahten → frühes Walking Skeleton
+- Chat-Kosten bei intensiver Nutzung → Limits von Anfang an, nicht nachrüsten
+- Scope-Kriechen Richtung „Chat kann Mails senden" → explizit NICHT (Kein-Auto-Send-Konvention gilt auch im Chat)
+
+---
+
+### Phase 8: Outlook-Add-in für den Agenten-Chat (v1.4)
+
+**Goal:** Der Agenten-Chat aus Phase 7 wird als Office-Add-in (Office.js, Taskpane) in Outlook nutzbar — Desktop (Windows/Mac), neues Outlook und Outlook im Web. Das Add-in ist eine dünne Hülle: Es lädt das einbettbare Chat-Partial per HTTPS vom Kundenserver und reicht die gerade geöffnete Mail (Betreff/Absender/Body via Office.js) als Kontext in den Chat. Liefergegenstand: Manifest, Taskpane-Seite, Sideloading-/Central-Deployment-Doku und eine dokumentierte HTTPS-Vorgabe für den Kundenserver (Reverse-Proxy, z. B. Caddy mit selbstverwaltetem Zertifikat).
+**Mode:** mvp
+**Ziel-Aufwand:** ~1.5–2 Werktage Vizionists (inkl. HTTPS-Setup-Doku)
+**Depends on:** Phase 7 (einbettbares Chat-Partial + /chat-API)
+**Motivation:** Betreiber arbeiten in Outlook, nicht im WebUI — der Chat kommt dorthin, wo die Mails gelesen werden.
+
+**Success Criteria:**
+
+1. Add-in-Manifest validiert; Sideloading in Outlook (neues Outlook + OWA) funktioniert dokumentiert
+2. Taskpane lädt den Chat vom Kundenserver über HTTPS; Auth-Fluss dokumentiert (Basic-Auth/Session)
+3. Geöffnete Mail wird als Chat-Kontext übergeben (Betreff, Absender, Body) — der Chat kann Fragen zur konkreten Mail beantworten
+4. HTTPS-Setup auf dem Kundenserver als Runbook-Kapitel (Reverse-Proxy vor der WebUI, Ports, Zertifikat)
+5. Kein-Auto-Send gilt weiter: Das Add-in erzeugt/ändert keine Mails, es liest nur
+
+**Requirements mapped:** OUT-01, OUT-02, OUT-03, OUT-04
+
+**Hauptrisiken:**
+
+- HTTPS-Erreichbarkeit des Kundenservers vom Outlook-Client (LAN vs. extern) → Vorab-Preflight-Kriterium, ggf. nur-LAN-Doku
+- Office.js-Add-in-Verteilung (Manifest je Kunde, zentrale M365-Verteilung braucht Admin) → beide Wege dokumentieren
+- Iframe-/CSP-Beschränkungen der Taskpane → Chat-Partial ohne Fremd-Ressourcen bauen (ist es ohnehin, kein CDN)
+
+---
+
 ## Estimation
 
 | Phase | Vizionists-Aufwand | Kunden-Beteiligung |
@@ -218,6 +299,9 @@ Plans:
 | Phase 3 | 0.5–1 Tag (verteilt) | 1 h Übergabe, ~30 Min Feedback pro Draft-Batch |
 | Phase 4 | 1.5–2 Tage | ~30 Min Erst-Konfig per WebUI vor Ort |
 | Phase 5 (v1.2) | ~2–3 Werktage | 0 (optionales Upgrade) |
+| Phase 6 (v1.3) | ~1–1.5 Werktage | 0 (automatisch beim Setup) |
+| Phase 7 (v1.3) | ~1.5–2 Werktage | 0 |
+| Phase 8 (v1.4) | ~1.5–2 Werktage | ggf. M365-Admin für Add-in-Verteilung |
 | **Summe (v1)** | **~4.5–5 Werktage** | **~5.5 h** |
 
 **Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 4 (Web-UI) → Vor-Ort-Termin bei Esso Leonberg mit UI-Rollout. Woche 3 = Phase 3 (Tuning + Übergabe, teilweise parallel).
@@ -230,5 +314,8 @@ Plans:
 - Phase 4 setzt Phase 2 (Container + Deployment-Paket-Builder) voraus, kann vor Phase 3 laufen
 - Phase 3 setzt Phase 2 (Live-Betrieb) und ~1 Woche gesammelte Real-Drafts voraus; kann parallel zu Phase 4 laufen (Feedback aus Live-Betrieb informiert UI-Tuning)
 - Phase 5 (v1.2) setzt Phase 4 (WebUI-Formular) + abgeschlossenen Esso-Rollout voraus — kein Feature-Creep vor Live-Betrieb
+- Phase 6 (v1.3) setzt Phase 5 voraus (per-Agent-Layout `/config/agents/<id>/`, LLM-Adapter, agents_io); Detail-Planung (`/gsd:plan-phase 6`) erst NACH Phase-5-Execution, damit der Planner gegen echten Code plant
+- Phase 7 (v1.3) setzt Phase 5 voraus (LLM-Adapter, Multi-Agent); nutzt Phase-6-style.md optional — kann bei Bedarf vor Phase 6 gezogen werden
+- Phase 8 (v1.4) setzt Phase 7 zwingend voraus (einbettbares Chat-Partial + /chat-API) + HTTPS-fähigen Kundenserver
 
 Preflight-Requirements (PRE-01…05) können teilweise parallel zu Phase 1 vom Kunden bearbeitet werden.

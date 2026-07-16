@@ -96,7 +96,7 @@
 ### Multi-Agent — mehrere Mail-Accounts (MA)
 
 - [ ] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
-- [ ] **MA-02**: Agent-Dropdown im WebUI — leer, wenn kein Agent gespeichert; "Neuen Agent anlegen"-Aktion (Provider wählen + API-Key + E-Mail + IMAP-Passwort + Context → Agent erscheint im Dropdown); Auswahl lädt das Konfig-Formular des gewählten Agenten; Umbenennen + Löschen (Zwei-Stufen-Bestätigung: Config + State)
+- [ ] **MA-02**: Agent-Dropdown im WebUI — leer, wenn kein Agent gespeichert; "Neuen Agent anlegen"-Aktion (API-Key + E-Mail + IMAP-Passwort + Context eingeben, Provider wird autodetektiert (D-51) → Agent erscheint im Dropdown); Auswahl lädt das Konfig-Formular des gewählten Agenten; Umbenennen + Löschen (Zwei-Stufen-Bestätigung: Config + State)
 - [ ] **MA-03**: Ein einziger Agent-Container (bestehender Compose-Service) mit Multi-Account-Poll-Loop — `main.py` liest pro Zyklus alle `/config/agents/*/` ein und verarbeitet sequentiell jeden Agenten mit gesetztem Aktiv-Flag (`AGENT_ENABLED`); Start/Stop-Button je Agent schreibt nur das Flag (wirkt ab nächstem Zyklus, kein Container-Restart, kein Docker-SDK pro Agent); Fehler eines Agenten (Auth/IMAP/LLM) wird geloggt und isoliert, übrige Agenten laufen im selben Zyklus weiter
 - [ ] **MA-04**: Getrennter State pro Agent — SQLite (`state.db`) + `agent_status.json` je Agent unter `/data/agents/<agent-id>/`; Status-Übersicht im WebUI listet alle Agenten (Läuft/Gestoppt via Aktiv-Flag + Last-Poll-Heartbeat, letzter Poll, Start/Stop-Button je Zeile)
 - [ ] **MA-05**: Paralleler Betrieb verifiziert — mind. 2 Agenten gegen 2 verschiedene Test-Postfächer gleichzeitig, jeder Draft landet im richtigen Postfach, keine Cross-Kontamination
@@ -106,6 +106,35 @@
 - [ ] **SEC-01**: Fernet-Verschlüsselung (Python `cryptography`) für Secret-Werte in `.env`-Dateien (`IMAP_PASSWORD`, `LLM_API_KEY`) mit `enc:`-Prefix; Key-Datei im Config-Volume, auto-generiert beim ersten Start, `chmod 600`
 - [ ] **SEC-02**: WebUI ver-/entschlüsselt transparent (Save verschlüsselt, Formular-Anzeige bleibt masked); Agent-`config.py` entschlüsselt beim Laden; Klartext-Legacy-Werte werden erkannt und beim nächsten Save verschlüsselt (sanfte Migration)
 - [ ] **SEC-03**: Key-Handling dokumentiert — Key-Datei nie im Git, Backup-Hinweis (Config-Backup enthält Key + verschlüsselte `.env`s zusammen), Zero-Reset löscht Key mit; Schutzumfang ehrlich dokumentiert (Datei-/Backup-Leaks, nicht Root auf Host)
+
+---
+
+## v1.3 Requirements (Phase 6 — Schreibstil-Adaption, Phase 7 — Agenten-Chat)
+
+### Schreibstil-Adaption pro Agent (STY)
+
+- [ ] **STY-01**: Automatische Stil-Extraktion beim Agent-Setup (erster erfolgreicher IMAP-Connect, Default an via `ENABLE_STYLE_ADAPTION=true`): letzte N gesendete Mails (Default 30, `STYLE_SAMPLE_COUNT`) aus dem Gesendet-Ordner (SPECIAL-USE `\Sent` + Provider-Config-Fallback) → LLM destilliert Stil-Profil → `/config/agents/<id>/style.md`
+- [ ] **STY-02**: `style.md` wird bei jedem Draft zusätzlich zu `context.md` injiziert; Prompt-Hierarchie fest: `context.md` = Inhalt (fachlich führend), `style.md` = nur Ton/Form; fehlende `style.md` → Draft-Generierung unverändert wie heute
+- [ ] **STY-03**: WebUI zeigt `style.md` pro Agent als editierbares Fieldset (Section-Save) + „Schreibstil neu lernen"-Button mit Bestätigung (überschreibt Profil)
+- [ ] **STY-04**: PII-Redaction (`pii.py`-Regime) läuft über die Gesendet-Mails, bevor sie ans LLM gehen; Extraktion filtert auf echte Antwort-Mails (keine Weiterleitungen/Ein-Wort-Mails); zu wenig Material → Hinweis statt schlechtem Profil
+- [ ] **STY-05**: Kein Learning-Loop — Extraktion läuft genau einmal beim Setup + manuell per Button; leerer/fehlender Gesendet-Ordner → graceful (Agent läuft ohne Profil, Hinweis im WebUI)
+
+### Agenten-Chat im WebUI (CHAT)
+
+- [ ] **CHAT-01**: Chat-UI im WebUI pro Agent (HTMX + SSE-Streaming), auth-geschützt; Verlauf in der Browser-Session (keine neue DB), Reset-Button
+- [ ] **CHAT-02**: System-Prompt injiziert `context.md` + `style.md` + kompakten Agent-Status (letzte Polls, Drafts-Ordner, Fehler); Chat beantwortet Fragen zu Konfiguration und Verarbeitungs-Ergebnissen
+- [ ] **CHAT-03**: Chat nutzt den Phase-5-LLM-Adapter mit Provider/Key des gewählten Agenten; Prompt-Injection-Anker wie beim Context-Seed-Assistenten
+- [ ] **CHAT-04**: Kosten-/Missbrauchs-Schutz: Rate-Limit pro Minute, max-Tokens-Deckel, Verlaufs-Trunkierung; Kein-Auto-Send gilt auch im Chat (Chat sendet/ändert keine Mails)
+- [ ] **CHAT-05**: Chat-Frontend als einbettbares Partial (eigene Route ohne WebUI-Chrome, keine externen Ressourcen) — Vorarbeit für das Outlook-Add-in (Phase 8)
+
+---
+
+## v1.4 Requirements (Phase 8 — Outlook-Add-in)
+
+- [ ] **OUT-01**: Office.js-Add-in (Taskpane) mit validiertem Manifest; Sideloading in neuem Outlook + Outlook im Web dokumentiert, zentrale M365-Verteilung als Alternative beschrieben
+- [ ] **OUT-02**: Taskpane lädt das Chat-Partial (CHAT-05) per HTTPS vom Kundenserver; Auth-Fluss dokumentiert
+- [ ] **OUT-03**: Geöffnete Mail (Betreff, Absender, Body) wird via Office.js als Chat-Kontext übergeben
+- [ ] **OUT-04**: HTTPS-Runbook-Kapitel für den Kundenserver (Reverse-Proxy vor der WebUI, Zertifikat, Ports); Add-in ist rein lesend (Kein-Auto-Send)
 
 ---
 
@@ -150,3 +179,6 @@
 | LLM-01 … LLM-04 | Phase 5 (v1.2) | Pending |
 | MA-01 … MA-05 | Phase 5 (v1.2) | Pending |
 | SEC-01 … SEC-03 | Phase 5 (v1.2) | Pending |
+| STY-01 … STY-05 | Phase 6 (v1.3) | Pending |
+| CHAT-01 … CHAT-05 | Phase 7 (v1.3) | Pending |
+| OUT-01 … OUT-04 | Phase 8 (v1.4) | Pending |

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-07-14T00:00:00.000Z"
+last_updated: "2026-07-16T00:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
@@ -31,6 +31,9 @@ progress:
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
 | 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves; Revision 4 mit D-51-Autodetect; Plan-Checker PASSED 2026-07-16) — Ausführung erst nach Esso-Rollout | — | — |
+| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📝 Roadmap-Eintrag (STY-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
+| 7 — Agenten-Chat im WebUI (v1.3) | 📝 Roadmap-Eintrag (CHAT-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
+| 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | 📝 Roadmap-Eintrag (OUT-01…04) — setzt Phase 7 voraus | — | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
@@ -90,13 +93,23 @@ Kern-Artefakte:
 | Plan | Was | Wave | Autonomous |
 |---|---|---|---|
 | 05.01 | Fernet-Krypto-Fundament (crypto.py Agent+WebUI, Key-Datei chmod 600, Deps openai/google-genai/cryptography, Version 1.2.0) | 1 | ja |
-| 05.02 | Docker-SDK Multi-Container (Self-Inspection, create/list pro agent_id, Update-SDK-Loop, Compose ohne statischen agent-Service) | 1 | ja |
 | 05.03 | LLM-Adapter im Agent (llm.py, LLM_PROVIDER/LLM_API_KEY, Fernet-Decrypt, classify+generate auf Adapter) | 2 | ja |
-| 05.04 | agents_io (per-Agent .env+context.md, Slug-Guard, rename/delete) + idempotente Migration Single→default | 2 | ja |
-| 05.05 | WebUI agent_id-Routing, /agents-CRUD, Agent-+Provider-Dropdown, Status-Liste, Multi-Agent-Zero-Reset | 3 | ja |
+| 05.04 | agents_io (per-Agent .env+context.md+AGENT_ENABLED, Slug-Guard, rename/delete, read_env_raw) + idempotente Migration Single→default mit Agent-Key-Guard | 2 | ja |
+| 05.02 | Agent-Multi-Account-Loop (EIN Container, per-Zyklus-Discovery, Aktiv-Flag, Fehler-Isolation, IMAP-Timeout, last_cycle-Heartbeat) | 3 | ja |
+| 05.05 | WebUI agent_id-Routing, /agents-CRUD, Agent-Dropdown + API-Key-Autodetect (D-51), Status-Liste, llm_seed pro Agent, Multi-Agent-Zero-Reset | 3 | ja |
 | 05.06 | Verifikation: Modell-ID-Check, LLM-04-Fixtures je Provider (≥ 11/14), MA-05-Parallelbetrieb, Esso-Migrations-Abnahme, Paket v1.2.0 | 4 | nein (Checkpoints) |
 
-Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05-CONTEXT.md D-46..D-50, 05-RESEARCH.md, 05-PATTERNS.md, 6 PLAN.md). Requirements LLM-01…04, MA-01…05, SEC-01…03 in REQUIREMENTS.md.
+Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05-CONTEXT.md D-46..D-51, 05-RESEARCH.md, 05-PATTERNS.md, 6 PLAN.md). Requirements LLM-01…04, MA-01…05, SEC-01…03 in REQUIREMENTS.md.
+
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 6 hinzugefügt (2026-07-16): Schreibstil-Adaption pro Agent (v1.3) — automatische Stil-Extraktion aus Gesendet-Ordner beim Setup, style.md pro Agent, Re-Learn-Button; STY-01…05
+- Phase 7 hinzugefügt (2026-07-16): Agenten-Chat im WebUI (v1.3) — SSE-Streaming, context/style/Status-Wissen, einbettbares Partial; CHAT-01…05
+- Phase 8 hinzugefügt (2026-07-16): Outlook-Add-in für den Agenten-Chat (v1.4) — Office.js-Taskpane über CHAT-05-Partial, HTTPS-Runbook; OUT-01…04
+- Verworfen (2026-07-16): Standalone-.exe/PyInstaller-Distribution — Architektur-Umbau zu groß, Docker bleibt Deployment-Standard. Docker-lose Ubuntu-Variante (systemd + venv, Steuerungs-Abstraktion statt docker_ctrl) als mögliche Mini-Phase notiert, nur bei konkretem Kundenbedarf.
+- Detail-Planung (`/gsd:plan-phase 6/7/8`) bewusst NACH Phase-5-Execution — die Phasen bauen auf Phase-5-Artefakten auf (agents-Layout, LLM-Adapter), gegen die der Planner erst planen kann, wenn sie im Code existieren.
 
 ## History
 
