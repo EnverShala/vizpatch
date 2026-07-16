@@ -1,9 +1,9 @@
 import os
 import tempfile
+from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from pathlib import Path
-
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -11,18 +11,20 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from . import auth, config_io, docker_ctrl, llm_seed, state_reader
+from . import agents_io, auth, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="Vizpatch WebUI", version="1.1.0")
+app = FastAPI(title="Vizpatch WebUI", version="1.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="src/templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google"}
 
 
 @app.middleware("http")
@@ -52,31 +54,64 @@ def auth_check() -> dict:
     return {"ok": True}
 
 
+def _build_agent_statuses() -> list[dict]:
+    """Baut die Status-Übersicht ALLER Agenten (D-50): Flag + Heartbeat + letzter Poll + fehlende Config."""
+    result: list[dict] = []
+    for aid in agents_io.list_agent_ids():
+        enabled = agents_io.get_agent_enabled(aid)
+        status_json = state_reader.get_agent_status_json(aid)
+        result.append(
+            {
+                "id": aid,
+                "enabled": enabled,
+                "running": state_reader.is_running(enabled, status_json),
+                "last_poll": state_reader.get_last_poll(aid),
+                "status_json": status_json,
+                "missing": agents_io.get_missing_config(aid),
+            }
+        )
+    return result
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
     user: str = Depends(auth.require_auth),
+    agent_id: str = "",
     saved: int = 0,
     reset: int = 0,
     error: str = "",
 ):
-    env_vals = config_io.read_env_masked()
-    context_md = config_io.read_context_md()
-    status = docker_ctrl.get_agent_status()
-    last_poll = state_reader.get_last_poll()
-    drafts_status = state_reader.get_drafts_folder_status()
-    missing = config_io.get_missing_config()
+    agents = agents_io.list_agent_ids()
+    active_id = agent_id or (agents[0] if agents else "")
+    agent_statuses = _build_agent_statuses()
+
+    if active_id and active_id in agents:
+        env_vals = agents_io.read_env_masked(active_id)
+        context_md = agents_io.read_context_md(active_id)
+        drafts_status = state_reader.get_agent_status_json(active_id)
+        missing = agents_io.get_missing_config(active_id)
+    else:
+        active_id = ""
+        env_vals = {}
+        context_md = ""
+        drafts_status = {}
+        missing = []
+
     return templates.TemplateResponse(
         request,
         "index.html",
         {
+            "agent_id": active_id,
+            "agents": agents,
+            "agent_statuses": agent_statuses,
             "env": env_vals,
+            "global_env": config_io.read_env_masked(),
             "context_md": context_md,
             "saved": saved,
             "reset": reset,
             "error": error,
-            "status": status,
-            "last_poll": last_poll,
+            "service_status": docker_ctrl.get_agent_status(),
             "drafts_status": drafts_status,
             "configured": not missing,
             "missing": missing,
@@ -86,50 +121,96 @@ def index(
     )
 
 
-@app.get("/agent/status", response_class=HTMLResponse)
-def agent_status(request: Request, user: str = Depends(auth.require_auth)):
-    status = docker_ctrl.get_agent_status()
-    last_poll = state_reader.get_last_poll()
-    missing = config_io.get_missing_config()
+@app.get("/agents/status", response_class=HTMLResponse)
+def agents_status(request: Request, user: str = Depends(auth.require_auth)):
     return templates.TemplateResponse(
         request,
         "_status_card.html",
-        {"status": status, "last_poll": last_poll, "configured": not missing, "missing": missing},
+        {"agent_statuses": _build_agent_statuses(), "service_status": docker_ctrl.get_agent_status()},
+    )
+
+
+@app.post("/agents")
+def create_agent(
+    request: Request,
+    name_or_email: str = Form(...),
+    user: str = Depends(auth.require_auth),
+):
+    slug = agents_io.slugify(name_or_email)
+    # Neuer Agent startet GESTOPPT (Einrichtungs-Flow: erst konfigurieren, dann Start-Klick).
+    agents_io.write_env(slug, {"AGENT_ENABLED": "false"})
+    return RedirectResponse(f"/?agent_id={slug}", status_code=303)
+
+
+@app.post("/agents/{agent_id}/rename")
+def rename_agent_endpoint(
+    agent_id: str,
+    new_name: str = Form(...),
+    user: str = Depends(auth.require_auth),
+):
+    new_slug = agents_io.slugify(new_name)
+    try:
+        agents_io.rename_agent(agent_id, new_slug)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse(f"/?agent_id={new_slug}", status_code=303)
+
+
+@app.post("/agents/{agent_id}/delete")
+def delete_agent_endpoint(
+    agent_id: str,
+    confirmation: str = Form(""),
+    user: str = Depends(auth.require_auth),
+):
+    if confirmation != "LÖSCHEN":
+        return RedirectResponse(
+            f"/?agent_id={agent_id}&error={quote('Löschen abgebrochen: Bestätigungswort war nicht ‚LÖSCHEN‘.')}",
+            status_code=303,
+        )
+    try:
+        agents_io.delete_agent(agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/agents/{agent_id}/{action}", response_class=HTMLResponse)
+def agent_flag_toggle(
+    request: Request,
+    agent_id: str,
+    action: str,
+    user: str = Depends(auth.require_auth),
+):
+    if action not in ("start", "stop"):
+        raise HTTPException(status_code=400, detail="invalid action")
+    try:
+        agents_io.set_agent_enabled(agent_id, action == "start")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return templates.TemplateResponse(
+        request,
+        "_status_card.html",
+        {
+            "agent_statuses": _build_agent_statuses(),
+            "service_status": docker_ctrl.get_agent_status(),
+            "action_result": "wirkt ab dem nächsten Poll-Zyklus",
+        },
     )
 
 
 @app.post("/agent/{action}", response_class=HTMLResponse)
 def agent_action(request: Request, action: str, user: str = Depends(auth.require_auth)):
+    """Globale Admin-Funktion (Phase-4-Umfang): steuert den EINEN agent-Service via Docker."""
     if action not in ("start", "stop"):
         raise HTTPException(status_code=400, detail="invalid action")
-    missing = config_io.get_missing_config()
-    if missing and action == "start":
-        status = docker_ctrl.get_agent_status()
-        last_poll = state_reader.get_last_poll()
-        return templates.TemplateResponse(
-            request,
-            "_status_card.html",
-            {
-                "status": status,
-                "last_poll": last_poll,
-                "action_result": f"Konfiguration unvollständig — fehlt: {', '.join(missing)}",
-                "configured": False,
-                "missing": missing,
-            },
-            status_code=400,
-        )
     result = docker_ctrl.control_agent(action)
-    status = docker_ctrl.get_agent_status()
-    last_poll = state_reader.get_last_poll()
     return templates.TemplateResponse(
         request,
         "_status_card.html",
         {
-            "status": status,
-            "last_poll": last_poll,
+            "agent_statuses": _build_agent_statuses(),
+            "service_status": docker_ctrl.get_agent_status(),
             "action_result": result,
-            "configured": not missing,
-            "missing": missing,
         },
     )
 
@@ -138,11 +219,32 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
 @limiter.limit("10/minute")
 def context_generate(
     request: Request,
+    agent_id: str = Form(...),
     firma_input: str = Form(..., max_length=5000),
     user: str = Depends(auth.require_auth),
 ):
     try:
-        seed_text = llm_seed.generate(firma_input)
+        env = agents_io.read_env_raw(agent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid agent_id")
+
+    provider = (env.get("LLM_PROVIDER") or "").strip()
+    if provider != "anthropic":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Der Context-Assistent nutzt Anthropic — dieser Agent verwendet "
+                f"{provider or 'keinen erkannten Provider'}. context.md bitte manuell pflegen "
+                "oder einen Anthropic-Key hinterlegen."
+            ),
+        )
+    raw_key = (env.get("LLM_API_KEY") or "").strip()
+    if not raw_key:
+        raise HTTPException(status_code=400, detail="Kein API-Key für diesen Agenten gespeichert")
+
+    try:
+        api_key = crypto.decrypt_value(raw_key)
+        seed_text = llm_seed.generate(firma_input, api_key=api_key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -159,7 +261,6 @@ def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redi
         css = "save-ok" if ok else "save-err"
         icon = "&#10003;" if ok else "&#9888;"
         return HTMLResponse(f'<span class="{css}">{icon} {message}</span>')
-    from urllib.parse import quote
     return RedirectResponse(f"/?{redirect_query}={quote(message) if not ok else '1'}", status_code=303)
 
 
@@ -167,9 +268,10 @@ def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redi
 @limiter.limit("20/minute")
 def save(
     request: Request,
+    agent_id: str = Form(""),
     imap_user: str | None = Form(None),
     imap_password: str | None = Form(None),
-    anthropic_api_key: str | None = Form(None),
+    llm_api_key: str | None = Form(None),
     imap_drafts_folder: str | None = Form(None),
     autostart_enabled: str | None = Form(None),
     context_md: str | None = Form(None),
@@ -181,14 +283,13 @@ def save(
     is_htmx = request.headers.get("HX-Request") == "true"
     existing = config_io.read_env_raw()
 
-    # Passwort-Change-Logik — nur wenn WebUI-Login-Felder tatsächlich mitgesendet wurden
+    # --- WebUI-Login-Passwort-Change-Logik (global, Root-.env) ---
     hashed_new_pw: str | None = None
     webui_user_new = (webui_user or "").strip() if webui_user is not None else None
     pw_current = webui_password_current or ""
     pw_new = webui_password_new or ""
     existing_pw = existing.get("WEBUI_PASSWORD", "").strip()
 
-    # Nur validieren wenn WebUI-Login-Felder überhaupt Teil der Submission sind
     webui_section_submitted = (
         webui_user is not None
         or webui_password_current is not None
@@ -214,28 +315,55 @@ def save(
             if pw_new:
                 hashed_new_pw = auth.hash_password(pw_new)
 
-    updates: dict[str, str] = {}
-    if imap_user is not None:
-        updates["IMAP_USER"] = imap_user
-        # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups
-        updates["OWN_EMAIL_ADDRESS"] = imap_user
+    global_updates: dict[str, str] = {}
     if autostart_enabled is not None:
-        updates["AUTOSTART_ENABLED"] = "true" if autostart_enabled in ("true", "on", "1") else "false"
-    if imap_drafts_folder is not None and imap_drafts_folder.strip() != "":
-        updates["IMAP_DRAFTS_FOLDER"] = imap_drafts_folder.strip()
-    if imap_password is not None and imap_password.strip() != "":
-        updates["IMAP_PASSWORD"] = imap_password
-    if anthropic_api_key is not None and anthropic_api_key.strip() != "":
-        updates["ANTHROPIC_API_KEY"] = anthropic_api_key
+        global_updates["AUTOSTART_ENABLED"] = "true" if autostart_enabled in ("true", "on", "1") else "false"
     if webui_user_new:
-        updates["WEBUI_USER"] = webui_user_new
+        global_updates["WEBUI_USER"] = webui_user_new
     if hashed_new_pw is not None:
-        updates["WEBUI_PASSWORD"] = hashed_new_pw
+        global_updates["WEBUI_PASSWORD"] = hashed_new_pw
+    if global_updates:
+        config_io.write_env(global_updates)
 
-    if updates:
-        config_io.write_env(updates)
-    if context_md is not None:
-        config_io.write_context_md_atomic(context_md)
+    # --- Agent-spezifische Updates (D-51: Provider-Autodetect aus llm_api_key) ---
+    agent_fields_submitted = any(
+        v is not None for v in (imap_user, imap_password, llm_api_key, imap_drafts_folder, context_md)
+    )
+    if agent_fields_submitted:
+        if not agent_id:
+            return _save_response(request, is_htmx, False, "Kein Agent ausgewählt.", "error")
+
+        updates: dict[str, str] = {}
+        if imap_user is not None:
+            updates["IMAP_USER"] = imap_user
+            # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups
+            updates["OWN_EMAIL_ADDRESS"] = imap_user
+        if imap_drafts_folder is not None and imap_drafts_folder.strip() != "":
+            updates["IMAP_DRAFTS_FOLDER"] = imap_drafts_folder.strip()
+        if imap_password is not None and imap_password.strip() != "":
+            updates["IMAP_PASSWORD"] = imap_password
+        if llm_api_key is not None and llm_api_key.strip() != "" and llm_api_key != agents_io.MASKED:
+            provider = llm_detect.detect_llm_provider(llm_api_key)
+            if provider is None:
+                return _save_response(
+                    request, is_htmx, False,
+                    "API-Key-Format nicht erkannt — erwartet sk-ant-… (Anthropic), sk-… (OpenAI) oder AIza… (Google)",
+                    "error",
+                )
+            updates["LLM_API_KEY"] = llm_api_key
+            updates["LLM_PROVIDER"] = provider
+
+        try:
+            if updates:
+                agents_io.write_env(agent_id, updates)
+            if context_md is not None:
+                agents_io.write_context_md_atomic(agent_id, context_md)
+        except ValueError:
+            return _save_response(request, is_htmx, False, "Ungültiger Agent.", "error")
+
+        if "LLM_PROVIDER" in updates:
+            provider_label = PROVIDER_LABELS.get(updates["LLM_PROVIDER"], updates["LLM_PROVIDER"])
+            return _save_response(request, is_htmx, True, f"Gespeichert — Provider erkannt: {provider_label}", "saved")
 
     return _save_response(request, is_htmx, True, "Gespeichert", "saved")
 
@@ -245,13 +373,20 @@ def reset_all_endpoint(
     confirmation: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
-    from urllib.parse import quote
     if confirmation != "LÖSCHEN":
         return RedirectResponse(
             f"/?error={quote('Zero-Reset abgebrochen: Bestätigungswort war nicht ‚LÖSCHEN‘.')}",
             status_code=303,
         )
+    # Alle Agenten (Config + State) entfernen (MA-01/D-50).
+    for aid in agents_io.list_agent_ids():
+        agents_io.delete_agent(aid)
+    # Fernet-Key-Datei löschen (SEC-03: Zero-Reset löscht den Key mit).
+    key_file = Path(os.getenv("VIZPATCH_SECRET_KEY_FILE", "/config/.secret_key"))
+    key_file.unlink(missing_ok=True)
+    # Den einen Agent-Container stoppen/entfernen (Phase-4-Signatur, parameterlos).
     docker_ctrl.stop_and_remove_agent()
+    # Root-.env (WebUI-globale Settings) leeren.
     config_io.reset_all()
     return RedirectResponse("/?reset=1", status_code=303)
 
