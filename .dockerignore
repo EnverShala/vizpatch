@@ -1,0 +1,30 @@
+# Secrets — niemals in ein Docker-Image gebacken (SEC-03)
+.env
+.secret_key
+**/.secret_key
+.migration-backup-*
+
+# Zero-Config-/Multi-Agent-Runtime-Verzeichnisse (Bind-Mounts, nicht Teil des Images)
+config/
+agent/config/
+agents/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Git / IDE / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tests / Deployment-Artefakte — nicht Teil des Runtime-Images
+tests/
+dist/

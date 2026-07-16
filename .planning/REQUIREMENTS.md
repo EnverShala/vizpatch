@@ -95,7 +95,7 @@
 
 ### Multi-Agent — mehrere Mail-Accounts (MA)
 
-- [ ] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
+- [x] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
 - [ ] **MA-02**: Agent-Dropdown im WebUI — leer, wenn kein Agent gespeichert; "Neuen Agent anlegen"-Aktion (API-Key + E-Mail + IMAP-Passwort + Context eingeben, Provider wird autodetektiert (D-51) → Agent erscheint im Dropdown); Auswahl lädt das Konfig-Formular des gewählten Agenten; Umbenennen + Löschen (Zwei-Stufen-Bestätigung: Config + State)
 - [ ] **MA-03**: Ein einziger Agent-Container (bestehender Compose-Service) mit Multi-Account-Poll-Loop — `main.py` liest pro Zyklus alle `/config/agents/*/` ein und verarbeitet sequentiell jeden Agenten mit gesetztem Aktiv-Flag (`AGENT_ENABLED`); Start/Stop-Button je Agent schreibt nur das Flag (wirkt ab nächstem Zyklus, kein Container-Restart, kein Docker-SDK pro Agent); Fehler eines Agenten (Auth/IMAP/LLM) wird geloggt und isoliert, übrige Agenten laufen im selben Zyklus weiter
 - [ ] **MA-04**: Getrennter State pro Agent — SQLite (`state.db`) + `agent_status.json` je Agent unter `/data/agents/<agent-id>/`; Status-Übersicht im WebUI listet alle Agenten (Läuft/Gestoppt via Aktiv-Flag + Last-Poll-Heartbeat, letzter Poll, Start/Stop-Button je Zeile)
@@ -104,8 +104,8 @@
 ### Secrets-Verschlüsselung (SEC)
 
 - [ ] **SEC-01**: Fernet-Verschlüsselung (Python `cryptography`) für Secret-Werte in `.env`-Dateien (`IMAP_PASSWORD`, `LLM_API_KEY`) mit `enc:`-Prefix; Key-Datei im Config-Volume, auto-generiert beim ersten Start, `chmod 600`
-- [ ] **SEC-02**: WebUI ver-/entschlüsselt transparent (Save verschlüsselt, Formular-Anzeige bleibt masked); Agent-`config.py` entschlüsselt beim Laden; Klartext-Legacy-Werte werden erkannt und beim nächsten Save verschlüsselt (sanfte Migration)
-- [ ] **SEC-03**: Key-Handling dokumentiert — Key-Datei nie im Git, Backup-Hinweis (Config-Backup enthält Key + verschlüsselte `.env`s zusammen), Zero-Reset löscht Key mit; Schutzumfang ehrlich dokumentiert (Datei-/Backup-Leaks, nicht Root auf Host)
+- [x] **SEC-02**: WebUI ver-/entschlüsselt transparent (Save verschlüsselt, Formular-Anzeige bleibt masked); Agent-`config.py` entschlüsselt beim Laden; Klartext-Legacy-Werte werden erkannt und beim nächsten Save verschlüsselt (sanfte Migration)
+- [x] **SEC-03**: Key-Handling dokumentiert — Key-Datei nie im Git, Backup-Hinweis (Config-Backup enthält Key + verschlüsselte `.env`s zusammen), Zero-Reset löscht Key mit; Schutzumfang ehrlich dokumentiert (Datei-/Backup-Leaks, nicht Root auf Host)
 
 ---
 

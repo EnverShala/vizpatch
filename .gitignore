@@ -17,6 +17,11 @@ venv/
 !.env.example
 !*env.example
 
+# Fernet-Key + Migrations-Backups (SEC-03) — niemals ins Repo
+.secret_key
+**/.secret_key
+.migration-backup-*
+
 # Zero-Config-Runtime-Verzeichnis (wird bei erstem Start von WebUI befüllt)
 agent/config/*
 !agent/config/.gitkeep
