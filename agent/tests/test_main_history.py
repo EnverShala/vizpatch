@@ -28,8 +28,6 @@ def test_process_one_thread_mode_when_references_present(mock_config):
     mock_imap.fetch_thread_history.return_value = []
     mock_imap.fetch_sender_history.return_value = []
 
-    mock_anthropic = MagicMock()
-
     with (
         patch("src.main.state.is_processed", return_value=False),
         patch("src.main.classify.classify_email", return_value="REPLY_NEEDED"),
@@ -37,7 +35,7 @@ def test_process_one_thread_mode_when_references_present(mock_config):
         patch("src.main.build_reply_draft", return_value=b"raw"),
         patch("src.main.pii.redact", return_value="Testbody"),
     ):
-        _process_one(msg, mock_config, mock_anthropic, MagicMock(), mock_imap)
+        _process_one(msg, mock_config, MagicMock(), mock_imap)
 
     assert mock_imap.fetch_thread_history.called, "fetch_thread_history should be called in thread mode"
     assert not mock_imap.fetch_sender_history.called, "fetch_sender_history should NOT be called in thread mode"
@@ -51,8 +49,6 @@ def test_process_one_sender_fallback_when_no_references(mock_config):
     mock_imap.fetch_thread_history.return_value = []
     mock_imap.fetch_sender_history.return_value = []
 
-    mock_anthropic = MagicMock()
-
     with (
         patch("src.main.state.is_processed", return_value=False),
         patch("src.main.classify.classify_email", return_value="REPLY_NEEDED"),
@@ -60,7 +56,7 @@ def test_process_one_sender_fallback_when_no_references(mock_config):
         patch("src.main.build_reply_draft", return_value=b"raw"),
         patch("src.main.pii.redact", return_value="Testbody"),
     ):
-        _process_one(msg, mock_config, mock_anthropic, MagicMock(), mock_imap)
+        _process_one(msg, mock_config, MagicMock(), mock_imap)
 
     assert not mock_imap.fetch_thread_history.called, "fetch_thread_history should NOT be called in sender-fallback mode"
     assert mock_imap.fetch_sender_history.called, "fetch_sender_history should be called in sender-fallback mode"

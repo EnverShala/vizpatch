@@ -20,7 +20,6 @@ def test_generate_returns_string(mock_config, mock_anthropic_generate):
         subject="Frage",
         body="Wie sind die Öffnungszeiten?",
         config=mock_config,
-        client=mock_anthropic_generate,
     )
     assert isinstance(result, str)
     assert len(result) > 0
@@ -33,9 +32,8 @@ def test_generate_injects_context(mock_config, mock_anthropic_generate):
         subject="Frage",
         body="Test",
         config=mock_config,
-        client=mock_anthropic_generate,
     )
-    call_args = mock_anthropic_generate.messages.create.call_args
-    prompt = call_args.kwargs["messages"][0]["content"]
+    call_args = mock_anthropic_generate.call_args
+    prompt = call_args.kwargs["prompt"]
     assert "Test-Tankstelle" in prompt
     assert "Mo-Fr 8-20" in prompt
