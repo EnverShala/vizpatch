@@ -1,70 +1,96 @@
-from unittest.mock import MagicMock
-
 import pytest
 
 
-def _mock_docker_running(mocker):
-    mock_container = MagicMock()
-    mock_container.status = "running"
-    mock_container.attrs = {"State": {"StartedAt": "2026-07-12T10:00:00Z"}}
-    mock_client = MagicMock()
-    mock_client.containers.get.return_value = mock_container
-    mocker.patch("docker.from_env", return_value=mock_client)
-    return mock_client
+def _setup_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
 
 
-def test_context_generate_requires_auth(authed_client, mocker):
-    _mock_docker_running(mocker)
-    response = authed_client.post("/context/generate", data={"firma_input": "test"})
+def test_context_generate_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post("/context/generate", data={"agent_id": "info", "firma_input": "test"})
     assert response.status_code == 401
 
 
-def test_context_generate_returns_plain_text(authed_client, mocker):
-    _mock_docker_running(mocker)
-    mocker.patch("src.llm_seed.generate", return_value="# About\nMocked content")
+def test_context_generate_uses_decrypted_key_for_anthropic_agent(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-ant-real-key", "LLM_PROVIDER": "anthropic"})
+    mock_generate = mocker.patch("src.llm_seed.generate", return_value="# About\nMocked content")
     response = authed_client.post(
         "/context/generate",
         auth=("admin", "pw"),
-        data={"firma_input": "Meine Tankstelle"},
+        data={"agent_id": "info", "firma_input": "Meine Tankstelle"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     assert response.text == "# About\nMocked content"
+    mock_generate.assert_called_once()
+    call_kwargs = mock_generate.call_args
+    assert call_kwargs.kwargs.get("api_key") == "sk-ant-real-key"
 
 
-def test_context_generate_too_long(authed_client, mocker):
-    _mock_docker_running(mocker)
+def test_context_generate_rejects_non_anthropic_provider(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-real-openai-key", "LLM_PROVIDER": "openai"})
+    mock_generate = mocker.patch("src.llm_seed.generate")
     response = authed_client.post(
         "/context/generate",
         auth=("admin", "pw"),
-        data={"firma_input": "x" * 5001},
+        data={"agent_id": "info", "firma_input": "test"},
+    )
+    assert response.status_code == 400
+    assert "Anthropic" in response.text
+    mock_generate.assert_not_called()
+
+
+def test_context_generate_missing_key_error(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_PROVIDER": "anthropic"})
+    mock_generate = mocker.patch("src.llm_seed.generate")
+    response = authed_client.post(
+        "/context/generate",
+        auth=("admin", "pw"),
+        data={"agent_id": "info", "firma_input": "test"},
+    )
+    assert response.status_code == 400
+    assert "Kein API-Key" in response.text
+    mock_generate.assert_not_called()
+
+
+def test_context_generate_invalid_agent_id_returns_400(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post(
+        "/context/generate",
+        auth=("admin", "pw"),
+        data={"agent_id": "../evil", "firma_input": "test"},
+    )
+    assert response.status_code == 400
+
+
+def test_context_generate_too_long(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-ant-real-key", "LLM_PROVIDER": "anthropic"})
+    response = authed_client.post(
+        "/context/generate",
+        auth=("admin", "pw"),
+        data={"agent_id": "info", "firma_input": "x" * 5001},
     )
     assert response.status_code in {400, 422}
 
 
-def test_context_generate_llm_error(authed_client, mocker):
-    _mock_docker_running(mocker)
+def test_context_generate_llm_error(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-ant-real-key", "LLM_PROVIDER": "anthropic"})
     mocker.patch("src.llm_seed.generate", side_effect=RuntimeError("API key not set"))
     response = authed_client.post(
         "/context/generate",
         auth=("admin", "pw"),
-        data={"firma_input": "test"},
+        data={"agent_id": "info", "firma_input": "test"},
     )
     assert response.status_code == 500
-
-
-def test_index_shows_ki_helper(authed_client, mocker, tmp_path, monkeypatch):
-    _mock_docker_running(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
-    response = authed_client.get("/", auth=("admin", "pw"))
-    assert response.status_code == 200
-    assert 'id="firma_input"' in response.text
-    assert 'onclick="generateContext(this)"' in response.text
-    assert 'id="context_md"' in response.text
-    # Nur EIN context.md-textarea sichtbar (name="context_md")
-    assert response.text.count('name="context_md"') == 1

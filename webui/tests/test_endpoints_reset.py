@@ -4,6 +4,13 @@ import pytest
 from docker.errors import NotFound
 
 
+def _setup_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
+
+
 def _mock_agent_container(mocker, exists=True):
     mock_container = MagicMock()
     mock_container.status = "running"
@@ -18,13 +25,10 @@ def _mock_agent_container(mocker, exists=True):
 
 
 def test_reset_requires_confirmation(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("Inhalt", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"AGENT_ENABLED": "false"})
     response = authed_client.post(
         "/reset",
         auth=("admin", "pw"),
@@ -34,15 +38,12 @@ def test_reset_requires_confirmation(authed_client, mocker, tmp_path, monkeypatc
     assert response.status_code == 303
     assert "error=" in response.headers.get("location", "")
     # nichts gelöscht
-    assert env_file.read_text(encoding="utf-8") == "IMAP_USER=u@x.de\n"
-    assert context_file.read_text(encoding="utf-8") == "Inhalt"
+    assert (tmp_path / "config" / "agents" / "info").exists()
 
 
 def test_reset_empty_confirmation_rejected(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
     response = authed_client.post(
         "/reset",
         auth=("admin", "pw"),
@@ -51,20 +52,18 @@ def test_reset_empty_confirmation_rejected(authed_client, mocker, tmp_path, monk
     )
     assert response.status_code == 303
     assert "error=" in response.headers.get("location", "")
-    assert env_file.read_text(encoding="utf-8") == "IMAP_USER=u@x.de\n"
 
 
-def test_reset_with_correct_confirmation_wipes_config(authed_client, mocker, tmp_path, monkeypatch):
+def test_reset_with_correct_confirmation_deletes_all_agents_and_key(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     mock_client, mock_container = _mock_agent_container(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\nANTHROPIC_API_KEY=sk-ant-abc\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("Firmen-Kontext", encoding="utf-8")
-    state_db = tmp_path / "state.db"
-    state_db.write_text("fake sqlite", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
-    monkeypatch.setenv("WEBUI_STATE_DB", str(state_db))
+    import src.agents_io as agents_io
+    agents_io.write_env("agent-a", {"AGENT_ENABLED": "true", "IMAP_USER": "a@x.de"})
+    agents_io.write_env("agent-b", {"AGENT_ENABLED": "true", "IMAP_USER": "b@x.de"})
+    key_file = tmp_path / ".secret_key"
+    key_file.write_bytes(b"fake-fernet-key-material")
+    root_env = tmp_path / "root.env"
+    root_env.write_text("AUTOSTART_ENABLED=true\n", encoding="utf-8")
 
     response = authed_client.post(
         "/reset",
@@ -75,24 +74,44 @@ def test_reset_with_correct_confirmation_wipes_config(authed_client, mocker, tmp
     assert response.status_code == 303
     assert "reset=1" in response.headers.get("location", "")
 
-    # Alles geleert bzw. gelöscht
-    assert env_file.read_text(encoding="utf-8") == ""
-    assert context_file.read_text(encoding="utf-8") == ""
-    assert not state_db.exists()
-
+    # Beide Agenten gelöscht
+    assert not (tmp_path / "config" / "agents" / "agent-a").exists()
+    assert not (tmp_path / "config" / "agents" / "agent-b").exists()
+    # Key-Datei gelöscht (SEC-03)
+    assert not key_file.exists()
+    # Root-.env geleert
+    assert root_env.read_text(encoding="utf-8") == ""
     # Agent-Container wurde gestoppt und entfernt
     mock_container.stop.assert_called_once()
     mock_container.remove.assert_called_once_with(force=True)
 
 
+def test_reset_wrong_confirmation_deletes_nothing(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    mock_client, mock_container = _mock_agent_container(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("agent-a", {"AGENT_ENABLED": "true"})
+    key_file = tmp_path / ".secret_key"
+    key_file.write_bytes(b"fake-fernet-key-material")
+
+    response = authed_client.post(
+        "/reset",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"confirmation": "falsch"},
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers.get("location", "")
+    assert (tmp_path / "config" / "agents" / "agent-a").exists()
+    assert key_file.exists()
+    mock_container.stop.assert_not_called()
+
+
 def test_reset_when_agent_container_missing(authed_client, mocker, tmp_path, monkeypatch):
-    mock_client, _ = _mock_agent_container(mocker, exists=False)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("x", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
+    _setup_env(tmp_path, monkeypatch)
+    _mock_agent_container(mocker, exists=False)
+    import src.agents_io as agents_io
+    agents_io.write_env("agent-a", {"AGENT_ENABLED": "true"})
     response = authed_client.post(
         "/reset",
         auth=("admin", "pw"),
@@ -102,30 +121,20 @@ def test_reset_when_agent_container_missing(authed_client, mocker, tmp_path, mon
     # Container fehlt → kein Fehler, andere Aufräumung trotzdem
     assert response.status_code == 303
     assert "reset=1" in response.headers.get("location", "")
-    assert env_file.read_text(encoding="utf-8") == ""
+    assert not (tmp_path / "config" / "agents" / "agent-a").exists()
 
 
 def test_reset_shows_success_banner(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
     response = authed_client.get("/?reset=1", auth=("admin", "pw"))
     assert response.status_code == 200
     assert "Zero-Reset ausgeführt" in response.text
 
 
 def test_index_shows_danger_zone(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
-    env_file = tmp_path / ".env"
-    env_file.write_text("IMAP_USER=u@x.de\n", encoding="utf-8")
-    context_file = tmp_path / "context.md"
-    context_file.write_text("", encoding="utf-8")
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(env_file))
-    monkeypatch.setenv("WEBUI_CONTEXT_PATH", str(context_file))
     response = authed_client.get("/", auth=("admin", "pw"))
     assert response.status_code == 200
     assert 'name="confirmation"' in response.text

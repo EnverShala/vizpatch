@@ -1,32 +1,71 @@
-<div id="status-card" hx-get="/agent/status" hx-trigger="every 30s" hx-swap="outerHTML">
-  <h3>Agent-Status</h3>
-  {% if status.state == "running" %}
-  <p class="state-running">Status: <strong>{{ status.state }}</strong></p>
-  {% elif status.state == "not_created" %}
-  <p class="state-exited">Status: <strong>{{ status.state }}</strong> (noch nicht gestartet)</p>
-  {% elif status.state == "error" %}
-  <p class="state-error">Status: <strong>Fehler</strong>{% if status.error %} — {{ status.error }}{% endif %}</p>
+<div id="status-card" hx-get="/agents/status" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h3>Agenten-Übersicht</h3>
+  {% if agent_statuses %}
+  <table class="agent-status-table">
+    <thead>
+      <tr>
+        <th>Agent</th>
+        <th>Status</th>
+        <th>Letzter Poll</th>
+        <th>Fehler</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for agent in agent_statuses %}
+      <tr>
+        <td>{{ agent.id }}</td>
+        <td>
+          {% if agent.running %}
+          <span class="state-running">Läuft</span>
+          {% elif agent.enabled %}
+          <span class="state-pending">Wartet auf nächsten Zyklus</span>
+          {% else %}
+          <span class="state-exited">Gestoppt</span>
+          {% endif %}
+        </td>
+        <td>{% if agent.last_poll %}{{ agent.last_poll }}{% else %}keine Daten{% endif %}</td>
+        <td>
+          {% if agent.status_json and agent.status_json.error %}
+          <span class="state-error">{{ agent.status_json.error }}</span>
+          {% endif %}
+        </td>
+        <td class="agent-buttons">
+          {% if agent.enabled %}
+          <button hx-post="/agents/{{ agent.id }}/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
+          {% else %}
+          <button hx-post="/agents/{{ agent.id }}/start" hx-target="#status-card" hx-swap="outerHTML">Start</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% else %}
-  <p class="state-exited">Status: <strong>{{ status.state }}</strong></p>
+  <p class="hint">Noch keine Agenten angelegt.</p>
   {% endif %}
-  {% if status.started_at and status.state == "running" %}
-  <p>Gestartet: {{ status.started_at }}</p>
-  {% endif %}
-  {% if last_poll %}
-  <p>Letzter Poll: {{ last_poll }}</p>
-  {% else %}
-  <p>Letzter Poll: keine Daten</p>
-  {% endif %}
+
   {% if action_result is defined %}
   <pre class="action-result">{{ action_result }}</pre>
   {% endif %}
-  {% if configured is defined and not configured %}
-  <p class="config-warning">&#9888; Start/Restart gesperrt — bitte erst Pflichtfelder ausfüllen und speichern.
-    {% if missing %}<br><small>Fehlt: {{ missing|join(", ") }}</small>{% endif %}
-  </p>
-  {% endif %}
-  <div class="agent-buttons">
-    <button hx-post="/agent/start" hx-target="#status-card" hx-swap="outerHTML" {% if configured is defined and not configured %}disabled title="Konfiguration unvollständig"{% endif %}>Start</button>
-    <button hx-post="/agent/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
+
+  <div class="admin-tile">
+    <h4>Admin: Agent-Dienst</h4>
+    {% if service_status.state == "running" %}
+    <p class="state-running">Container-Status: <strong>{{ service_status.state }}</strong></p>
+    {% elif service_status.state == "not_created" %}
+    <p class="state-exited">Container-Status: <strong>{{ service_status.state }}</strong> (noch nicht gestartet)</p>
+    {% elif service_status.state == "error" %}
+    <p class="state-error">Container-Status: <strong>Fehler</strong>{% if service_status.error %} — {{ service_status.error }}{% endif %}</p>
+    {% else %}
+    <p class="state-exited">Container-Status: <strong>{{ service_status.state }}</strong></p>
+    {% endif %}
+    {% if service_status.started_at and service_status.state == "running" %}
+    <p>Gestartet: {{ service_status.started_at }}</p>
+    {% endif %}
+    <div class="agent-buttons">
+      <button hx-post="/agent/start" hx-target="#status-card" hx-swap="outerHTML">Start</button>
+      <button hx-post="/agent/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
+    </div>
   </div>
 </div>
