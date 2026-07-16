@@ -9,8 +9,8 @@
 
 Diese Phase liefert drei Features, ausschließlich als Erweiterung des bestehenden Agent+WebUI-Stacks (FastAPI/Jinja2/HTMX + Python-Agent + Docker-SDK):
 
-1. **Multi-LLM-Provider:** Dropdown im WebUI-Formular zur Wahl zwischen Anthropic (Default), OpenAI und Google Gemini. Generisches `LLM_API_KEY`-Feld ersetzt `ANTHROPIC_API_KEY`. Interner Adapter im Agent routet Classify- und Draft-Calls zum jeweiligen SDK.
-2. **Multi-Agent:** Ein Agent-Dropdown im WebUI (leer, wenn kein Agent gespeichert ist) erlaubt das Anlegen, Auswählen, Bearbeiten und Löschen mehrerer Agenten (= Mail-Accounts). Mehrere Agenten laufen gleichzeitig — **in einem einzigen Agent-Container** (Multi-Account-Loop), Start/Stop pro Agent über ein Aktiv-Flag. Einrichtungs-Flow (Nutzer wörtlich): Agent anlegen → Provider klicken (Anthropic/OpenAI/Google) → API-Key + E-Mail + IMAP-Passwort + Context eingeben → Agent ist konfiguriert und erscheint im Dropdown.
+1. **Multi-LLM-Provider:** KEIN Provider-Dropdown (Korrektur 2026-07-16, Runde 3) — ein generisches API-Key-Feld mit Label „API-Key (Anthropic / OpenAI / Google)" ersetzt `ANTHROPIC_API_KEY`; der Provider wird aus dem Key-Prefix **autodetektiert** (`sk-ant-` → Anthropic, `AIza` → Google, sonst `sk-` → OpenAI). Interner Adapter im Agent routet Classify- und Draft-Calls zum jeweiligen SDK.
+2. **Multi-Agent:** Ein Agent-Dropdown im WebUI (leer, wenn kein Agent gespeichert ist) erlaubt das Anlegen, Auswählen, Bearbeiten und Löschen mehrerer Agenten (= Mail-Accounts). Mehrere Agenten laufen gleichzeitig — **in einem einzigen Agent-Container** (Multi-Account-Loop), Start/Stop pro Agent über ein Aktiv-Flag. Einrichtungs-Flow: Agent anlegen → API-Key + E-Mail + IMAP-Passwort + Context eingeben (Provider wird aus dem Key erkannt) → Agent ist konfiguriert und erscheint im Dropdown.
 3. **Secrets-Verschlüsselung:** IMAP-Passwort und LLM-API-Key liegen verschlüsselt in den `.env`-Dateien (dort, wo sie heute gespeichert sind — kein neuer Speicherort).
 
 **Nicht in dieser Phase:** Auto-Send, Draft-Vorschau/Historie im WebUI, OAuth2, IMAP-IDLE, Mandanten-Trennung mit Logins pro Kunde (Multi-Agent ≠ Multi-Tenant: eine WebUI, ein Betreiber, mehrere Postfächer). Ausführung der Pläne erfolgt explizit später (nach Esso-Rollout).
@@ -19,12 +19,12 @@ Diese Phase liefert drei Features, ausschließlich als Erweiterung des bestehend
 <decisions>
 ## Implementation Decisions
 
-### Nutzer-Vorgaben (locked, wörtlich aus dem Auftrag + Korrektur-Runde 2026-07-16)
-- WebUI-Dropdown zur Auswahl zwischen Anthropic, OpenAI, Google AI
+### Nutzer-Vorgaben (locked, wörtlich aus dem Auftrag + Korrektur-Runden 2026-07-16)
+- ~~WebUI-Dropdown zur Auswahl zwischen Anthropic, OpenAI, Google AI~~ **Korrektur Runde 3 (2026-07-16): KEIN Provider-Dropdown** — der Provider wird aus dem API-Key autodetektiert; über dem Key-Feld steht das Label „API-Key (Anthropic / OpenAI / Google)"
 - Bei E-Mail ebenfalls ein Dropdown, **leer wenn kein Agent gespeichert ist**, um mehrere Agenten (mehrere Mail-Accounts) gleichzeitig zu verwalten und auszuführen
 - **Ausdrücklich KEIN Container pro Agent** — Agenten werden per Dropdown ausgewählt und per Start/Stop-Button laufen gelassen
-- **Pro Agent genau 1 API-Key** konfigurierbar (der Key des gewählten Providers)
-- Einrichtungs-Flow: Agent anlegen → Provider klicken → API-Key, E-Mail, IMAP-Passwort, Context eingeben → Agent erscheint im Dropdown
+- **Pro Agent genau 1 API-Key** konfigurierbar (der Provider ergibt sich aus dem Key)
+- Einrichtungs-Flow: Agent anlegen → API-Key, E-Mail, IMAP-Passwort, Context eingeben → Agent erscheint im Dropdown (Provider-Klick entfällt, Autodetect)
 - Die Daten (Credentials) sind "einfach verschlüsselt" in der `.env` bzw. am aktuellen Speicherort — keine neue Datenbank, kein externer Secret-Store
 
 ### D-46 (revidiert 2026-07-16): Ein Agent-Container gesamt, Aktiv-Flag pro Agent (locked, Nutzer-Entscheidung)
@@ -40,11 +40,21 @@ Symmetrische Verschlüsselung mit `cryptography.fernet`. Secret-Werte stehen als
 **Why:** Nutzer will es "einfach verschlüsselt"; Master-Passwort würde Zero-Config und Autostart nach Reboot brechen. Schutzumfang (Datei-/Backup-Leaks, nicht Root-Zugriff auf den Host) wird ehrlich dokumentiert (SEC-03).
 
 ### D-49: LLM-Provider pro Agent, Modell-Defaults hart verdrahtet (locked)
-`LLM_PROVIDER` + `LLM_API_KEY` sind Felder der Agent-`.env` (pro Agent unabhängig). Kein Modell-Auswahlfeld im UI — pro Provider ein fest verdrahtetes Classify+Draft-Modellpaar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI/Google-Äquivalente im Research verifizieren). Adapter-Modul im Agent (`llm.py` o. ä.), `classify.py`/`generate.py` rufen nur noch den Adapter.
+`LLM_PROVIDER` + `LLM_API_KEY` sind Felder der Agent-`.env` (pro Agent unabhängig); `LLM_PROVIDER` wird dabei nicht vom Nutzer gewählt, sondern von der WebUI beim Save aus dem Key abgeleitet (siehe D-51). Kein Modell-Auswahlfeld im UI — pro Provider ein fest verdrahtetes Classify+Draft-Modellpaar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI/Google-Äquivalente im Research verifizieren). Adapter-Modul im Agent (`llm.py` o. ä.), `classify.py`/`generate.py` rufen nur noch den Adapter.
 **Why:** UI bleibt schlank (Betreiber ist kein LLM-Experte), Modellpflege ist Code-Sache; Provider-Wahl pro Agent erlaubt gemischte Setups.
 
 ### D-50: Dropdown-Semantik + Status-Übersicht (locked)
 Agent-Dropdown leer bei frischer Installation → Formular startet im "Neuen Agent anlegen"-Modus. Auswahl eines Agenten lädt dessen Formular (HTMX, ohne Full-Reload passend zum Section-Save-Muster). Löschen mit Zwei-Stufen-Bestätigung (wie Zero-Reset aus UI-08) entfernt Config-Verzeichnis und State (Aktiv-Flag vorher aus → Agent fällt aus dem nächsten Poll-Zyklus). Der Status-Bereich zeigt eine **Übersicht aller Agenten** (bestätigt per Rückfrage 2026-07-16): je Zeile Läuft/Gestoppt (Aktiv-Flag + Last-Poll-Heartbeat), letzter Poll, eigener Start/Stop-Button.
+
+### D-51 (neu 2026-07-16, Korrektur-Runde 3): Provider-Autodetect aus dem API-Key statt Dropdown (locked, Nutzer-Entscheidung)
+Das WebUI zeigt KEIN Provider-Auswahlfeld. Es gibt genau EIN API-Key-Feld mit Label „API-Key (Anthropic / OpenAI / Google)". Beim Save erkennt die WebUI den Provider am Key-Prefix und schreibt `LLM_PROVIDER` selbst in die Agent-`.env`:
+- `sk-ant-` → `anthropic`
+- `AIza` → `google`
+- sonst `sk-` → `openai`
+- kein Treffer → Save des Key-Felds wird mit klarer Fehlermeldung abgelehnt („API-Key-Format nicht erkannt — erwartet sk-ant-… (Anthropic), sk-… (OpenAI) oder AIza… (Google)")
+
+Leeres Key-Feld („leer = unverändert") lässt `LLM_PROVIDER` unangetastet. Der AVV-Hinweis (LLM-04) richtet sich nach dem **erkannten** Provider: live per kleinem Inline-Script beim Tippen (gleiches Prefix-Matching) und serverseitig gerendert für den gespeicherten Provider. Agent-Seite unverändert: `config.py` liest weiterhin `LLM_PROVIDER` aus der `.env` (Kontrakt zu 05.03/05.04 bleibt). Die Erkennung läuft auf dem Klartext-Key VOR der Fernet-Verschlüsselung.
+**Why:** Nutzer-Entscheidung 2026-07-16 — ein Feld weniger, kein Mismatch Provider↔Key mehr möglich (der frühere Pitfall „Provider gewechselt, Key nicht" entfällt per Design).
 
 ### Claude's Discretion
 - Exakte Slug-Regeln für Agent-IDs, Kollisionshandling
@@ -71,7 +81,7 @@ Agent-Dropdown leer bei frischer Installation → Formular startet im "Neuen Age
 - `webui/src/docker_ctrl.py` — Docker-SDK-Wrapper (bleibt Single-Container: globales Start/Stop/Restart + Update des einen `agent`-Service)
 - `webui/src/state_reader.py` — SQLite-Ro + agent_status.json-Ro (wird pro-Agent-fähig)
 - `webui/docker-entrypoint.sh` — Zero-Config-Seeding (Migration-Hook)
-- `webui/src/templates/index.html` + `_status_card.html` — Formular mit Section-Save (bekommt Agent- + Provider-Dropdown)
+- `webui/src/templates/index.html` + `_status_card.html` — Formular mit Section-Save (bekommt Agent-Dropdown + API-Key-Feld mit Provider-Autodetect, D-51)
 - `agent/src/config.py` — .env/context/prompts-Loader (bekommt Entschlüsselung + LLM_*-Vars)
 - `agent/src/classify.py`, `agent/src/generate.py` — Anthropic-Calls (werden auf Adapter umgestellt)
 - `agent/src/main.py` — Polling-Loop + Wait-for-Config (wird Multi-Account: Agenten-Discovery aus `/config/agents/*/`, Aktiv-Flag-Filter, Fehler-Isolation pro Agent)
@@ -89,9 +99,9 @@ Agent-Dropdown leer bei frischer Installation → Formular startet im "Neuen Age
 <specifics>
 ## Specific Ideas
 
-- Dropdown-Reihenfolge Provider: Anthropic (Default) | OpenAI | Google
+- ~~Dropdown-Reihenfolge Provider: Anthropic (Default) | OpenAI | Google~~ obsolet durch D-51 (Autodetect, kein Dropdown); Label des Key-Felds: „API-Key (Anthropic / OpenAI / Google)"
 - `enc:`-Prefix als Erkennungsmerkmal verschlüsselter Werte (Klartext ohne Prefix = Legacy, wird migriert)
-- AVV-Hinweistext im WebUI abhängig vom gewählten Provider (ein Satz, kein Rechtstext)
+- AVV-Hinweistext im WebUI abhängig vom **erkannten** Provider (ein Satz, kein Rechtstext)
 - Status-Bereich: Übersichts-Liste aller Agenten (je Zeile Status + letzter Poll + Start/Stop-Button)
 - `install-autostart.sh`/systemd: unverändert — es gibt weiterhin nur die zwei Compose-Services `agent` + `webui`, Reboot-Verhalten wie in Phase 4
 </specifics>

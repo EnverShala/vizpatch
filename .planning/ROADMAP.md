@@ -13,7 +13,7 @@
 | 2 | Deployment beim Kunden | Container läuft auf Kundenserver, echter Live-Betrieb, erste Drafts entstehen | PRE-02…05, DEP-01…06 | 4 | 🔧 Code fertig, Pre-Test ausstehend |
 | 3 | Tuning & Übergabe | Draft-Qualität ≥ 80 %, Betreiber nutzt selbständig | OP-01…05, OPS-01…05 | 5 | ⏳ Pending |
 | 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
-| 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | WebUI-Dropdown Anthropic / OpenAI / Google Gemini, mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
+| 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 
 **38 Requirements, 4 Phasen (v1) + Phase 5 (v1.2 Backlog). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI.**
 
@@ -161,7 +161,7 @@ Plans:
 
 ### Phase 5: Multi-LLM, Multi-Agent & Verschlüsselung (v1.2)
 
-**Goal:** Der Betreiber verwaltet im WebUI mehrere Agenten (= Mail-Accounts) gleichzeitig: Agent-Dropdown (leer, solange kein Agent gespeichert ist), Anlegen/Bearbeiten/Löschen pro Agent, Start/Stop pro Agent per Aktiv-Flag — alle Agenten laufen in **einem** Agent-Container (Multi-Account-Poll-Loop, kein Container pro Agent). Pro Agent ist der LLM-Provider per Dropdown wählbar (Anthropic Default | OpenAI | Google Gemini) mit genau einem generischen `LLM_API_KEY`. Alle Secrets (IMAP-Passwort, API-Key) liegen verschlüsselt (Fernet) in den `.env`-Dateien; der Schlüssel liegt als `chmod 600`-Datei im Config-Volume. Bestehende Single-Agent-Installationen (Esso) werden beim ersten Start automatisch und verlustfrei migriert.
+**Goal:** Der Betreiber verwaltet im WebUI mehrere Agenten (= Mail-Accounts) gleichzeitig: Agent-Dropdown (leer, solange kein Agent gespeichert ist), Anlegen/Bearbeiten/Löschen pro Agent, Start/Stop pro Agent per Aktiv-Flag — alle Agenten laufen in **einem** Agent-Container (Multi-Account-Poll-Loop, kein Container pro Agent). Pro Agent gibt es genau ein generisches API-Key-Feld („API-Key (Anthropic / OpenAI / Google)"); der LLM-Provider wird aus dem Key-Prefix autodetektiert (D-51, kein Dropdown). Alle Secrets (IMAP-Passwort, API-Key) liegen verschlüsselt (Fernet) in den `.env`-Dateien; der Schlüssel liegt als `chmod 600`-Datei im Config-Volume. Bestehende Single-Agent-Installationen (Esso) werden beim ersten Start automatisch und verlustfrei migriert.
 **Mode:** mvp
 **Ziel-Aufwand:** ~2–3 Werktage Vizionists
 **Depends on:** Phase 4 (WebUI + Config-Formular + Docker-SDK-Steuerung vorhanden), Esso-Rollout abgeschlossen (Migration wird gegen das Live-Setup-Layout getestet, kein Regressions-Risiko)
@@ -169,12 +169,12 @@ Plans:
 
 **Success Criteria:**
 
-1. `LLM_PROVIDER`-Dropdown im Agent-Formular (Anthropic | OpenAI | Google), API-Key-Feld heißt `LLM_API_KEY`; interner Adapter `llm_call(...)` routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`) mit hart verdrahteten Modell-Defaults pro Provider (Classify+Draft-Paar)
+1. Generisches API-Key-Feld `LLM_API_KEY` im Agent-Formular mit Label „API-Key (Anthropic / OpenAI / Google)"; der Provider wird beim Save aus dem Key-Prefix autodetektiert und als `LLM_PROVIDER` gespeichert (D-51, kein Dropdown; unbekanntes Format → Fehlermeldung); interner Adapter `llm_call(...)` routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`) mit hart verdrahteten Modell-Defaults pro Provider (Classify+Draft-Paar)
 2. Agent-Dropdown im WebUI: leer bei frischer Installation; "Neuen Agent anlegen" erzeugt `/config/agents/<agent-id>/` mit eigener `.env` + `context.md`; Auswahl im Dropdown lädt das Formular für genau diesen Agenten; Löschen entfernt Config + State nach Zwei-Stufen-Bestätigung
 3. Ein einziger Agent-Container verarbeitet pro Poll-Zyklus alle Agenten mit gesetztem Aktiv-Flag (Fehler eines Agenten isoliert, andere laufen weiter); Start/Stop-Button je Agent schreibt nur das Aktiv-Flag (wirkt ab nächstem Zyklus, ohne Container-Restart); Status-Übersicht listet alle Agenten mit Läuft/Gestoppt + letztem Poll + eigenem Start/Stop-Button; mind. 2 Agenten laufen parallel gegen 2 Test-Postfächer ohne Cross-Drafts
 4. Secrets stehen nur noch Fernet-verschlüsselt in den `.env`-Dateien (`enc:`-Prefix); Key-Datei wird beim ersten Start generiert (`chmod 600`, im Config-Volume); WebUI ver-/entschlüsselt transparent, Agent entschlüsselt beim Config-Load; Klartext-Legacy-Werte werden beim nächsten Save migriert
 5. Migration: bestehendes Single-Agent-Layout (`/config/.env` + `context.md`) wird beim ersten Start automatisch als Agent `default` übernommen (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`), der laufende Betrieb geht ohne Neukonfiguration weiter
-6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den gewählten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
+6. Pre-Deployment-Test-Fixtures (14 `.eml`) je Provider erneut durchlaufen — ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; Doku: AVV-Hinweis "für den erkannten Provider ist ein AVV nötig" im WebUI-Setup-Hinweis
 
 **Requirements mapped:** LLM-01, LLM-02, LLM-03, LLM-04, MA-01, MA-02, MA-03, MA-04, MA-05, SEC-01, SEC-02, SEC-03
 
@@ -193,7 +193,7 @@ Plans:
 **Wave 3** *(05.02 blocked on 05.03; 05.05 blocked on 05.04)*
 
 - [ ] 05.02-agent-multi-account-loop-PLAN.md — EIN Agent-Container wird Multi-Account: per-Zyklus-Discovery aus /config/agents/*/, Aktiv-Flag-Filter, Fehler-Isolation + IMAP-Timeout pro Agent, per-Agent-State + last_cycle-Heartbeat, Idle-Wait bei 0 Agenten (MA-03, MA-04)
-- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Flag-basiertes Start/Stop + per-Agent context.md + Provider-/Agent-Dropdown + AVV-Hinweis + Status-Übersicht aller Agenten + globale Docker-Admin-Buttons + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
+- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Flag-basiertes Start/Stop + per-Agent context.md + Agent-Dropdown + API-Key-Feld mit Provider-Autodetect (D-51) + AVV-Hinweis + Status-Übersicht aller Agenten + globale Docker-Admin-Buttons + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
 
 **Wave 4** *(blocked on Wave 3)*
 

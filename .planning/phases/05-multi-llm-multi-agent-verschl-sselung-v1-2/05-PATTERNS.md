@@ -285,7 +285,7 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
   </div>
 </fieldset>
 ```
-→ Direkte Vorlage für das neue "LLM-Provider"-Fieldset: `<select name="llm_provider">` (Anthropic/OpenAI/Google) + generisches `llm_api_key`-Passwort-Feld, gleiches `hx-post="/save"`/`hx-include="closest fieldset"`-Idiom, plus AVV-Hinweistext (LLM-04) als `<p class="hint">`, dynamisch per Provider (siehe RESEARCH.md DSGVO-Tabelle).
+→ Direkte Vorlage für das neue "LLM-API-Key"-Fieldset — **Addendum Revision 3 (D-51, 2026-07-16): KEIN `<select name="llm_provider">` mehr.** Stattdessen nur das generische `llm_api_key`-Passwort-Feld mit Label „API-Key (Anthropic / OpenAI / Google)", gleiches `hx-post="/save"`/`hx-include="closest fieldset"`-Idiom; der Provider wird serverseitig per `llm_detect.detect_llm_provider()` aus dem Key-Prefix erkannt und als `LLM_PROVIDER` mitgeschrieben. AVV-Hinweistext (LLM-04) als `<p class="hint">`, dynamisch zum ERKANNTEN Provider (Inline-Script mit demselben Prefix-Matching; siehe RESEARCH.md DSGVO-Tabelle).
 
 **Status-Kachel-Liste** (`_status_card.html` komplett, 32 Zeilen) — bestehende EINE-Kachel-Struktur (`<div id="status-card" hx-get="/agent/status" hx-trigger="every 30s" hx-swap="outerHTML">`) wird zur Vorlage für `{% for agent in agents %}`-Schleife (Specifics-Abschnitt CONTEXT.md: "Status-Bereich: eine Status-Kachel pro Agent (Liste)"). Buttons-Pattern (Zeilen 28-31) bleibt pro Kachel identisch, nur `hx-post="/agent/start"` → `hx-post="/agents/{{ agent.id }}/start"`.
 

@@ -23,6 +23,23 @@
 > (agent_id, agent_dir)` liest via `dotenv_values` (KEINE os.environ-Mutation) und leitet Pfade aus
 > agent_id/agent_dir ab (siehe Plan 05.02-agent-multi-account-loop).
 
+> ## ⚠ Addendum 2026-07-16 (Runde 3) — Provider-Autodetect statt Dropdown (neues D-51)
+>
+> Der Nutzer will KEIN Provider-Dropdown im WebUI. Neues D-51 (siehe 05-CONTEXT.md): EIN generisches
+> API-Key-Feld mit Label „API-Key (Anthropic / OpenAI / Google)"; die WebUI erkennt den Provider am
+> Key-Prefix (`sk-ant-` → anthropic, `AIza` → google, sonst `sk-` → openai; kein Treffer → Save-Fehler)
+> und schreibt `LLM_PROVIDER` selbst in die Agent-`.env`. Damit sind in diesem Dokument **OBSOLET**:
+>
+> - Alle `LLM_PROVIDER`-Dropdown-Erwähnungen (LLM-01-Zeile der Requirements-Tabelle, Specifics
+>   „Dropdown-Reihenfolge Provider", Zeile „LLM-Provider-Auswahl (Dropdown)" der Verantwortungs-Tabelle)
+> - **Pitfall 7 komplett** („Provider gewechselt, Key nicht") — der Mismatch ist per Autodetect
+>   ausgeschlossen; an seine Stelle tritt die Format-Validierung beim Save (unbekanntes Key-Format
+>   wird abgelehnt)
+>
+> **Weiterhin gültig:** DSGVO/AVV-Tabelle (die drei Hinweis-Sätze, jetzt zum ERKANNTEN statt gewählten
+> Provider angezeigt), Agent-seitiges `LLM_PROVIDER`-Env-Var-Pattern (Zeile 183 — der Agent liest den
+> von der WebUI geschriebenen Wert unverändert), alle SDK-/Modell-/Fernet-Sektionen.
+
 
 **Researched:** 2026-07-15
 **Domain:** Multi-Provider-LLM-Adapter (Anthropic/OpenAI/Google) + dynamische Docker-SDK-Container-Orchestrierung + Fernet-Secrets-Verschlüsselung + Config/State-Migration
