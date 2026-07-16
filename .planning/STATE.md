@@ -30,7 +30,7 @@ progress:
 | 2 — Deployment beim Kunden | ✅ Completed | 2026-07-11 | 2026-07-12 |
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
-| 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves; Revision 4: D-51-Autodetect + Plan-Check-R3-Blocker B1/B2 + W1–W5 behoben) — Ausführung erst nach Esso-Rollout | — | — |
+| 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves; Revision 4 mit D-51-Autodetect; Plan-Checker PASSED 2026-07-16) — Ausführung erst nach Esso-Rollout | — | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
