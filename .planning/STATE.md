@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-07-17T12:00:00.000Z"
+last_updated: "2026-07-17T15:10:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
   percent: 50
 ---
 
@@ -35,7 +35,7 @@ progress:
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
 | 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | ✅ Code ausgeführt (6/6 Plans + Fixes WR-01…06, CR-01) — **05.06-Verifikation (Tasks 1–3) deferred** bis OpenAI/Google-Keys vorliegen | 2026-07-15 | 2026-07-17 |
-| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📋 Geplant (4 Plans, 3 Waves; Plan-Checker revised 2026-07-17) — Ausführung nach Esso-Rollout | — | — |
+| 6 — Schreibstil-Adaption pro Agent (v1.3) | 🔧 In Ausführung — 06.01 abgeschlossen (1/4 Plans, Wave 1) | 2026-07-17 | — |
 | 7 — Agenten-Chat im WebUI (v1.3) | 📝 Roadmap-Eintrag (CHAT-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
 | 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | 📝 Roadmap-Eintrag (OUT-01…04) — setzt Phase 7 voraus | — | — |
 
@@ -139,4 +139,5 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 - **2026-07-15 bis 2026-07-17** — **Phase 5 ausgeführt** (v1.2). Alle 6 Plans committet: 05.01 Fernet-Krypto-Fundament (Agent+WebUI, Versionsbump 1.2.0), 05.03 Multi-LLM-Adapter (`agent/src/llm.py`, LLM_API_KEY/LLM_PROVIDER, Fernet-Decrypt), 05.04 agents_io + Single→default-Migration, 05.02 Multi-Account-Loop (Ein-Container, per-Zyklus-Discovery, Fehler-Isolation, IMAP-Timeout, Heartbeat), 05.05 WebUI agent_id-Routing + /agents-CRUD + API-Key-Autodetect (D-51) + Multi-Agent-Zero-Reset, 05.06 Verifikation/Ship. **Post-Review-Fixes:** CR-01 (Mails ohne Message-ID sauber überspringen), WR-01 (OpenAI-Call-Shape: max_completion_tokens, keine temperature), WR-02 (detection_source überlebt Status-Write), WR-03 (Config-Load-Fehler pro Agent sichtbar), WR-04 (fehlgeschlagene Drafts-Probe nicht cachen), WR-05 (abweichende OWN_EMAIL_ADDRESS beim IMAP-Save nicht zurücksetzen), WR-06 (Drift-Guard für duplizierte crypto.py). **05.06-Verifikation Tasks 1–3 ehrlich als deferred markiert** (Modell-ID-Check, LLM-04-Fixtures je Provider ≥ 11/14, MA-05-Parallelbetrieb, Migrations-Abnahme) — brauchen echte OpenAI/Google-API-Keys. Letzter Commit `d7b5a36` "Aktueller Stand, Limit ausgeschöpft".
 - **2026-07-16/17** — Phase 6 (Schreibstil-Adaption, v1.3) geplant: 4 Plans, 3 Waves, Plan-Checker-Revision (Commits `438cc1a`, `f2e50de`). Ausführung bewusst nach Esso-Rollout.
 - **2026-07-17** — **STATE.md-Korrektur:** Der Header behauptete fälschlich noch "Phase 5 = geplant, completed_phases: 2". Realität laut Git-Historie: Phase 5 ausgeführt. Korrigiert auf completed_phases: 4 (1/2/4/5), 23 Plans total / 19 ausgeführt, percent 50. Betreiber-Entscheidung: Autostart nicht mehr auf Zwischen-VM, sondern direkt beim Kunden testen. Nächste Schritte: Deployment-Paket v1.2.0 → Rest + DSGVO/AVV → Update zum Kunden.
+- **2026-07-17** — **Phase 6, Plan 06.01 ausgeführt** (Agent-seitige style.md-Injection, STY-02): `Config` lädt pro Agent ein optionales `style.md` (Guard-Muster analog `context_md`, defaultete Trailing-Felder `style_md`/`enable_style_adaption` für Rückwärtskompat), `ENABLE_STYLE_ADAPTION`-Flag (Default true, D-54). `generate.py` injiziert `{style_md}` konditional, `prompts/generate.txt` hat neue „# Schreibstil"-Sektion + Hierarchie-Satz (context.md=WAS, style.md=nur WIE, übersteuert Fach-Inhalt nie — T-06-01-Mitigation). TDD-Zyklus vollständig (RED `c0c7776` → GREEN `ac62da1`+`801450f`). 4 neue Tests, volle Agent-Suite 109 passed/1 skipped. Definiert das style.md-Zielformat (6 D-56-Abschnitte) für Plan 06.02 (WebUI-Extraktion, Interface-First). Commits: `c0c7776`, `ac62da1`, `801450f`.
 - **2026-07-14** — Phase-4-Nachtrag "Zero-Config-Overhaul + Live-Verification". Commits: `68d2a7a` (Zero-Config + bcrypt + UX-Overhaul, 27 Dateien), `c4986cd` (Drafts-Ordner Auto-Discovery via IMAP SPECIAL-USE, 10 Dateien), Section-Save-Buttons (in Arbeit). Kern-Änderungen: **(a)** WebUI startet ohne Vor-Config — `docker-entrypoint.sh` seedet `/config/.env` + `/config/context.md` beim ersten Start; **(b)** Login optional (Empty = kein Schutz + Warnbanner) mit bcrypt-Hashing + "Aktuelles/Neues Passwort"-Change-UX; **(c)** OWN_EMAIL_ADDRESS auto = IMAP_USER (Feld aus Formular entfernt); **(d)** Drafts-Ordner Auto-Discovery via RFC 6154 SPECIAL-USE (Fallback: provider_config); **(e)** Wait-for-Config-Loop im Agent (kein Restart-Loop bei leerer .env); **(f)** Danger-Zone / Zero-Reset-Button (löscht .env + context.md + state.db + Agent-Container); **(g)** Section-weise Save-Buttons (jedes Fieldset einzeln übernehmbar via HTMX, kein Page-Reload). **End-to-End-Test**: echte Test-Mail von privatem Gmail an IONOS-Postfach → Classify REPLY_NEEDED → Sonnet-Draft → APPEND in "Entwürfe" (via SPECIAL-USE detected) → im IONOS-Webmail sichtbar mit aktivem "Senden"-Button. **149 Tests grün** (63 agent + 86 webui + 3 neue Section-Save-Tests → 89 webui). Zombie-Container `kea-agent` (Prä-Rename) entfernt.

@@ -114,7 +114,7 @@
 ### Schreibstil-Adaption pro Agent (STY)
 
 - [ ] **STY-01**: Automatische Stil-Extraktion beim Agent-Setup (erster erfolgreicher IMAP-Connect, Default an via `ENABLE_STYLE_ADAPTION=true`): letzte N gesendete Mails (Default 30, `STYLE_SAMPLE_COUNT`) aus dem Gesendet-Ordner (SPECIAL-USE `\Sent` + Provider-Config-Fallback) → LLM destilliert Stil-Profil → `/config/agents/<id>/style.md`
-- [ ] **STY-02**: `style.md` wird bei jedem Draft zusätzlich zu `context.md` injiziert; Prompt-Hierarchie fest: `context.md` = Inhalt (fachlich führend), `style.md` = nur Ton/Form; fehlende `style.md` → Draft-Generierung unverändert wie heute
+- [x] **STY-02**: `style.md` wird bei jedem Draft zusätzlich zu `context.md` injiziert; Prompt-Hierarchie fest: `context.md` = Inhalt (fachlich führend), `style.md` = nur Ton/Form; fehlende `style.md` → Draft-Generierung unverändert wie heute
 - [ ] **STY-03**: WebUI zeigt `style.md` pro Agent als editierbares Fieldset (Section-Save) + „Schreibstil neu lernen"-Button mit Bestätigung (überschreibt Profil)
 - [ ] **STY-04**: PII-Redaction (`pii.py`-Regime) läuft über die Gesendet-Mails, bevor sie ans LLM gehen; Extraktion filtert auf echte Antwort-Mails (keine Weiterleitungen/Ein-Wort-Mails); zu wenig Material → Hinweis statt schlechtem Profil
 - [ ] **STY-05**: Kein Learning-Loop — Extraktion läuft genau einmal beim Setup + manuell per Button; leerer/fehlender Gesendet-Ordner → graceful (Agent läuft ohne Profil, Hinweis im WebUI)
