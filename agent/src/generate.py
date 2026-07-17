@@ -56,10 +56,16 @@ def generate_draft_text(
 
     company_name = _extract_company_name(config.context_md)
     history_block = _build_history_block(conversation_history or [])
+    # style.md ist nachrangig zu context.md (Hierarchie in prompts/generate.txt
+    # verankert) — bei deaktiviertem Flag oder fehlendem Profil bleibt der
+    # Platzhalter leer, NIE "None" (STY-02-Kontrakt: byte-gleich zum heutigen
+    # Verhalten wenn kein Profil vorliegt).
+    style_block = config.style_md if config.enable_style_adaption else ""
     prompt = config.prompt_generate.format(
         **{
             "company_name": company_name,
             "context_md_full": config.context_md,
+            "style_md": style_block,
             "conversation_history": history_block,
             "from": from_address,
             "subject": subject,
