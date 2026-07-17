@@ -217,6 +217,22 @@
     </div>
   </fieldset>
 
+  <fieldset>
+    <legend>Datenschutz</legend>
+    <details id="privacy-details">
+      <summary>Datenschutzbestimmungen</summary>
+      {% include "_datenschutz.html" %}
+    </details>
+
+    <label>
+      <input type="checkbox" name="privacy_consent" value="on" required {% if privacy_consent_accepted %}checked{% endif %}>
+      Ich stimme den <a href="/datenschutz" target="_blank" rel="noopener">Datenschutzbestimmungen</a> zu
+    </label>
+    {% if privacy_consent_accepted %}
+    <p class="hint">&#10003; Zugestimmt am {{ privacy_consent_at }}</p>
+    {% endif %}
+  </fieldset>
+
   <button type="submit" class="btn-save-all">Alles speichern</button>
 </form>
 

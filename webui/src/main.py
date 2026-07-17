@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -30,6 +31,11 @@ templates = Jinja2Templates(directory="src/templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google"}
+
+# Datenschutz-Zustimmung (D-68): Stand der Bestimmungen, mit denen ein
+# gegebenes PRIVACY_CONSENT_ACCEPTED=true korrespondiert (siehe _datenschutz.html).
+PRIVACY_CONSENT_VERSION = "2026-07-17"
+_CONSENT_TRUTHY = {"true", "on", "1"}
 
 # Add-in-/Embed-Pfad-Klassifikation (Phase 8, D-66/T-08-02): NUR diese Pfade
 # bekommen eine gelockerte CSP (Outlook muss die Taskpane + das darin
@@ -140,6 +146,9 @@ def index(
     agents = agents_io.list_agent_ids()
     active_id = agent_id or (agents[0] if agents else "")
     agent_statuses = _build_agent_statuses()
+    root_env_raw = config_io.read_env_raw()
+    privacy_consent_accepted = (root_env_raw.get("PRIVACY_CONSENT_ACCEPTED") or "").strip().lower() == "true"
+    privacy_consent_at = root_env_raw.get("PRIVACY_CONSENT_AT") or ""
 
     if active_id and active_id in agents:
         env_vals = agents_io.read_env_masked(active_id)
@@ -177,7 +186,9 @@ def index(
             "configured": not missing,
             "missing": missing,
             "auth_enabled": auth.is_auth_enabled(),
-            "password_configured": bool((config_io.read_env_raw().get("WEBUI_PASSWORD") or "").strip()),
+            "password_configured": bool((root_env_raw.get("WEBUI_PASSWORD") or "").strip()),
+            "privacy_consent_accepted": privacy_consent_accepted,
+            "privacy_consent_at": privacy_consent_at,
         },
     )
 
@@ -541,10 +552,36 @@ def save(
     webui_user: str | None = Form(None),
     webui_password_current: str | None = Form(None),
     webui_password_new: str | None = Form(None),
+    privacy_consent: str | None = Form(None),
     user: str = Depends(auth.require_auth),
 ):
     is_htmx = request.headers.get("HX-Request") == "true"
     existing = config_io.read_env_raw()
+
+    # --- Datenschutz-Zustimmung (D-68): gated NUR den echten Agent-Konfig-Save
+    # (IMAP-Creds/API-Key/context.md) — WebUI-Login-, Autostart- oder
+    # Schreibstil-Section-Saves duerfen NIE daran scheitern. Ist der Consent
+    # bereits im Root-.env persistiert, ist keine erneute Zustimmung noetig.
+    consent_relevant_submitted = any(
+        v is not None for v in (imap_user, imap_password, llm_api_key, context_md)
+    )
+    consent_already_persisted = (existing.get("PRIVACY_CONSENT_ACCEPTED") or "").strip().lower() == "true"
+    consent_truthy_this_request = (privacy_consent or "").strip().lower() in _CONSENT_TRUTHY
+    if consent_relevant_submitted and not consent_already_persisted:
+        if not consent_truthy_this_request:
+            return _save_response(
+                request, is_htmx, False,
+                "Bitte stimmen Sie den Datenschutzbestimmungen zu, bevor Sie Zugangsdaten speichern.",
+                "error",
+            )
+        config_io.write_env(
+            {
+                "PRIVACY_CONSENT_ACCEPTED": "true",
+                "PRIVACY_CONSENT_AT": datetime.now(timezone.utc).isoformat(),
+                "PRIVACY_CONSENT_VERSION": PRIVACY_CONSENT_VERSION,
+            }
+        )
+        existing = config_io.read_env_raw()
 
     # --- Cred-Transition-Erfassung (Esso-Guard, D-53/D-54/SC5): Ist-Zustand VOR
     # jeglichem Write dieses Requests. "style.md fehlt" ist BEWUSST NICHT der
