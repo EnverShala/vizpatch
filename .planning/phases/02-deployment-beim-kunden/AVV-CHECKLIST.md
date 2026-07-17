@@ -97,9 +97,47 @@ Maßnahmen:                   - PII-Redaction für IBAN/Kreditkarten vor LLM-Cal
 
 ---
 
+## 6. Nachtrag v1.2–v1.4 (Stand 2026-07-17) — erweiterte Verarbeitung
+
+> Die Abschnitte 1–5 entstanden für den reinen Anthropic-Draft-Betrieb (v1.0/v1.1).
+> Seit v1.2–v1.4 sind neue Verarbeitungszwecke und Rollen hinzugekommen. Dieser
+> Nachtrag ergänzt die Checkliste. **Muster — final rechtlich prüfen lassen.**
+
+### 6.1 Wer schließt mit wem welchen AVV?
+
+| # | Parteien | Rolle | Pflicht? | Inhalt-Besonderheit |
+|---|---|---|---|---|
+| 1 | Betreiber ↔ **Anthropic** | Controller ↔ Processor | Ja (bei Anthropic-Nutzung) | DPA in Commercial Terms eingebettet, EU-SCC Modul 2+3, ZDR optional |
+| 2 | Betreiber ↔ **Vizionists** | Controller ↔ Processor | Ja, sobald Vizionists Zugriff auf Server/Config/Logs/Postfach hat (Einrichtung/Wartung/Support) | KI-Anbieter als **Unter-Auftragsverarbeiter** benennen |
+| 3 | Betreiber ↔ **OpenAI** bzw. **Google** | Controller ↔ Processor | Nur falls dieser Provider per API-Key genutzt wird (Phase 5) | jeweiliges DPA + Drittland-Absicherung analog Anthropic |
+
+### 6.2 Neue Verarbeitungszwecke (in Art.-30-Verzeichnis + AVV aufnehmen)
+
+- [ ] **Schreibstil-Ableitung (Phase 6):** einmalige LLM-Verarbeitung der letzten Mails des *Gesendet*-Ordners; gespeichert wird nur ein abstrahiertes Stil-Profil (`style.md`), keine Mail-Inhalte.
+- [ ] **Agenten-Chat (Phase 7):** Betreiber-Anfragen + injizierter Kontext/Status gehen an den KI-Anbieter; Kein-Auto-Send gilt auch hier.
+- [ ] **Outlook-Add-in (Phase 8):** die geöffnete Mail (Betreff/Absender/Body) wird via Office.js in den Chat gereicht → an den KI-Anbieter; rein lesend (ReadItem).
+
+### 6.3 Vizionists als Auftragsverarbeiter — AVV-Pflichtinhalt (Art. 28 Abs. 3)
+
+- [ ] Gegenstand, Dauer, Art & Zweck der Verarbeitung, Datenarten, Kategorien Betroffener
+- [ ] Weisungsbindung + Vertraulichkeit
+- [ ] TOMs (Art. 32): Fernet-Verschlüsselung at-rest, chmod-600-Schlüsseldatei, Self-Hosting, PII-Maskierung, Kein-Auto-Send
+- [ ] **Unter-Auftragsverarbeiter** (Anthropic; ggf. OpenAI/Google) benannt + genehmigt
+- [ ] Unterstützung bei Betroffenenrechten & Meldepflichten (Art. 33/34)
+- [ ] Löschung/Rückgabe nach Vertragsende (WebUI-Reset löscht Config + Kontext + Stil + State + Schlüssel)
+- [ ] Audit-/Nachweisrechte des Betreibers
+- [ ] Bei OpenAI/Google zusätzlich: Drittland-Transfer per SCC
+
+### 6.4 Verhältnis zur WebUI-Einwilligung
+
+- [ ] Die im WebUI implementierte **Pflicht-Checkbox „Datenschutzbestimmungen"** deckt die *Betreiber-Einwilligung* zur beschriebenen Verarbeitung ab (Art. 6 Abs. 1 lit. a). Sie **ersetzt nicht** die AVVs #1–#3 — das sind separate Verträge zwischen den Unternehmen. Beides ist nötig.
+- [ ] Platzhalter in der Datenschutzerklärung (`webui/src/templates/_datenschutz.html`) mit echten Betreiber-Angaben ausgefüllt.
+
+---
+
 ## Freigabe
 
-- [ ] Alle Punkte in Abschnitt 1–5 sind ✅
+- [ ] Alle Punkte in Abschnitt 1–6 sind ✅
 - [ ] Optional: Datenschutzbeauftragter der Tankstelle (falls vorhanden) hat den Vorgang zur Kenntnis genommen
 
 **AVV/DSGVO-Bereit für Live-Verarbeitung?** [ ] Ja  [ ] Nein — Blocker: ______________
