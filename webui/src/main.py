@@ -336,8 +336,19 @@ def save(
         updates: dict[str, str] = {}
         if imap_user is not None:
             updates["IMAP_USER"] = imap_user
-            # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups
-            updates["OWN_EMAIL_ADDRESS"] = imap_user
+            # Own-Sender-Filter: IMAP_USER == OWN_EMAIL_ADDRESS für 99% aller Setups.
+            # WR-05: eine BEWUSST abweichend gesetzte OWN_EMAIL_ADDRESS (z.B. Shared-
+            # Alias statt Login) darf ein IMAP-Section-Save nicht stillschweigend
+            # zurücksetzen — nur defaulten, wenn sie fehlt oder bisher an IMAP_USER
+            # gekoppelt war.
+            try:
+                existing_env = agents_io.read_env_raw(agent_id)
+            except ValueError:
+                existing_env = {}  # ungültige agent_id -> Fehler kommt unten aus write_env
+            existing_own = (existing_env.get("OWN_EMAIL_ADDRESS") or "").strip()
+            existing_imap_user = (existing_env.get("IMAP_USER") or "").strip()
+            if not existing_own or existing_own == existing_imap_user:
+                updates["OWN_EMAIL_ADDRESS"] = imap_user
         if imap_drafts_folder is not None and imap_drafts_folder.strip() != "":
             updates["IMAP_DRAFTS_FOLDER"] = imap_drafts_folder.strip()
         if imap_password is not None and imap_password.strip() != "":

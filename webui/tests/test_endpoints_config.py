@@ -271,6 +271,50 @@ def test_save_updates_imap_fields_for_agent(authed_client, mocker, tmp_path, mon
     assert raw["IMAP_PASSWORD"]
 
 
+def test_save_preserves_custom_own_email_address(authed_client, mocker, tmp_path, monkeypatch):
+    """WR-05: Eine bewusst abweichend gesetzte OWN_EMAIL_ADDRESS (Alias != Login)
+    darf ein IMAP-Section-Save nicht stillschweigend auf IMAP_USER zurücksetzen."""
+    _setup_env(tmp_path, monkeypatch)
+    _mock_docker_running(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {
+        "IMAP_USER": "login@x.de",
+        "OWN_EMAIL_ADDRESS": "alias@x.de",  # bewusst abweichend
+    })
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"agent_id": "info", "imap_user": "login-neu@x.de"},
+    )
+    assert response.status_code in (303, 200)
+    raw = agents_io.read_env_raw("info")
+    assert raw["IMAP_USER"] == "login-neu@x.de"
+    assert raw["OWN_EMAIL_ADDRESS"] == "alias@x.de"  # NICHT überschrieben
+
+
+def test_save_keeps_own_email_coupled_when_previously_equal_to_imap_user(authed_client, mocker, tmp_path, monkeypatch):
+    """Wenn OWN_EMAIL_ADDRESS bisher an IMAP_USER gekoppelt war (Default-Fall),
+    folgt sie einem IMAP_USER-Wechsel weiterhin automatisch."""
+    _setup_env(tmp_path, monkeypatch)
+    _mock_docker_running(mocker)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {
+        "IMAP_USER": "old@x.de",
+        "OWN_EMAIL_ADDRESS": "old@x.de",  # gekoppelt (Auto-Default)
+    })
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={"agent_id": "info", "imap_user": "new@x.de"},
+    )
+    assert response.status_code in (303, 200)
+    raw = agents_io.read_env_raw("info")
+    assert raw["IMAP_USER"] == "new@x.de"
+    assert raw["OWN_EMAIL_ADDRESS"] == "new@x.de"  # folgt der Kopplung
+
+
 def test_save_context_md_for_active_agent(authed_client, mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _mock_docker_running(mocker)
