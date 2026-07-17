@@ -1,0 +1,87 @@
+/* Minimales Chat-Styling für das chrome-lose Partial (D-61) — nur lokale Regeln,
+ * keine externen @import/url(). */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #f5f5f5;
+}
+
+#chat-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 0.75rem;
+}
+
+#chat-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.chat-bubble-user {
+  align-self: flex-end;
+  background: #2563eb;
+  color: #fff;
+}
+
+.chat-bubble-assistant {
+  align-self: flex-start;
+  background: #e5e7eb;
+  color: #111;
+}
+
+#chat-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+#chat-input {
+  flex: 1 1 auto;
+  resize: vertical;
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+#chat-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+#chat-controls button {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+#chat-send-btn {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}

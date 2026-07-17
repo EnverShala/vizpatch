@@ -5,14 +5,14 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from . import agents_io, auth, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
+from . import agents_io, auth, chat, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -301,6 +301,63 @@ def style_relearn(
 
     agents_io.write_style_md_atomic(agent_id, style_md)
     return PlainTextResponse(style_md)
+
+
+@app.get("/chat/{agent_id}/embed", response_class=HTMLResponse)
+def chat_embed(request: Request, agent_id: str, user: str = Depends(auth.require_auth)):
+    """Chrome-loses, einbettbares Chat-Partial (D-61/CHAT-05) — eigener Rahmen,
+    KEIN base.html-Erbe. Phase 8 (Outlook-Add-in) bindet dieselbe Route ein."""
+    if agent_id not in agents_io.list_agent_ids():
+        raise HTTPException(status_code=404, detail="agent not found")
+    return templates.TemplateResponse(request, "chat.html", {"agent_id": agent_id})
+
+
+def _sse_data_frame(text: str) -> str:
+    """Kodiert einen Text-Chunk als SSE-`data:`-Frame — eingebettete Newlines
+    werden zu mehreren `data:`-Fortsetzungszeilen desselben Events (SSE-Spec)."""
+    body = "\n".join(f"data: {line}" for line in text.split("\n"))
+    return f"{body}\n\n"
+
+
+@app.post("/chat/{agent_id}/send")
+def chat_send(
+    agent_id: str,
+    message: str = Form(...),
+    user: str = Depends(auth.require_auth),
+):
+    """Streamt eine Chat-Antwort via SSE (D-62, Walking-Skeleton). Provider/Key/
+    Modell werden GENAU für `agent_id` aufgelöst (D-59-Intent) — kein Anthropic-
+    Sonderweg. Rate-Limit + History/System-Prompt kommen erst in 07-02/07-03."""
+    try:
+        provider, api_key, model = chat.resolve_chat_target(agent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid agent_id")
+    except chat.ChatConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    prompt = message
+
+    def _stream():
+        try:
+            for piece in chat.stream_chat(
+                provider=provider,
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                max_tokens=2000,
+                temperature=0.7,
+            ):
+                yield _sse_data_frame(piece)
+            yield "event: done\ndata: \n\n"
+        except Exception as e:
+            logger.warning("chat_stream_error", extra={"agent_id": agent_id, "error": str(e)})
+            yield f"event: error\ndata: {e}\n\n"
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redirect_query: str) -> object:
