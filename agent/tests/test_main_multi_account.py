@@ -200,6 +200,38 @@ def test_zero_agents_waits_idle_without_crash(agent_env, mocker):
     assert main_module._shutdown is True
 
 
+def test_failed_drafts_probe_is_not_cached_and_retried_next_cycle(agent_env, mock_config, mocker):
+    """WR-04: Eine transient fehlgeschlagene SPECIAL-USE-Probe (IMAP kurz nicht
+    erreichbar) darf NICHT als Provider-Default bis zum nächsten .env-Save im Cache
+    kleben — der nächste Zyklus muss die Auto-Discovery erneut versuchen."""
+    from dataclasses import replace as dc_replace
+
+    agents_root, data_root = agent_env["agents_root"], agent_env["data_root"]
+    agent_dir = _make_agent_dir(agents_root, "agent-a", enabled=True)
+    status_file = _status_file(data_root, "agent-a")
+    cfg = dc_replace(mock_config, imap_drafts_folder_explicit=False, agent_id="agent-a")
+
+    imap_instance = mocker.MagicMock()
+    imap_instance.detect_drafts_folder.side_effect = [RuntimeError("IMAP down"), "Entwürfe"]
+    mock_client_cls = mocker.patch("src.main.ImapClient")
+    mock_client_cls.return_value.__enter__.return_value = imap_instance
+    mock_client_cls.return_value.__exit__.return_value = False  # Exceptions NICHT schlucken
+
+    logger = __import__("logging").getLogger("test")
+
+    # 1. Zyklus: Probe schlägt fehl -> Provider-Fallback, aber KEIN Cache-Eintrag.
+    cfg1, source1 = main_module._resolve_drafts_folder(cfg, agent_dir, status_file, logger)
+    assert source1 == "provider"
+    assert "agent-a" not in main_module._drafts_cache
+
+    # 2. Zyklus (unveränderte .env-mtime): Probe wird erneut versucht und greift jetzt.
+    cfg2, source2 = main_module._resolve_drafts_folder(cfg, agent_dir, status_file, logger)
+    assert source2 == "special-use"
+    assert cfg2.imap_drafts_folder == "Entwürfe"
+    assert main_module._drafts_cache["agent-a"][1:] == ("Entwürfe", "special-use")
+    assert imap_instance.detect_drafts_folder.call_count == 2
+
+
 def test_wait_for_agents_surfaces_error_for_sole_broken_agent(agent_env, mocker):
     """WR-03: Ein einziger Agent mit unentschlüsselbarer/kaputter Config darf nicht
     ewig still im Idle-Wait hängen — sein Fehler MUSS in seine agent_status.json

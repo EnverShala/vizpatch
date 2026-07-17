@@ -216,10 +216,12 @@ def _resolve_drafts_folder(
         return replace(config, imap_drafts_folder=folder), source
 
     detected: str | None = None
+    probe_failed = False
     try:
         with ImapClient(config, logger=logger, timeout=_imap_timeout_seconds()) as imap:
             detected = imap.detect_drafts_folder()
     except Exception as e:
+        probe_failed = True
         logger.warning("drafts_folder_probe_failed", extra={"error": str(e), "agent_id": config.agent_id})
 
     if detected:
@@ -227,7 +229,12 @@ def _resolve_drafts_folder(
     else:
         folder, source = config.imap_drafts_folder, "provider"
 
-    _drafts_cache[config.agent_id] = (env_mtime, folder, source)
+    # WR-04: Nur ECHTE Ergebnisse cachen (Detection oder bewusster Provider-Fallback
+    # nach erfolgreicher Probe). Eine transient fehlgeschlagene Probe (IMAP kurz
+    # nicht erreichbar) darf nicht bis zum nächsten .env-Save "kleben" — der
+    # nächste Zyklus probiert die SPECIAL-USE-Discovery erneut.
+    if not probe_failed:
+        _drafts_cache[config.agent_id] = (env_mtime, folder, source)
     logger.info("drafts_folder_resolved", extra={"folder": folder, "source": source, "agent_id": config.agent_id})
     status_writer.write_status(drafts_folder=folder, detection_source=source, status_file=status_file)
     return replace(config, imap_drafts_folder=folder), source
