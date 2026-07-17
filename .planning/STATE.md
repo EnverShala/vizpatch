@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: "2026-07-17T09:52:00.977Z"
+status: executing
+last_updated: "2026-07-17T12:00:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 18
-  completed_plans: 18
-  percent: 25
+  completed_phases: 4
+  total_plans: 23
+  completed_plans: 19
+  percent: 50
 ---
 
 # STATE — Vizpatch (schmaler KI-Email-Agent)
@@ -20,7 +20,11 @@ progress:
 
 ## Current Phase
 
-**Phase 4 — Web-UI & Multi-Kunde ✅ Code + Zero-Config-Overhaul + Auto-Discovery + Section-Save durch. End-to-End erfolgreich getestet mit Live-IMAP (IONOS) am 2026-07-14: echte Test-Mail → REPLY_NEEDED → Draft im "Entwürfe"-Ordner (via IMAP SPECIAL-USE detected). Deployment-Paket v1.1.0-Build (`bash scripts/build-deployment-package.sh v1.1.0`) noch offen.**
+**Phase 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) ✅ Code ausgeführt.** Alle 6 Plans (05.01–05.06) committet, plus Post-Review-Fixes (WR-01…06, CR-01). Codebasis inhaltlich bei **v1.2**: Multi-Agent-Loop (Ein-Container, `/config/agents/<id>/`), Multi-LLM-Adapter (`agent/src/llm.py`, Anthropic/OpenAI/Google, Provider-Autodetect D-51), Fernet-Verschlüsselung at-rest (`crypto.py` Agent+WebUI). **Offen:** Verifikation 05.06 Tasks 1–3 (Modell-ID-Check, LLM-04-Fixtures je Provider ≥ 11/14, MA-05-Parallelbetrieb, Migrations-Abnahme) ist **ehrlich als deferred markiert** — braucht echte OpenAI/Google-API-Keys.
+
+**Anmerkung:** Phase 5 wurde entgegen der ursprünglichen Roadmap-Reihenfolge **vor** dem Esso-Rollout ausgeführt. Migration Single→default wurde gegen eine Kopie des Live-Layouts getestet (kein Regressions-Risiko), der eigentliche Esso-Rollout steht aber noch aus.
+
+**Nächster Fokus: Esso Leonberg live bekommen — nicht Feature-Ausbau.**
 
 ## Phase Status
 
@@ -30,8 +34,8 @@ progress:
 | 2 — Deployment beim Kunden | ✅ Completed | 2026-07-11 | 2026-07-12 |
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
-| 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves; Revision 4 mit D-51-Autodetect; Plan-Checker PASSED 2026-07-16) — Ausführung erst nach Esso-Rollout | — | — |
-| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📋 Geplant (4 Plans, 3 Waves; 2026-07-17) — Ausführung nach Phase-5-Execution | — | — |
+| 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | ✅ Code ausgeführt (6/6 Plans + Fixes WR-01…06, CR-01) — **05.06-Verifikation (Tasks 1–3) deferred** bis OpenAI/Google-Keys vorliegen | 2026-07-15 | 2026-07-17 |
+| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📋 Geplant (4 Plans, 3 Waves; Plan-Checker revised 2026-07-17) — Ausführung nach Esso-Rollout | — | — |
 | 7 — Agenten-Chat im WebUI (v1.3) | 📝 Roadmap-Eintrag (CHAT-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
 | 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | 📝 Roadmap-Eintrag (OUT-01…04) — setzt Phase 7 voraus | — | — |
 
@@ -74,12 +78,14 @@ progress:
 
 ## Next Action
 
-**Zwei konkrete Todos vor dem Kundentermin Esso Leonberg (Reihenfolge festgelegt am 2026-07-14):**
+**Weg zum Esso-Rollout (Reihenfolge festgelegt am 2026-07-17 mit Betreiber):**
 
-1. **Deployment-Paket v1.1.0 bauen:** `bash scripts/build-deployment-package.sh v1.1.0` → produziert `dist/deployment-paket-v1.1.0.tar.gz` mit Agent + WebUI + install-autostart.sh + RUNBOOK. Grundlage für Vor-Ort-Rollout.
-2. **Autostart auf echter Ubuntu-VM verifizieren:** Multipass oder Hyper-V, sudo install-autostart.sh enable + reboot. Grund: WSL-Autostart-Test am 2026-07-14 lief in Docker-Desktop-Bind-Mount-Cache-Bug (siehe Commit 2cfe60b + Memory `wsl_docker_desktop_bindmount.md`), muss auf nativem Linux nochmal grün laufen bevor Kunde.
+1. **Deployment-Paket v1.2.0 bauen:** `bash scripts/build-deployment-package.sh v1.2.0` → produziert `dist/deployment-paket-v1.2.0/` mit Agent- + WebUI-Image-Tarballs (inkl. llm.py, crypto.py, agents_io.py, migration.py) + install-autostart.sh + docker-compose + README. Grundlage für Vor-Ort-Rollout.
+2. **Rest fertigstellen:** verbleibende 05.06-Verifikations-Punkte (soweit für Anthropic-only-Rollout nötig) + Feinschliff.
+3. **DSGVO + AVV mit Anthropic** abschließen (Vertrag/Checkliste) — Voraussetzung für Live-Verarbeitung echter Kundenmails.
+4. **Update zum Kunden ausrollen — fertig.** Vor-Ort-Termin Esso Leonberg mit Browser-UI statt SSH-Setup.
 
-Erst wenn beide grün → Vor-Ort-Termin Esso Leonberg mit Browser-UI statt SSH-Setup.
+**Autostart-Test:** bewusst NICHT mehr auf separater VM — wird direkt beim Kunden auf dem echten Ubuntu-Server getestet (Entscheidung 2026-07-17). Der WSL-Autostart-Test war durch den Docker-Desktop-Bind-Mount-Cache-Bug ungültig (Memory `wsl_docker_desktop_bindmount.md`), eine Zwischen-VM ist den Aufwand nicht wert.
 
 ### Ältere Notizen zur Phase 4 (nur zur Historie)
 
@@ -130,4 +136,7 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 - **2026-07-13** — Positionierung nachgeschärft: "für Tankstelle" aus Produkt-Titeln entfernt (Vizpatch ist branchen-agnostisch, Tankstelle nur erster Kunde). Drafts-Ordner nun `Vizpatch` (Enver hat ihn im Mail-Client manuell so angelegt). **DEL-08 unverändert public** (Repo `EnverShala/vizpatch` ist öffentlich — GHCR-Package damit ebenfalls anonym pullbar). **D-45 neu in Phase-4-CONTEXT**: bestätigt kein PAT-Setup beim Kunden, `pull_and_restart` ohne `auth_config`.
 - **2026-07-13** — Phase 4 Code vollständig implementiert (5 Plans, 5 Waves). Commits: 04.01 Walking Skeleton, 04.02 Basic-Auth+Konfig-Formular, 04.03 Steuerung+Status, 04.04 KI-Assistent, 04.05 Update+Autostart+Deployment-Paket. **59 Tests grün, 1 skipped (chmod Windows)**. webui/ hat FastAPI+Jinja2+HTMX+Docker-SDK, alle Endpoints (/, /save, /agent/{action}, /agent/status, /context/generate, /update/pull, /update/upload, /healthz). Deployment-Paket v1.1.0 Builder bereit (`bash scripts/build-deployment-package.sh v1.1.0`). Ausstehend: manueller Browser-Checkpoint vor Vor-Ort-Termin Esso Leonberg.
 - **2026-07-15** — Phase 5 komplett geplant (Scope erweitert von Multi-LLM-only auf Multi-LLM + Multi-Agent + Secrets-Verschlüsselung, Direktauftrag Betreiber). Roadmap + 12 neue Requirements (LLM/MA/SEC), 05-CONTEXT (D-46..D-50: ein Container pro Agent, /config/agents/<id>/-Layout, Fernet+Key-Datei ohne Master-Passwort, Provider pro Agent, Dropdown-Semantik), Research (SDK-Versionen verifiziert, OpenAI/Google-Modell-IDs LOW-confidence → Verifikations-Task), Pattern-Mapping (22 Dateien), 6 Pläne in 4 Waves. Plan-Checker Runde 1: 3 Blocker + 5 Warnings (context.md nicht agent-parametrisiert, rename_agent fehlte, /reset-Regression) → Revision → Runde 2 PASSED. Ausführung bewusst verschoben bis Esso-Rollout abgeschlossen.
+- **2026-07-15 bis 2026-07-17** — **Phase 5 ausgeführt** (v1.2). Alle 6 Plans committet: 05.01 Fernet-Krypto-Fundament (Agent+WebUI, Versionsbump 1.2.0), 05.03 Multi-LLM-Adapter (`agent/src/llm.py`, LLM_API_KEY/LLM_PROVIDER, Fernet-Decrypt), 05.04 agents_io + Single→default-Migration, 05.02 Multi-Account-Loop (Ein-Container, per-Zyklus-Discovery, Fehler-Isolation, IMAP-Timeout, Heartbeat), 05.05 WebUI agent_id-Routing + /agents-CRUD + API-Key-Autodetect (D-51) + Multi-Agent-Zero-Reset, 05.06 Verifikation/Ship. **Post-Review-Fixes:** CR-01 (Mails ohne Message-ID sauber überspringen), WR-01 (OpenAI-Call-Shape: max_completion_tokens, keine temperature), WR-02 (detection_source überlebt Status-Write), WR-03 (Config-Load-Fehler pro Agent sichtbar), WR-04 (fehlgeschlagene Drafts-Probe nicht cachen), WR-05 (abweichende OWN_EMAIL_ADDRESS beim IMAP-Save nicht zurücksetzen), WR-06 (Drift-Guard für duplizierte crypto.py). **05.06-Verifikation Tasks 1–3 ehrlich als deferred markiert** (Modell-ID-Check, LLM-04-Fixtures je Provider ≥ 11/14, MA-05-Parallelbetrieb, Migrations-Abnahme) — brauchen echte OpenAI/Google-API-Keys. Letzter Commit `d7b5a36` "Aktueller Stand, Limit ausgeschöpft".
+- **2026-07-16/17** — Phase 6 (Schreibstil-Adaption, v1.3) geplant: 4 Plans, 3 Waves, Plan-Checker-Revision (Commits `438cc1a`, `f2e50de`). Ausführung bewusst nach Esso-Rollout.
+- **2026-07-17** — **STATE.md-Korrektur:** Der Header behauptete fälschlich noch "Phase 5 = geplant, completed_phases: 2". Realität laut Git-Historie: Phase 5 ausgeführt. Korrigiert auf completed_phases: 4 (1/2/4/5), 23 Plans total / 19 ausgeführt, percent 50. Betreiber-Entscheidung: Autostart nicht mehr auf Zwischen-VM, sondern direkt beim Kunden testen. Nächste Schritte: Deployment-Paket v1.2.0 → Rest + DSGVO/AVV → Update zum Kunden.
 - **2026-07-14** — Phase-4-Nachtrag "Zero-Config-Overhaul + Live-Verification". Commits: `68d2a7a` (Zero-Config + bcrypt + UX-Overhaul, 27 Dateien), `c4986cd` (Drafts-Ordner Auto-Discovery via IMAP SPECIAL-USE, 10 Dateien), Section-Save-Buttons (in Arbeit). Kern-Änderungen: **(a)** WebUI startet ohne Vor-Config — `docker-entrypoint.sh` seedet `/config/.env` + `/config/context.md` beim ersten Start; **(b)** Login optional (Empty = kein Schutz + Warnbanner) mit bcrypt-Hashing + "Aktuelles/Neues Passwort"-Change-UX; **(c)** OWN_EMAIL_ADDRESS auto = IMAP_USER (Feld aus Formular entfernt); **(d)** Drafts-Ordner Auto-Discovery via RFC 6154 SPECIAL-USE (Fallback: provider_config); **(e)** Wait-for-Config-Loop im Agent (kein Restart-Loop bei leerer .env); **(f)** Danger-Zone / Zero-Reset-Button (löscht .env + context.md + state.db + Agent-Container); **(g)** Section-weise Save-Buttons (jedes Fieldset einzeln übernehmbar via HTMX, kein Page-Reload). **End-to-End-Test**: echte Test-Mail von privatem Gmail an IONOS-Postfach → Classify REPLY_NEEDED → Sonnet-Draft → APPEND in "Entwürfe" (via SPECIAL-USE detected) → im IONOS-Webmail sichtbar mit aktivem "Senden"-Button. **149 Tests grün** (63 agent + 86 webui + 3 neue Section-Save-Tests → 89 webui). Zombie-Container `kea-agent` (Prä-Rename) entfernt.
