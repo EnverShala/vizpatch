@@ -383,3 +383,50 @@ def test_chat_py_source_has_no_mail_write_or_send_path():
         lowered = stripped.lower()
         for forbidden in forbidden_call_patterns:
             assert forbidden not in lowered, f"chat.py enthaelt verbotenen Mail-Send-Aufruf: {stripped}"
+
+
+# --- Einbettbarkeits-Nachweis (Plan 07-04, CHAT-05/D-61, T-07-12): --------------
+# keine externen Ressourcen im embed-Partial + referenzierten /static-Assets.
+
+
+def _find_external_refs(text: str) -> list[str]:
+    """Sammelt alle src=/href=/url(...)-Referenzen und filtert auf externe
+    Ziele (http://, https:// oder protokoll-relativ //) — genau die Ziele, die
+    ein Fremd-Host (T-07-12: CDN/Supply-Chain) NICHT laden duerfte."""
+    refs: list[str] = []
+    for match in re.finditer(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', text, re.IGNORECASE):
+        refs.append(match.group(1))
+    for match in re.finditer(r'url\(\s*["\']?([^"\')]+)', text, re.IGNORECASE):
+        refs.append(match.group(1))
+    return [r for r in refs if r.startswith("http://") or r.startswith("https://") or r.startswith("//")]
+
+
+def test_chat_embed_and_static_assets_have_no_external_resources(authed_client, tmp_path, monkeypatch):
+    """CHAT-05/D-61/T-07-12: der embed-Body ist chrome-los (kein
+    <h1>Vizpatch-Chrome) und enthaelt — genau wie die referenzierten
+    /static-Assets chat.js/chat.css — KEINE externe URL (kein CDN)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    response = authed_client.get("/chat/info/embed", auth=("admin", "pw"))
+    assert response.status_code == 200
+    body = response.text
+    assert "<h1>Vizpatch" not in body
+    assert _find_external_refs(body) == []
+
+    static_dir = Path(__file__).resolve().parent.parent / "static"
+    chat_js = (static_dir / "chat.js").read_text(encoding="utf-8")
+    chat_css = (static_dir / "chat.css").read_text(encoding="utf-8")
+    assert _find_external_refs(chat_js) == []
+    assert _find_external_refs(chat_css) == []
+    assert "@import" not in chat_css
+
+
+def test_embed_test_fixture_has_no_external_urls():
+    """Nachweis (CHAT-05, Phase-8-Vorarbeit): die nackte Test-HTML-Seite, die
+    demonstriert wie ein Fremd-Host das Partial einbindet, referenziert
+    ausschliesslich lokale/relative Dateien — keine externe/protokoll-relative
+    URL irgendwo im Fixture."""
+    fixture = Path(__file__).resolve().parent / "fixtures" / "embed_test.html"
+    text = fixture.read_text(encoding="utf-8")
+    assert re.search(r"https?://", text) is None
+    assert re.search(r"(^|[^:])//", text, re.MULTILINE) is None

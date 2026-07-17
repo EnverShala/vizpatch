@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Fremd-Host-Einbettungs-Demo (CHAT-05, Phase-8-Vorarbeit)</title>
+  <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+  <h1>Demo-Seite ohne Vizpatch-Chrome</h1>
+  <p>
+    Diese Seite steht fuer einen Fremd-Host (Phase 8: Outlook-Taskpane), der das
+    Vizpatch-Chat-Partial einbindet. Sie hat KEIN base.html-Chrome (kein
+    Vizpatch-Header, kein Navigations-Rahmen) und referenziert ausschliesslich
+    lokale, relative Dateien (chat.css, chat.js) statt eines CDN.
+  </p>
+  <div id="chat-root" data-agent-id="demo-agent">
+    <div id="chat-log" aria-live="polite"></div>
+    <form id="chat-form">
+      <textarea id="chat-input" rows="2" placeholder="Nachricht eingeben..." required></textarea>
+      <div id="chat-controls">
+        <button type="submit" id="chat-send-btn">Senden</button>
+        <button type="button" id="chat-reset-btn">Verlauf zuruecksetzen</button>
+      </div>
+    </form>
+  </div>
+  <script src="chat.js"></script>
+</body>
+</html>

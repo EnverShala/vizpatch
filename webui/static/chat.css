@@ -1,5 +1,5 @@
 /* Minimales Chat-Styling für das chrome-lose Partial (D-61) — nur lokale Regeln,
- * keine externen @import/url(). Wird von ZWEI Kontexten geladen (07-04,
+ * keine externen CDN-Imports/url()-Referenzen. Wird von ZWEI Kontexten geladen (07-04,
  * CHAT-01/CHAT-05 — eine Markup-Quelle über _chat.html):
  * (a) dem eigenstaendigen chrome-losen chat.html (Klasse "chat-standalone"
  *     auf <body> — volle Viewport-Hoehe, eigener Rahmen);
