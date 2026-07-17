@@ -281,7 +281,7 @@ Plans:
 
 **Wave 4** *(blocked on 07-03)*
 
-- [ ] 07-04-PLAN.md — Haupt-WebUI-Integration (gleiche Partial-Quelle) + Einbettbarkeits-Nachweis + CHAT_*-Env-Doku (CHAT-01/05)
+- [x] 07-04-PLAN.md — Haupt-WebUI-Integration (gleiche Partial-Quelle) + Einbettbarkeits-Nachweis + CHAT_*-Env-Doku (CHAT-01/05)
 
 **Hauptrisiken:**
 
