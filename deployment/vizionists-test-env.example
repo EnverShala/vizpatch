@@ -25,3 +25,8 @@ LOG_LEVEL=INFO
 CONTEXT_FILE=/config/context.md
 STATE_DB=/data/state.db
 PROMPTS_DIR=/app/prompts
+
+# ==== AGENTEN-CHAT (Phase 7) — Kosten-/Missbrauchsschutz, Defaults meist ok ====
+CHAT_RATE_LIMIT_PER_MIN=20
+CHAT_MAX_TOKENS=2000
+CHAT_HISTORY_TOKEN_BUDGET=3000

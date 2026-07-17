@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import tempfile
@@ -319,25 +320,80 @@ def _sse_data_frame(text: str) -> str:
     return f"{body}\n\n"
 
 
+def _parse_chat_history(raw: str) -> list[dict]:
+    """Parst den vom Browser gehaltenen Verlauf (D-58) defensiv aus dem
+    JSON-Formfeld — bei Parse-Fehler oder falscher Struktur: leere Liste statt
+    500 (T-07-09, manipulierte/kaputte history ist vollstaendig untrusted).
+    Nur Turns mit str-role/str-content werden uebernommen, alles andere
+    verworfen (kein Crash bei fremdartigen Einträgen)."""
+    if not raw.strip():
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    parsed: list[dict] = []
+    for turn in data:
+        if not isinstance(turn, dict):
+            continue
+        role = turn.get("role")
+        content = turn.get("content")
+        if not isinstance(role, str) or not isinstance(content, str):
+            continue
+        parsed.append({"role": role, "content": content})
+    return parsed
+
+
+def _parse_mail_context(raw: str) -> dict | None:
+    """Parst das optionale mail_context-Formfeld (D-65) defensiv — bei
+    Parse-Fehler oder falscher Struktur: `None` (kein Mail-Block, kein Crash).
+    In Phase 7 ungenutzt/leer; Phase 8 (OUT-03) fuellt es via Office.js."""
+    if not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {
+        "subject": str(data.get("subject") or ""),
+        "sender": str(data.get("sender") or ""),
+        "body": str(data.get("body") or ""),
+    }
+
+
 @app.post("/chat/{agent_id}/send")
+@limiter.limit(lambda: f"{os.getenv('CHAT_RATE_LIMIT_PER_MIN', '20')}/minute")
 def chat_send(
+    request: Request,
     agent_id: str,
     message: str = Form(...),
+    history: str = Form(""),
+    mail_context: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
-    """Streamt eine Chat-Antwort via SSE (D-62, Walking-Skeleton). Provider/Key/
-    Modell werden GENAU für `agent_id` aufgelöst (D-59-Intent) — kein Anthropic-
-    Sonderweg. Der System-Prompt injiziert context.md/style.md/Status (CHAT-02,
-    D-64); Rate-Limit + echte Multi-Turn-History kommen erst in 07-03."""
+    """Streamt eine Chat-Antwort via SSE (D-62). Provider/Key/Modell werden
+    GENAU für `agent_id` aufgelöst (D-59-Intent) — kein Anthropic-Sonderweg.
+    build_chat_prompt() (CHAT-01/02/04) injiziert System-Prompt + auf
+    CHAT_HISTORY_TOKEN_BUDGET getrimmten Verlauf + optionalen mail_context-
+    DATEN-Block (D-65). Rate-Limit CHAT_RATE_LIMIT_PER_MIN (D-60, per
+    Remote-Address) + max-tokens-Deckel CHAT_MAX_TOKENS greifen serverseitig,
+    beide .env-konfigurierbar zur Laufzeit gelesen."""
+    parsed_history = _parse_chat_history(history)
+    parsed_mail_context = _parse_mail_context(mail_context)
+
     try:
         provider, api_key, model = chat.resolve_chat_target(agent_id)
-        system_prompt = chat.build_system_prompt(agent_id)
+        prompt = chat.build_chat_prompt(agent_id, message, parsed_history, parsed_mail_context)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid agent_id")
     except chat.ChatConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    prompt = f"{system_prompt}\n\n# Nachricht des Betreibers\n\n{message}"
+    max_tokens = int(os.getenv("CHAT_MAX_TOKENS", "2000"))
 
     def _stream():
         try:
@@ -346,7 +402,7 @@ def chat_send(
                 api_key=api_key,
                 model=model,
                 prompt=prompt,
-                max_tokens=2000,
+                max_tokens=max_tokens,
                 temperature=0.7,
             ):
                 yield _sse_data_frame(piece)

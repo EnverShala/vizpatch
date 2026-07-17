@@ -24,6 +24,9 @@ services:
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       WEBUI_COMPOSE_DIR: /compose
+      CHAT_RATE_LIMIT_PER_MIN: ${CHAT_RATE_LIMIT_PER_MIN:-20}
+      CHAT_MAX_TOKENS: ${CHAT_MAX_TOKENS:-2000}
+      CHAT_HISTORY_TOKEN_BUDGET: ${CHAT_HISTORY_TOKEN_BUDGET:-3000}
     ports:
       - "8080:8080"
     group_add:

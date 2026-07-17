@@ -46,3 +46,12 @@ WEBUI_PASSWORD=<setzen-vor-erstem-start>
 AUTOSTART_ENABLED=false
 # DOCKER_GID: Wird von install-autostart.sh mit echter Host-GID überschrieben
 DOCKER_GID=999
+
+# ==== AGENTEN-CHAT (Phase 7) — Kosten-/Missbrauchsschutz, Defaults meist ok ====
+# CHAT_RATE_LIMIT_PER_MIN: Max. Chat-Nachrichten pro Minute (pro Client-IP)
+CHAT_RATE_LIMIT_PER_MIN=20
+# CHAT_MAX_TOKENS: Hartes Token-Limit pro Chat-Antwort (Kostensicherheitsnetz)
+CHAT_MAX_TOKENS=2000
+# CHAT_HISTORY_TOKEN_BUDGET: Token-Budget für den mitgeschickten Chat-Verlauf
+# im Prompt (ältere Turns fallen zuerst weg, wenn das Budget überschritten wird)
+CHAT_HISTORY_TOKEN_BUDGET=3000

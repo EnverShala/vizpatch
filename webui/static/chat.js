@@ -1,6 +1,14 @@
-/* Vanilla-JS-SSE-Client für den Agenten-Chat (D-62, Walking-Skeleton).
+/* Vanilla-JS-SSE-Client für den Agenten-Chat (D-62).
  * Keine externe Lib (D-61) — fetch() + ReadableStream, lokal eingebunden wie htmx.min.js.
- * Reset-Button ist bewusst noch ohne Verhalten (Reset-Logik kommt erst in Plan 07-03). */
+ *
+ * Verlauf (D-58): lebt ausschließlich in diesem In-Memory-Array — keine
+ * DB, kein localStorage. Verlauf endet mit dem Seitenleben (Reload/Tab-Schluss).
+ * Reset-Button (D-58) leert history + #chat-log.
+ *
+ * mail_context (D-65, Phase-8-Vorarbeit): window.vizpatchGetMailContext ist ein
+ * überschreibbarer Hook. In Phase 7 liefert er null (kein Mail-Kontext). Phase 8
+ * (Outlook-Add-in) überschreibt diese Funktion via Office.js mit der gerade
+ * geöffneten Mail — keine Änderung an chat.js nötig. */
 (function () {
   const root = document.getElementById('chat-root');
   const agentId = root.dataset.agentId;
@@ -8,6 +16,27 @@
   const form = document.getElementById('chat-form');
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('chat-send-btn');
+  const resetBtn = document.getElementById('chat-reset-btn');
+
+  /** Phase-8-Erweiterungspunkt (D-65): Office.js überschreibt diesen Hook, um
+   * die aktuell geöffnete Mail als {subject, sender, body} zurückzugeben.
+   * Phase 7: liefert bewusst null — kein Mail-Kontext vorhanden. */
+  if (typeof window.vizpatchGetMailContext !== 'function') {
+    window.vizpatchGetMailContext = function () {
+      return null;
+    };
+  }
+
+  let history = [];
+
+  function resetHistory() {
+    history = [];
+    log.innerHTML = '';
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetHistory);
+  }
 
   function addBubble(role) {
     const bubble = document.createElement('div');
@@ -40,6 +69,14 @@
 
     const fd = new FormData();
     fd.append('message', message);
+    fd.append('history', JSON.stringify(history));
+    const mailContext = window.vizpatchGetMailContext();
+    if (mailContext) {
+      fd.append('mail_context', JSON.stringify(mailContext));
+    }
+
+    let assistantText = '';
+    let sawError = false;
 
     try {
       const res = await fetch('/chat/' + agentId + '/send', { method: 'POST', body: fd });
@@ -63,13 +100,22 @@
           const parsed = parseSseBlock(block);
           if (parsed.eventType === 'error') {
             assistantBubble.textContent += '\n[Fehler: ' + parsed.data + ']';
+            sawError = true;
           } else if (parsed.eventType === 'done') {
             /* Stream-Ende — nichts anzuhängen. */
           } else {
+            assistantText += parsed.data;
             assistantBubble.textContent += parsed.data;
           }
           log.scrollTop = log.scrollHeight;
         }
+      }
+      /* Verlauf (D-58) erst nach vollständiger Antwort anhängen — bei Fehler
+       * während des Streams bleibt der Verlauf konsistent mit dem, was der
+       * Assistent tatsächlich vollständig geantwortet hat. */
+      if (!sawError) {
+        history.push({ role: 'user', content: message });
+        history.push({ role: 'assistant', content: assistantText });
       }
     } catch (e) {
       assistantBubble.textContent = 'Netzwerkfehler: ' + e;
