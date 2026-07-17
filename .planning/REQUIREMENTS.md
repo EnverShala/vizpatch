@@ -121,11 +121,11 @@
 
 ### Agenten-Chat im WebUI (CHAT)
 
-- [ ] **CHAT-01**: Chat-UI im WebUI pro Agent (HTMX + SSE-Streaming), auth-geschützt; Verlauf in der Browser-Session (keine neue DB), Reset-Button
+- [x] **CHAT-01**: Chat-UI im WebUI pro Agent (HTMX + SSE-Streaming), auth-geschützt; Verlauf in der Browser-Session (keine neue DB), Reset-Button
 - [ ] **CHAT-02**: System-Prompt injiziert `context.md` + `style.md` + kompakten Agent-Status (letzte Polls, Drafts-Ordner, Fehler); Chat beantwortet Fragen zu Konfiguration und Verarbeitungs-Ergebnissen
-- [ ] **CHAT-03**: Chat nutzt den Phase-5-LLM-Adapter mit Provider/Key des gewählten Agenten; Prompt-Injection-Anker wie beim Context-Seed-Assistenten
+- [x] **CHAT-03**: Chat nutzt den Phase-5-LLM-Adapter mit Provider/Key des gewählten Agenten; Prompt-Injection-Anker wie beim Context-Seed-Assistenten
 - [ ] **CHAT-04**: Kosten-/Missbrauchs-Schutz: Rate-Limit pro Minute, max-Tokens-Deckel, Verlaufs-Trunkierung; Kein-Auto-Send gilt auch im Chat (Chat sendet/ändert keine Mails)
-- [ ] **CHAT-05**: Chat-Frontend als einbettbares Partial (eigene Route ohne WebUI-Chrome, keine externen Ressourcen) — Vorarbeit für das Outlook-Add-in (Phase 8)
+- [x] **CHAT-05**: Chat-Frontend als einbettbares Partial (eigene Route ohne WebUI-Chrome, keine externen Ressourcen) — Vorarbeit für das Outlook-Add-in (Phase 8)
 
 ---
 

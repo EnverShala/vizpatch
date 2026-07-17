@@ -264,12 +264,12 @@ Plans:
 
 **Requirements mapped:** CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05
 
-**Plans:** 4 plans (4 sequentielle Waves — alle teilen webui/src/main.py + webui/src/chat.py)
+**Plans:** 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — SSE-Walking-Skeleton: chrome-loses Chat-Partial + Streaming-Adapter chat.py + /chat/{id}/embed + /chat/{id}/send (CHAT-01/03/05)
+- [x] 07-01-PLAN.md — SSE-Walking-Skeleton: chrome-loses Chat-Partial + Streaming-Adapter chat.py + /chat/{id}/embed + /chat/{id}/send (CHAT-01/03/05)
 
 **Wave 2** *(blocked on 07-01)*
 
