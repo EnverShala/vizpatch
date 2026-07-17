@@ -30,14 +30,22 @@ def _call_anthropic(prompt: str, model: str, max_tokens: int, temperature: float
 
 
 def _call_openai(prompt: str, model: str, max_tokens: int, temperature: float, api_key: str) -> str:
+    """UNVERIFIZIERT gegen die echte API (kein OpenAI-Key verfügbar — Verifikation
+    bewusst DEFERRED, siehe 05.06-SUMMARY.md). Call-Shape nach aktueller API-Doku:
+
+    - GPT-5-/o-Klasse-Modelle lehnen `max_tokens` ab und verlangen
+      `max_completion_tokens` (Reasoning-Tokens zählen mit).
+    - Dieselben Modelle erlauben nur den Default `temperature=1` — ein explizit
+      gesetzter Wert führt zu einem 400er. Deshalb wird `temperature` hier
+      bewusst NICHT übergeben (Review WR-01).
+    """
     from openai import OpenAI  # lazy import
 
     client = OpenAI(api_key=api_key)
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=temperature,
+        max_completion_tokens=max_tokens,
     )
     return resp.choices[0].message.content or ""
 

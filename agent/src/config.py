@@ -47,10 +47,13 @@ class DecryptionError(RuntimeError):
 
 
 # Provisorisch (05-RESEARCH.md, Sektion "Call-Pattern pro Provider") — Modell-IDs für
-# OpenAI/Google werden vor Produktiv-Einsatz per client.models.list() verifiziert (Plan 05.06).
+# OpenAI/Google werden vor Produktiv-Einsatz per client.models.list() verifiziert (Plan 05.06;
+# Verifikation DEFERRED, kein OpenAI-/Google-Key verfügbar — siehe 05.06-SUMMARY.md).
+# LOW confidence für openai/google: best-known IDs nach öffentlicher Doku, NICHT gegen
+# die echte API getestet. Fällt ein ID weg, per MODEL_CLASSIFY/MODEL_DRAFT übersteuerbar.
 MODEL_DEFAULTS: dict[str, dict[str, str]] = {
     "anthropic": {"classify": "claude-haiku-4-5", "draft": "claude-sonnet-4-6"},
-    "openai": {"classify": "gpt-5-mini", "draft": "gpt-5.4"},
+    "openai": {"classify": "gpt-5-mini", "draft": "gpt-5.1"},
     "google": {"classify": "gemini-2.5-flash-lite", "draft": "gemini-2.5-pro"},
 }
 

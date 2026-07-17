@@ -52,11 +52,12 @@ def test_llm_call_openai_returns_text(mocker):
 
     assert result == "Hallo von OpenAI"
     mock_openai_cls.assert_called_once_with(api_key="sk-test")
+    # WR-01: GPT-5-Klasse verlangt max_completion_tokens (statt max_tokens) und
+    # erlaubt nur Default-temperature — der Adapter darf beides nicht übergeben.
     mock_client.chat.completions.create.assert_called_once_with(
         model="gpt-5-mini",
         messages=[{"role": "user", "content": "Test-Prompt"}],
-        max_tokens=20,
-        temperature=0.0,
+        max_completion_tokens=20,
     )
 
 
