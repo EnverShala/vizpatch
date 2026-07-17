@@ -77,7 +77,13 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+None in the implemented code - plan executed exactly as written. One process note:
+
+**[Judgment call] OUT-02 not checked off in REQUIREMENTS.md yet**
+- **Found during:** close-out (requirement bookkeeping step)
+- **Issue:** The plan's frontmatter lists `requirements: [OUT-02]`, but OUT-02's full text ("Taskpane lädt das Chat-Partial per HTTPS vom Kundenserver; Auth-Fluss dokumentiert") also requires the Auth-Fluss documentation, which is explicitly scheduled for Plan 08-03 (HTTPS-Runbook + Auth-Fluss + Deployment-Template-Env).
+- **Decision:** Left the OUT-02 checkbox unchecked in `.planning/REQUIREMENTS.md` to avoid a false-complete signal; added a traceability-table note pointing at this SUMMARY instead of running `requirements.mark-complete`. Will check it off once 08-03 documents the Auth-Fluss.
+- **Files modified:** `.planning/REQUIREMENTS.md` (traceability row only, no checkbox change)
 
 ## Issues Encountered
 

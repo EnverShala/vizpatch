@@ -185,4 +185,4 @@
 | SEC-03 | Phase 5 (v1.2) | ✅ Done (05.06 Task 4) |
 | STY-01 … STY-05 | Phase 6 (v1.3) | Pending |
 | CHAT-01 … CHAT-05 | Phase 7 (v1.3) | Pending |
-| OUT-01 … OUT-04 | Phase 8 (v1.4) | Pending |
+| OUT-01 … OUT-04 | Phase 8 (v1.4) | Pending — 08-01 liefert den Taskpane-Serving-Teil von OUT-02 (Auth-Fluss-Doku folgt in 08-03), siehe 08-01-SUMMARY.md |
