@@ -183,12 +183,17 @@ _drafts_cache: dict[str, tuple[float, str, str]] = {}
 
 def _resolve_drafts_folder(
     config: Config, agent_dir: Path, status_file: Path, logger: logging.Logger
-) -> Config:
+) -> tuple[Config, str]:
     """Resolution-Chain für den Drafts-Ordner (pro Agent):
       1. User hat IMAP_DRAFTS_FOLDER explizit gesetzt → respektieren
       2. IMAP SPECIAL-USE Auto-Discovery (\\Drafts-Flag), Ergebnis pro agent_id gecacht
       3. Statischer Provider-Default (bereits in config.imap_drafts_folder)
     Schreibt das Ergebnis in die STATUS-DATEI DIESES Agenten.
+
+    Returns (config, detection_source) — die Source wird von _run_cycle an den
+    Erfolgs-Status-Write durchgereicht, damit sie NICHT von einem generischen
+    Wert überschrieben wird (Review WR-02: die WebUI rendert die grüne
+    "automatisch erkannt"-Bestätigung nur für special-use/provider/explicit).
     """
     if config.imap_drafts_folder_explicit:
         status_writer.write_status(
@@ -196,7 +201,7 @@ def _resolve_drafts_folder(
             detection_source="explicit",
             status_file=status_file,
         )
-        return config
+        return config, "explicit"
 
     env_path = agent_dir / ".env"
     try:
@@ -208,7 +213,7 @@ def _resolve_drafts_folder(
     if cached is not None and cached[0] == env_mtime:
         _, folder, source = cached
         status_writer.write_status(drafts_folder=folder, detection_source=source, status_file=status_file)
-        return replace(config, imap_drafts_folder=folder)
+        return replace(config, imap_drafts_folder=folder), source
 
     detected: str | None = None
     try:
@@ -225,7 +230,7 @@ def _resolve_drafts_folder(
     _drafts_cache[config.agent_id] = (env_mtime, folder, source)
     logger.info("drafts_folder_resolved", extra={"folder": folder, "source": source, "agent_id": config.agent_id})
     status_writer.write_status(drafts_folder=folder, detection_source=source, status_file=status_file)
-    return replace(config, imap_drafts_folder=folder)
+    return replace(config, imap_drafts_folder=folder), source
 
 
 def _fail_agent(agent_id: str, status_file: Path, logger: logging.Logger, error: Exception) -> None:
@@ -262,7 +267,7 @@ def _run_cycle(logger: logging.Logger) -> None:
                 agent_logger.debug("agent_disabled_skip", extra={"agent_id": agent_id})
                 continue
             state.init_db(cfg.state_db)
-            cfg = _resolve_drafts_folder(cfg, agent_dir, status_file, agent_logger)
+            cfg, drafts_source = _resolve_drafts_folder(cfg, agent_dir, status_file, agent_logger)
             _poll_once(cfg, agent_logger)
         except DecryptionError as e:
             _fail_agent(agent_id, status_file, agent_logger, e)
@@ -274,9 +279,12 @@ def _run_cycle(logger: logging.Logger) -> None:
             _fail_agent(agent_id, status_file, agent_logger, e)
             continue
         else:
+            # WR-02: die echte detection_source (special-use/provider/explicit)
+            # aus der Resolution durchreichen — ein generisches "ok" würde die
+            # WebUI-Bestätigung "Drafts-Ordner automatisch erkannt" unterdrücken.
             status_writer.write_status(
                 drafts_folder=cfg.imap_drafts_folder,
-                detection_source="ok",
+                detection_source=drafts_source,
                 error=None,
                 status_file=status_file,
                 last_cycle=datetime.now(timezone.utc).isoformat(),

@@ -82,7 +82,7 @@ def test_two_enabled_agents_both_processed_in_discovery_order(agent_env, mocker)
     _make_agent_dir(agents_root, "agent-b", enabled=True)
 
     mock_resolve = mocker.patch(
-        "src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: cfg
+        "src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "provider")
     )
     mock_poll = mocker.patch("src.main._poll_once")
 
@@ -99,7 +99,7 @@ def test_disabled_agent_is_skipped(agent_env, mocker):
     _make_agent_dir(agents_root, "agent-a", enabled=True)
     _make_agent_dir(agents_root, "agent-b", enabled=False)
 
-    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: cfg)
+    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "provider"))
     mock_poll = mocker.patch("src.main._poll_once")
 
     logger = __import__("logging").getLogger("test")
@@ -118,7 +118,7 @@ def test_exception_in_poll_once_isolates_failing_agent(agent_env, mocker):
     _make_agent_dir(agents_root, "agent-a", enabled=True)
     _make_agent_dir(agents_root, "agent-b", enabled=True)
 
-    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: cfg)
+    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "provider"))
 
     def _poll_side_effect(cfg, logger):
         if cfg.agent_id == "agent-a":
@@ -160,7 +160,7 @@ def test_decryption_error_at_config_load_isolates_failing_agent(agent_env, mocke
         return real_load_agent_config(agent_id, agent_dir)
 
     mocker.patch("src.main.load_agent_config", side_effect=_load_side_effect)
-    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: cfg)
+    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "provider"))
     mock_poll = mocker.patch("src.main._poll_once")
 
     logger = __import__("logging").getLogger("test")
@@ -200,12 +200,33 @@ def test_zero_agents_waits_idle_without_crash(agent_env, mocker):
     assert main_module._shutdown is True
 
 
+def test_successful_cycle_preserves_detected_drafts_source(agent_env, mocker):
+    """WR-02: der Erfolgs-Status-Write darf die echte detection_source
+    (special-use/provider/explicit) nicht mit einem generischen Wert
+    überschreiben — sonst zeigt die WebUI die Erkennungs-Bestätigung nie an."""
+    agents_root, data_root = agent_env["agents_root"], agent_env["data_root"]
+    _make_agent_dir(agents_root, "agent-a", enabled=True)
+
+    mocker.patch(
+        "src.main._resolve_drafts_folder",
+        side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "special-use"),
+    )
+    mocker.patch("src.main._poll_once")
+
+    logger = __import__("logging").getLogger("test")
+    main_module._run_cycle(logger)
+
+    status = _read_status(data_root, "agent-a")
+    assert status["error"] is None
+    assert status["detection_source"] == "special-use"
+
+
 def test_successful_cycle_writes_fresh_last_cycle_for_all_agents(agent_env, mocker):
     agents_root, data_root = agent_env["agents_root"], agent_env["data_root"]
     _make_agent_dir(agents_root, "agent-a", enabled=True)
     _make_agent_dir(agents_root, "agent-b", enabled=True)
 
-    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: cfg)
+    mocker.patch("src.main._resolve_drafts_folder", side_effect=lambda cfg, agent_dir, status_file, logger: (cfg, "provider"))
     mocker.patch("src.main._poll_once")
 
     logger = __import__("logging").getLogger("test")
