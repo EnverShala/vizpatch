@@ -133,7 +133,7 @@
 
 - [ ] **OUT-01**: Office.js-Add-in (Taskpane) mit validiertem Manifest; Sideloading in neuem Outlook + Outlook im Web dokumentiert, zentrale M365-Verteilung als Alternative beschrieben
 - [ ] **OUT-02**: Taskpane lädt das Chat-Partial (CHAT-05) per HTTPS vom Kundenserver; Auth-Fluss dokumentiert
-- [ ] **OUT-03**: Geöffnete Mail (Betreff, Absender, Body) wird via Office.js als Chat-Kontext übergeben
+- [x] **OUT-03**: Geöffnete Mail (Betreff, Absender, Body) wird via Office.js als Chat-Kontext übergeben
 - [ ] **OUT-04**: HTTPS-Runbook-Kapitel für den Kundenserver (Reverse-Proxy vor der WebUI, Zertifikat, Ports); Add-in ist rein lesend (Kein-Auto-Send)
 
 ---
@@ -185,4 +185,6 @@
 | SEC-03 | Phase 5 (v1.2) | ✅ Done (05.06 Task 4) |
 | STY-01 … STY-05 | Phase 6 (v1.3) | Pending |
 | CHAT-01 … CHAT-05 | Phase 7 (v1.3) | Pending |
-| OUT-01 … OUT-04 | Phase 8 (v1.4) | Pending — 08-01 liefert den Taskpane-Serving-Teil von OUT-02 (Auth-Fluss-Doku folgt in 08-03), siehe 08-01-SUMMARY.md |
+| OUT-01, OUT-04 | Phase 8 (v1.4) | Pending — 08-02 liefert Manifest (OUT-01-Code) + Kein-Auto-Send-Wächter (OUT-04-Code); Sideloading-Doku (OUT-01) + HTTPS-Runbook (OUT-04) folgen in 08-03, Live-Abnahme in 08-04, siehe 08-02-SUMMARY.md |
+| OUT-02 | Phase 8 (v1.4) | Pending — 08-01 liefert den Taskpane-Serving-Teil (Auth-Fluss-Doku folgt in 08-03), siehe 08-01-SUMMARY.md |
+| OUT-03 | Phase 8 (v1.4) | ✅ Done (08-02) — Office.js → postMessage → chat.js liefert Mail-Kontext, siehe 08-02-SUMMARY.md |
