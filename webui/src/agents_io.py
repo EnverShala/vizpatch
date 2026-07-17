@@ -64,6 +64,14 @@ def _context_path(agent_id: str) -> Path:
     return _agent_dir(agent_id) / "context.md"
 
 
+def _style_path(agent_id: str) -> Path:
+    return _agent_dir(agent_id) / "style.md"
+
+
+def _style_note_path(agent_id: str) -> Path:
+    return _agent_dir(agent_id) / "style_note.md"
+
+
 def read_env_masked(agent_id: str) -> dict[str, str]:
     env_path = _env_path(agent_id)
     values = dotenv_values(env_path) if env_path.exists() else {}
@@ -140,6 +148,39 @@ def write_context_md_atomic(agent_id: str, content: str) -> None:
     tmp = context_path.with_suffix(".tmp")
     tmp.write_text(content, encoding="utf-8")
     os.replace(tmp, context_path)
+
+
+def read_style_md(agent_id: str) -> str:
+    """style.md ist Klartext wie context.md (D-57) — KEIN Secret, KEIN Encrypt."""
+    style_path = _style_path(agent_id)
+    if style_path.exists():
+        return style_path.read_text(encoding="utf-8")
+    return ""
+
+
+def write_style_md_atomic(agent_id: str, content: str) -> None:
+    style_path = _style_path(agent_id)
+    style_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = style_path.with_suffix(".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, style_path)
+
+
+def read_style_note(agent_id: str) -> str:
+    """Optionale manuelle Stil-Angabe des Betreibers (D-52). Eigene Datei, damit
+    sie einen Re-Learn-Overwrite von style.md ueberlebt (D-54)."""
+    style_note_path = _style_note_path(agent_id)
+    if style_note_path.exists():
+        return style_note_path.read_text(encoding="utf-8")
+    return ""
+
+
+def write_style_note_atomic(agent_id: str, content: str) -> None:
+    style_note_path = _style_note_path(agent_id)
+    style_note_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = style_note_path.with_suffix(".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, style_note_path)
 
 
 def get_missing_config(agent_id: str) -> list[str]:

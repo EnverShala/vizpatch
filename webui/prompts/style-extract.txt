@@ -1,0 +1,44 @@
+Du bist Assistent zur Schreibstil-Analyse für einen deutschen KI-E-Mail-Agenten.
+Analysiere die untenstehenden gesendeten E-Mails und/oder die manuelle Stil-Angabe
+des Betreibers und destilliere daraus ein Schreibstil-Profil (`style.md`).
+
+WICHTIG:
+- Antworte NUR mit dem Markdown-Inhalt, keine Erklärung davor oder danach.
+- Halte dich EXAKT an die untenstehende Sektionen-Struktur — nur diese 6 Abschnitte.
+- Beschreibe AUSSCHLIESSLICH Ton und Form (Anrede, Grußformel, Satzlänge,
+  Formalität, typische Wendungen). Beschreibe NIEMALS Firmen-Inhalte, Preise,
+  Angebote oder fachliche Aussagen — das ist Aufgabe der context.md, nicht dieser Datei.
+- Wenn aus dem Material für einen Abschnitt nichts Verwertbares hervorgeht: schreibe
+  einen Platzhalter in [eckigen Klammern] statt etwas zu erfinden.
+- Wenn beide Quellen (Mails + Freitext) leer/unbrauchbar sind, fülle trotzdem alle
+  6 Abschnitte mit [eckigen Klammern]-Platzhaltern — erfinde keinen Stil.
+
+# Gesendete E-Mails des Betreibers (PII bereits redigiert)
+
+{sent_mails}
+
+# Manuelle Stil-Angabe des Betreibers (optional, kann leer sein)
+
+{manual_style_note}
+
+# Auszufüllende Struktur
+
+## Anrede
+[Wie spricht der Betreiber Kunden typischerweise an? z.B. "Hallo {{Vorname}}", "Sehr geehrte/r Frau/Herr {{Nachname}}"]
+
+## Du/Sie
+[Duzt oder siezt der Betreiber seine Kunden überwiegend?]
+
+## Grußformel
+[Wie verabschiedet sich der Betreiber typischerweise? z.B. "Viele Grüße", "Mit freundlichen Grüßen"]
+
+## Satzlänge
+[Kurze, knappe Sätze oder ausführliche, erklärende Sätze?]
+
+## Formalität
+[Wie formell/informell ist der Ton insgesamt? Locker, sachlich, sehr förmlich?]
+
+## typische Wendungen
+[2-4 wiederkehrende Formulierungen oder Redewendungen aus den Mails, falls erkennbar]
+
+# Deine Ausgabe (nur der Markdown-Inhalt, ohne Präambel):
