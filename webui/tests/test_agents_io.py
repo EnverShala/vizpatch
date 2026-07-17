@@ -207,6 +207,68 @@ def test_write_env_chmod_600(tmp_path, monkeypatch):
     assert mode == 0o600
 
 
+def test_style_md_round_trip_per_agent(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    assert agents_io.read_style_md("info") == ""
+    agents_io.write_style_md_atomic("info", "## Anrede\nDu")
+    assert agents_io.read_style_md("info") == "## Anrede\nDu"
+    # Zwei-Agenten-Isolation: Agent "other" sieht den Inhalt NICHT
+    assert agents_io.read_style_md("other") == ""
+
+
+def test_style_md_atomic_no_leftover_tmp_file(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_style_md_atomic("info", "## Anrede\nDu")
+    style_path = tmp_path / "config" / "agents" / "info" / "style.md"
+    tmp_file = style_path.with_suffix(".tmp")
+    assert style_path.read_text(encoding="utf-8") == "## Anrede\nDu"
+    assert not tmp_file.exists()
+
+
+def test_style_note_round_trip_per_agent(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    assert agents_io.read_style_note("info") == ""
+    agents_io.write_style_note_atomic("info", "Wir duzen alle Kunden, sehr locker.")
+    assert agents_io.read_style_note("info") == "Wir duzen alle Kunden, sehr locker."
+    assert agents_io.read_style_note("other") == ""
+
+
+def test_style_note_survives_style_md_overwrite(tmp_path, monkeypatch):
+    """D-54: style_note.md ueberlebt einen Re-Learn-Overwrite von style.md (getrennte Datei)."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_style_note_atomic("info", "Freitext-Angabe des Betreibers")
+    agents_io.write_style_md_atomic("info", "## Anrede\nDu")
+    agents_io.write_style_md_atomic("info", "## Anrede\nSie (neu gelernt)")
+    assert agents_io.read_style_note("info") == "Freitext-Angabe des Betreibers"
+    assert agents_io.read_style_md("info") == "## Anrede\nSie (neu gelernt)"
+
+
+def test_style_md_and_style_note_not_in_secret_keys():
+    import src.agents_io as agents_io
+    assert "style.md" not in agents_io.SECRET_KEYS
+    assert "style_note.md" not in agents_io.SECRET_KEYS
+    assert "STYLE_MD" not in agents_io.SECRET_KEYS
+    assert "STYLE_NOTE" not in agents_io.SECRET_KEYS
+
+
+@pytest.mark.parametrize("bad_id", ["../evil", "../../etc/passwd", "Info", "with spaces", "", "a" * 65])
+def test_invalid_agent_id_raises_value_error_for_style_functions(tmp_path, monkeypatch, bad_id):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    with pytest.raises(ValueError):
+        agents_io.read_style_md(bad_id)
+    with pytest.raises(ValueError):
+        agents_io.write_style_md_atomic(bad_id, "content")
+    with pytest.raises(ValueError):
+        agents_io.read_style_note(bad_id)
+    with pytest.raises(ValueError):
+        agents_io.write_style_note_atomic(bad_id, "content")
+
+
 def test_get_missing_config(tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     import src.agents_io as agents_io
