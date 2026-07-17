@@ -4,6 +4,14 @@ Kapselt Key-Erzeugung (`/config/.secret_key`, chmod 600), `encrypt_value`/
 `decrypt_value` mit `enc:`-Prefix und tolerante Legacy-Klartext-Behandlung.
 Kein Master-Passwort (D-48) — die Key-Datei liegt im selben Config-Bind-Mount,
 der ohnehin komplett gebackupt wird.
+
+SYNC-KONTRAKT (Review WR-06): Diese Datei existiert absichtlich BYTE-IDENTISCH
+als `agent/src/crypto.py` UND `webui/src/crypto.py` — zwei getrennte
+Docker-Images, bewusst KEIN Shared-Package. Jede Änderung MUSS in beiden
+Dateien identisch erfolgen (Prefix, Key-Pfad und Fehlerübersetzung sind ein
+Cross-Service-Kontrakt: WebUI verschlüsselt, Agent entschlüsselt).
+`tests/test_crypto_sync.py` in beiden Services schlägt fehl, sobald die
+Kopien auseinanderlaufen.
 """
 from __future__ import annotations
 
