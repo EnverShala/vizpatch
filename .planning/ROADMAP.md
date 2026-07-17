@@ -264,7 +264,7 @@ Plans:
 
 **Requirements mapped:** CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05
 
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 plans executed (code-komplett 2026-07-17; nur menschliche Browser-Klick-Abnahme des Chats offen)
 
 Plans:
 **Wave 1**
@@ -309,7 +309,7 @@ Plans:
 
 **Requirements mapped:** OUT-01, OUT-02, OUT-03, OUT-04
 
-**Plans:** 4 plans (Wave 1: 08-01 | Wave 2: 08-02 | Wave 3: 08-03 | Wave 4: 08-04 - sequentiell, gemeinsame Dateien webui/src/main.py + addin_taskpane.html werden ueber die Waves erweitert) — 3/4 ausgefuehrt
+**Plans:** 4 plans (Wave 1: 08-01 | Wave 2: 08-02 | Wave 3: 08-03 | Wave 4: 08-04 - sequentiell, gemeinsame Dateien webui/src/main.py + addin_taskpane.html werden ueber die Waves erweitert) — 08-01…08-03 ausgeführt (code-komplett 2026-07-17); 08-04 Task 1 (Auto-Gate) grün, Task 2 (Live-Sideload in echtem Outlook + HTTPS) = PENDING menschlicher Checkpoint (D-71)
 
 Plans:
 - [x] 08-01-PLAN.md - Taskpane-Serving-Route (GET /addin/taskpane.html) + pfad-abhaengige CSP/frame-ancestors fuer Office-Einbettung (OUT-02) — abgeschlossen 2026-07-17, SUMMARY: `08-01-SUMMARY.md`

@@ -35,9 +35,9 @@ progress:
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
 | 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | ✅ Code ausgeführt (6/6 Plans + Fixes WR-01…06, CR-01) — **05.06-Verifikation (Tasks 1–3) deferred** bis OpenAI/Google-Keys vorliegen | 2026-07-15 | 2026-07-17 |
-| 6 — Schreibstil-Adaption pro Agent (v1.3) | 🔧 In Ausführung — 06.01+06.02+06.03 abgeschlossen, 06.04 Task 1 (Fixtures) fertig, Task 2 (Checkpoint) PENDING | 2026-07-17 | — |
-| 7 — Agenten-Chat im WebUI (v1.3) | ✅ Completed — alle 4 Plans (07-01…07-04) abgeschlossen | 2026-07-17 | 2026-07-17 |
-| 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | 🔧 In Ausführung — 08-01 (Taskpane-Serving-Route + pfad-abhängige CSP) + 08-02 (XML-Manifest + Office.js-Mail-Kontext + Read-only-Wächter) + 08-03 (HTTPS-Runbook + Sideloading/M365-Doku + Auth-Fluss) abgeschlossen, 08-04 (menschlicher Sideload-Checkpoint) offen | 2026-07-17 | — |
+| 6 — Schreibstil-Adaption pro Agent (v1.3) | ✅ Code-komplett — 06.01–06.03 abgeschlossen, 06.04 Task 1 (A/B-Fixtures) fertig; **06.04 Task 2 (A/B-Ton-Abnahme) = menschlicher Checkpoint offen** | 2026-07-17 | — |
+| 7 — Agenten-Chat im WebUI (v1.3) | ✅ Code-komplett — alle 4 Plans (07-01…07-04) abgeschlossen; nur **Browser-Klick-Abnahme des Chats offen** (menschlicher Check) | 2026-07-17 | 2026-07-17 |
+| 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | ✅ Code-komplett — 08-01 (Taskpane-Serving + pfad-abhängige CSP) + 08-02 (XML-Manifest + Office.js-Mail-Kontext + Read-only-Wächter) + 08-03 (HTTPS-Runbook + Sideloading/M365-Doku) abgeschlossen, 08-04 Task 1 (Auto-Gate) grün; **08-04 Task 2 (Live-Sideload in echtem Outlook + HTTPS) = menschlicher Checkpoint offen** | 2026-07-17 | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
