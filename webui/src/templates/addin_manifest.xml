@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Vizpatch Outlook-Add-in — klassisches XML-Manifest (D-67/OUT-01).
+
+  ADDIN_BASE_URL wird von GET /addin/manifest.xml (webui/src/main.py) pro
+  Installation per str.replace eingesetzt — dies ist eine reine Textdatei,
+  KEIN Jinja2-Template (kein Autoescape-Konflikt mit XML). Die Id ist eine
+  feste, für dieses Produkt reservierte GUID — NICHT pro Installation neu
+  generieren, sonst verliert eine zentrale M365-Admin-Verteilung (D-67) den
+  Bezug zu vorherigen Versionen.
+
+  Permissions = ReadItem (keine weitergehende Schreib-Berechtigung) —
+  strukturelles Kein-Auto-Send (D-70/OUT-04), siehe
+  webui/tests/test_addin_readonly.py.
+-->
+<OfficeApp
+    xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+    xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+    xsi:type="MailApp">
+  <Id>2cad0ada-30d3-4d43-b71e-db03255276e9</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Vizionists</ProviderName>
+  <DefaultLocale>de-DE</DefaultLocale>
+  <DisplayName DefaultValue="Vizpatch Agenten-Chat" />
+  <Description DefaultValue="KI-gestützter Agenten-Chat als Outlook-Taskpane. Liest die geöffnete Mail rein lesend als Kontext (Betreff/Absender/Text) — kein automatisches Senden oder Ändern von Mails." />
+  <IconUrl DefaultValue="{ADDIN_BASE_URL}/static/addin/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="{ADDIN_BASE_URL}/static/addin/icon-64.png" />
+  <SupportUrl DefaultValue="{ADDIN_BASE_URL}/addin/taskpane.html" />
+  <AppDomains>
+    <AppDomain>{ADDIN_BASE_URL}</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <!-- 1.5 ist die verifizierte Mindest-Anforderung fuer
+           Office.EventType.ItemChanged (addHandlerAsync in taskpane.js,
+           D-69) — siehe Microsoft-Referenz "Outlook add-in API
+           requirement set 1.5 > Events". -->
+      <Set Name="Mailbox" MinVersion="1.5" />
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="{ADDIN_BASE_URL}/addin/taskpane.html" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+</OfficeApp>

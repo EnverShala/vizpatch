@@ -42,6 +42,13 @@ DEFAULT_ADDIN_FRAME_ANCESTORS = (
     "https://*.office.com https://*.office365.com"
 )
 
+# T-08-06: ADDIN_BASE_URL wird per Textreplace ins Manifest-XML eingesetzt —
+# vor dem Einsetzen validiert (https://-Pflicht, keine XML-Sonderzeichen),
+# sonst waere eine XML-Injection ueber einen fehlerhaft/boesartig gesetzten
+# Env-Wert moeglich.
+_XML_SPECIAL_CHARS_RE = re.compile(r'[<>"&]')
+DEFAULT_ADDIN_BASE_URL = "https://CHANGE-ME.example"
+
 
 def _is_addin_embeddable_path(path: str) -> bool:
     return path.startswith("/addin/") or bool(_ADDIN_EMBED_PATH_RE.match(path))
@@ -369,6 +376,29 @@ def addin_taskpane(request: Request, user: str = Depends(auth.require_auth)):
         "addin_taskpane.html",
         {"agents": agents, "initial_agent": initial_agent},
     )
+
+
+@app.get("/addin/manifest.xml")
+def addin_manifest(user: str = Depends(auth.require_auth)):
+    """Klassisches XML-Add-in-Manifest (D-67/OUT-01), pro Installation über
+    ADDIN_BASE_URL templatisiert. Wird als reine Textdatei geladen und per
+    str.replace ersetzt (NICHT über TemplateResponse/Jinja2 gerendert) — kein
+    Autoescape-Konflikt mit XML. ADDIN_BASE_URL wird VOR dem Einsetzen
+    validiert (T-08-06): muss mit https:// beginnen und darf keine
+    XML-Sonderzeichen enthalten, sonst 400 statt eines kaputten/injizierbaren
+    Manifests."""
+    base_url = os.getenv("ADDIN_BASE_URL", DEFAULT_ADDIN_BASE_URL).strip()
+    if not base_url.startswith("https://") or _XML_SPECIAL_CHARS_RE.search(base_url):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "ADDIN_BASE_URL ist ungültig — muss mit https:// beginnen und darf "
+                'keine Zeichen <, >, " oder & enthalten.'
+            ),
+        )
+    manifest_path = Path("src/templates/addin_manifest.xml")
+    xml_text = manifest_path.read_text(encoding="utf-8").replace("{ADDIN_BASE_URL}", base_url)
+    return PlainTextResponse(xml_text, media_type="application/xml")
 
 
 def _sse_data_frame(text: str) -> str:
