@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-07-16T00:00:00.000Z"
+status: ready_to_plan
+last_updated: "2026-07-17T09:52:00.977Z"
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_phases: 8
+  completed_phases: 2
+  total_plans: 18
+  completed_plans: 18
+  percent: 25
 ---
 
 # STATE — Vizpatch (schmaler KI-Email-Agent)
@@ -31,7 +31,7 @@ progress:
 | 3 — Tuning & Übergabe | 🔧 In Vorbereitung | 2026-07-12 | — |
 | 4 — Web-UI & Multi-Kunde | ✅ End-to-End verifiziert (63 agent + 89 webui Tests grün + Live-Draft in Entwürfe) | 2026-07-12 | 2026-07-14 |
 | 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | 📋 Geplant (6 Plans, 4 Waves; Revision 4 mit D-51-Autodetect; Plan-Checker PASSED 2026-07-16) — Ausführung erst nach Esso-Rollout | — | — |
-| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📝 Roadmap-Eintrag (STY-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
+| 6 — Schreibstil-Adaption pro Agent (v1.3) | 📋 Geplant (4 Plans, 3 Waves; 2026-07-17) — Ausführung nach Phase-5-Execution | — | — |
 | 7 — Agenten-Chat im WebUI (v1.3) | 📝 Roadmap-Eintrag (CHAT-01…05) — Detail-Plan nach Phase-5-Execution | — | — |
 | 8 — Outlook-Add-in für den Agenten-Chat (v1.4) | 📝 Roadmap-Eintrag (OUT-01…04) — setzt Phase 7 voraus | — | — |
 
@@ -84,6 +84,7 @@ Erst wenn beide grün → Vor-Ort-Termin Esso Leonberg mit Browser-UI statt SSH-
 ### Ältere Notizen zur Phase 4 (nur zur Historie)
 
 Kern-Artefakte:
+
 - `.planning/phases/04-web-ui-multi-kunde/04-CONTEXT.md` — D-27..D-44 Entscheidungen (FastAPI+Jinja2+HTMX, Docker-Socket + Basic-Auth, LLM-Seed via Sonnet 4.6, systemd via Post-Install-Skript, kein HTTPS in v1)
 - `.planning/phases/04-web-ui-multi-kunde/04-RESEARCH.md` — Stack-Versionen (FastAPI 0.139, docker 7.2, python-multipart 0.0.32), File-Struktur, Docker-Socket-GID-Passing, Update-Flow, Prompt-Template
 - `.planning/phases/04-web-ui-multi-kunde/04.01..05-PLAN.md` — je 3–5 Tasks mit read_first + acceptance_criteria

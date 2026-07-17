@@ -181,26 +181,26 @@ Plans:
 
 **Requirements mapped:** LLM-01, LLM-02, LLM-03, LLM-04, MA-01, MA-02, MA-03, MA-04, MA-05, SEC-01, SEC-02, SEC-03
 
-**Plans:** 6 plans (Wave 1: 05.01 | Wave 2: 05.03, 05.04 | Wave 3: 05.02, 05.05 | Wave 4: 05.06)
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 05.01-krypto-fundament-PLAN.md — Fernet-Krypto in Agent + WebUI + Phase-5-Dependencies + Versionsbump 1.2.0 (SEC-01)
+- [x] 05.01-krypto-fundament-PLAN.md — Fernet-Krypto in Agent + WebUI + Phase-5-Dependencies + Versionsbump 1.2.0 (SEC-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 05.03-multi-llm-adapter-PLAN.md — Agent-LLM-Adapter + LLM_API_KEY/LLM_PROVIDER + Fernet-Decrypt beim Load (LLM-01, LLM-02, LLM-03, SEC-02)
-- [ ] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht (.env + context.md + AGENT_ENABLED-Flag + rename_agent, docker-frei) + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
+- [x] 05.03-multi-llm-adapter-PLAN.md — Agent-LLM-Adapter + LLM_API_KEY/LLM_PROVIDER + Fernet-Decrypt beim Load (LLM-01, LLM-02, LLM-03, SEC-02)
+- [x] 05.04-agents-io-migration-PLAN.md — WebUI per-Agent-Datenschicht (.env + context.md + AGENT_ENABLED-Flag + rename_agent, docker-frei) + Encrypt-on-Save + idempotenter Single→default-Migrationslauf (MA-01, SEC-02, SEC-03)
 
 **Wave 3** *(05.02 blocked on 05.03; 05.05 blocked on 05.04)*
 
-- [ ] 05.02-agent-multi-account-loop-PLAN.md — EIN Agent-Container wird Multi-Account: per-Zyklus-Discovery aus /config/agents/*/, Aktiv-Flag-Filter, Fehler-Isolation + IMAP-Timeout pro Agent, per-Agent-State + last_cycle-Heartbeat, Idle-Wait bei 0 Agenten (MA-03, MA-04)
-- [ ] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Flag-basiertes Start/Stop + per-Agent context.md + Agent-Dropdown + API-Key-Feld mit Provider-Autodetect (D-51) + AVV-Hinweis + Status-Übersicht aller Agenten + globale Docker-Admin-Buttons + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
+- [x] 05.02-agent-multi-account-loop-PLAN.md — EIN Agent-Container wird Multi-Account: per-Zyklus-Discovery aus /config/agents/*/, Aktiv-Flag-Filter, Fehler-Isolation + IMAP-Timeout pro Agent, per-Agent-State + last_cycle-Heartbeat, Idle-Wait bei 0 Agenten (MA-03, MA-04)
+- [x] 05.05-webui-routing-ui-PLAN.md — agent_id-Routing + /agents-CRUD + Flag-basiertes Start/Stop + per-Agent context.md + Agent-Dropdown + API-Key-Feld mit Provider-Autodetect (D-51) + AVV-Hinweis + Status-Übersicht aller Agenten + globale Docker-Admin-Buttons + Multi-Agent-Zero-Reset inkl. Key-Löschung (MA-02, MA-04, LLM-01, LLM-04, SEC-03)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider (Gate ≥ 11/14) + MA-05-Parallelbetrieb im Ein-Container-Modell inkl. Fehler-Isolations-Check + Migrations-Abnahme gegen Esso-Live-Layout-Kopie + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-01, MA-05, SEC-03)
+- [x] 05.06-verifikation-ship-PLAN.md — Modell-ID-Verifikation + LLM-04-Fixtures je Provider (Gate ≥ 11/14) + MA-05-Parallelbetrieb im Ein-Container-Modell inkl. Fehler-Isolations-Check + Migrations-Abnahme gegen Esso-Live-Layout-Kopie + SEC-03-Doku + Deployment-Paket v1.2.0 (LLM-03, LLM-04, MA-01, MA-05, SEC-03)
 
 **Hauptrisiken:**
 
@@ -219,6 +219,14 @@ Plans:
 **Ziel-Aufwand:** ~1–1.5 Werktage Vizionists
 **Depends on:** Phase 5 (per-Agent-Layout `/config/agents/<id>/`, LLM-Adapter, agents_io)
 **Motivation:** Drafts klingen nach dem Betreiber statt nach generischem LLM-Ton — direkter Qualitätshebel auf die Ø-Draft-Bewertung, ohne dass der Kunde etwas konfigurieren muss.
+
+**Plans:** 4 plans (Wave 1: 06-01, 06-02 parallel | Wave 2: 06-03 | Wave 3: 06-04 Checkpoint)
+
+Plans:
+- [ ] 06-01-PLAN.md — Agent-Injection: style.md-Feld + {style_md}-Prompt-Block mit Hierarchie (STY-02)
+- [ ] 06-02-PLAN.md — WebUI-Extraktions-Service: extract_style() + pii/llm-Duplikate (Drift-Guard) + \Sent-Detection + agents_io-style-I/O (STY-01/04/05)
+- [ ] 06-03-PLAN.md — WebUI-UI+Endpoints: style-Fieldset + Freitext + Enable-Schalter + /style/relearn + Auto-Extraktion beim Setup (STY-01/03/05)
+- [ ] 06-04-PLAN.md — A/B-Abnahme (Checkpoint): Ton-Unterschied sichtbar, Beschwerde-Hierarchie hält (SC2)
 
 **Success Criteria:**
 
