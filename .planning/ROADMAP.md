@@ -277,7 +277,7 @@ Plans:
 
 **Wave 3** *(blocked on 07-02)*
 
-- [ ] 07-03-PLAN.md — Browser-Verlauf + Reset + Rate-Limit + max-tokens + Verlaufs-Trunkierung + optionales mail_context + Kein-Auto-Send-Guard (CHAT-01/04)
+- [x] 07-03-PLAN.md — Browser-Verlauf + Reset + Rate-Limit + max-tokens + Verlaufs-Trunkierung + optionales mail_context + Kein-Auto-Send-Guard (CHAT-01/04)
 
 **Wave 4** *(blocked on 07-03)*
 
