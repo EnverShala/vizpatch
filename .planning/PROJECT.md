@@ -95,6 +95,8 @@ _(Noch keine — Projekt neu ausgerichtet)_
 
 Dokumentiert Veränderungen bei Phasenwechseln und Milestone-Grenzen.
 
+**Phase 5 abgeschlossen (2026-07-17, v1.2):** Multi-LLM (Anthropic/OpenAI/Google via Adapter + Provider-Autodetect aus Key-Prefix, D-51), Multi-Agent im Ein-Container-Modell (D-46: per-Zyklus-Discovery aus `/config/agents/*/`, Aktiv-Flag, Fehler-Isolation), Fernet-Verschlüsselung aller Secrets (SEC-01…03), idempotente Single→`agents/default`-Migration, Deployment-Paket v1.2.0. Code-Review-Zyklus mit 7 Fixes (CR-01, WR-01…06) durchlaufen. **Offen (05-HUMAN-UAT.md):** Live-Verifikation OpenAI/Google-Modell-IDs (LLM-03), Fixture-Gate je Provider (LLM-04), MA-05-Parallelbetrieb gegen 2 echte Postfächer, migrate()-Abnahme gegen Esso-Live-Kopie (nach Esso-Rollout).
+
 **Nach jedem Phasenwechsel:**
 1. Requirements invalidiert? → in Out of Scope mit Begründung
 2. Requirements validiert? → in Validated mit Phasen-Referenz
@@ -102,4 +104,4 @@ Dokumentiert Veränderungen bei Phasenwechseln und Milestone-Grenzen.
 4. Entscheidungen? → in Key Decisions ergänzen
 
 ---
-*Last updated: 2026-07-09 (Pivot 3 — Eigenbau statt InboxZero, Tankstellen-Kontext)*
+*Last updated: 2026-07-17 (Phase 5 abgeschlossen — Multi-LLM, Multi-Agent, Verschlüsselung v1.2)*
