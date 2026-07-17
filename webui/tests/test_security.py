@@ -61,3 +61,65 @@ def test_login_failures_do_not_lock_on_missing_credentials(authed_client, mocker
         assert r.status_code == 401
     ok = authed_client.get("/_auth_check", auth=("admin", "pw"))
     assert ok.status_code == 200
+
+
+# --- Pfad-abhängige CSP für Add-in-/Embed-Pfade (Phase 8, Plan 08-01, T-08-01/T-08-02) ---
+
+
+def test_addin_taskpane_relaxed_csp_no_x_frame_options(authed_client, tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    response = authed_client.get("/addin/taskpane.html", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "X-Frame-Options" not in response.headers
+    csp = response.headers.get("Content-Security-Policy", "")
+    assert "frame-ancestors" in csp
+    assert "'self'" in csp
+    assert "https://outlook.office.com" in csp
+    assert "https://appsforoffice.microsoft.com" in csp
+
+
+def test_chat_embed_relaxed_csp_no_x_frame_options(authed_client, tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    import src.agents_io as agents_io
+
+    agents_io.write_env("info", {"LLM_API_KEY": "sk-ant-test", "LLM_PROVIDER": "anthropic"})
+    response = authed_client.get("/chat/info/embed", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert "X-Frame-Options" not in response.headers
+    csp = response.headers.get("Content-Security-Policy", "")
+    assert "'self'" in csp
+    assert "https://outlook.office.com" in csp
+    # /chat/*/embed bekommt KEINE office.js-CDN-Freigabe (T-08-03) — nur die Taskpane.
+    assert "https://appsforoffice.microsoft.com" not in csp
+
+
+def test_addin_frame_ancestors_env_override(authed_client, tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    monkeypatch.setenv("ADDIN_FRAME_ANCESTORS", "'self' https://custom.example.com")
+    response = authed_client.get("/addin/taskpane.html", auth=("admin", "pw"))
+    assert response.status_code == 200
+    csp = response.headers.get("Content-Security-Policy", "")
+    assert "https://custom.example.com" in csp
+    assert "https://outlook.office.com" not in csp
+
+
+def test_addin_taskpane_without_auth_returns_401(authed_client):
+    response = authed_client.get("/addin/taskpane.html")
+    assert response.status_code == 401
+
+
+def test_healthz_strict_policy_unaffected_by_addin_changes(client):
+    """Regressionstest (T-08-02): /healthz behält weiterhin die strikte Policy —
+    identisch zu test_security_headers_present, hier explizit im Add-in-Kontext
+    dokumentiert."""
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.headers.get("X-Frame-Options") == "DENY"
+    csp = response.headers.get("Content-Security-Policy", "")
+    assert "frame-ancestors 'none'" in csp

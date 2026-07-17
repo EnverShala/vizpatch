@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
@@ -30,21 +31,64 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google"}
 
+# Add-in-/Embed-Pfad-Klassifikation (Phase 8, D-66/T-08-02): NUR diese Pfade
+# bekommen eine gelockerte CSP (Outlook muss die Taskpane + das darin
+# geschachtelte Chat-Embed iframen können). Alle anderen Pfade bleiben strikt.
+_ADDIN_EMBED_PATH_RE = re.compile(r"^/chat/[^/]+/embed$")
+
+DEFAULT_ADDIN_FRAME_ANCESTORS = (
+    "'self' https://outlook.office.com https://outlook.office365.com "
+    "https://outlook.live.com https://outlook-sdf.office.com "
+    "https://*.office.com https://*.office365.com"
+)
+
+
+def _is_addin_embeddable_path(path: str) -> bool:
+    return path.startswith("/addin/") or bool(_ADDIN_EMBED_PATH_RE.match(path))
+
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    response.headers["X-Frame-Options"] = "DENY"
+    path = request.url.path
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'"
-    )
     response.headers["Referrer-Policy"] = "same-origin"
+
+    if _is_addin_embeddable_path(path):
+        # Gelockerte Policy NUR für /addin/-Seiten + /chat/*/embed (T-08-01/T-08-02):
+        # X-Frame-Options entfaellt komplett (kann nur DENY/SAMEORIGIN, wuerde
+        # Cross-Origin-Framing durch Outlook blockieren) — die Kontrolle liegt bei
+        # frame-ancestors, das per Default NUR 'self' + feste Office/Outlook-Origins
+        # zulaesst (kein `*`-Wildcard, Clickjacking-Schutz).
+        if "X-Frame-Options" in response.headers:
+            del response.headers["X-Frame-Options"]
+        frame_ancestors = os.getenv("ADDIN_FRAME_ANCESTORS", DEFAULT_ADDIN_FRAME_ANCESTORS)
+        script_src = "'self' 'unsafe-inline'"
+        frame_src_directive = ""
+        if path.startswith("/addin/"):
+            # Nur die Taskpane selbst darf office.js laden + das Embed schachteln;
+            # /chat/*/embed bleibt ohne CDN-Freigabe (T-08-03).
+            script_src += " https://appsforoffice.microsoft.com"
+            frame_src_directive = "frame-src 'self'; "
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            f"script-src {script_src}; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            f"{frame_src_directive}"
+            f"frame-ancestors {frame_ancestors}"
+        )
+    else:
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
     return response
 
 
@@ -311,6 +355,20 @@ def chat_embed(request: Request, agent_id: str, user: str = Depends(auth.require
     if agent_id not in agents_io.list_agent_ids():
         raise HTTPException(status_code=404, detail="agent not found")
     return templates.TemplateResponse(request, "chat.html", {"agent_id": agent_id})
+
+
+@app.get("/addin/taskpane.html", response_class=HTMLResponse)
+def addin_taskpane(request: Request, user: str = Depends(auth.require_auth)):
+    """Outlook-Office.js-Taskpane (D-66/OUT-02): same-origin ausgeliefert, iframed
+    das bestehende Chat-Embed. Kein 404-Guard nötig — die Seite listet nur die
+    Agenten fürs Dropdown, der Existenz-Guard sitzt bereits in chat_embed()."""
+    agents = agents_io.list_agent_ids()
+    initial_agent = agents[0] if agents else ""
+    return templates.TemplateResponse(
+        request,
+        "addin_taskpane.html",
+        {"agents": agents, "initial_agent": initial_agent},
+    )
 
 
 def _sse_data_frame(text: str) -> str:
