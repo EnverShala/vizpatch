@@ -13,7 +13,9 @@ Deckt ab:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -40,6 +42,18 @@ def _write_agent(agent_id, api_key="sk-ant-test-key"):
     agents_io.write_env(agent_id, {"LLM_API_KEY": api_key, "LLM_PROVIDER": "anthropic"})
 
 
+def _mock_docker_running(mocker):
+    """Muster aus test_endpoints_config.py/test_security.py — GET / (index)
+    ruft docker_ctrl.get_agent_status() auf, das braucht einen Docker-Client-Mock."""
+    mock_container = MagicMock()
+    mock_container.status = "running"
+    mock_container.attrs = {"State": {"StartedAt": "2026-07-12T10:00:00Z"}}
+    mock_client = MagicMock()
+    mock_client.containers.get.return_value = mock_container
+    mocker.patch("docker.from_env", return_value=mock_client)
+    return mock_client
+
+
 def test_chat_embed_requires_auth(authed_client, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info")
@@ -55,6 +69,56 @@ def test_chat_embed_authed_returns_chromeless_partial(authed_client, tmp_path, m
     assert "<h1>Vizpatch" not in response.text
     assert "/static/chat.js" in response.text
     assert "data-agent-id=\"info\"" in response.text
+
+
+# --- Haupt-WebUI-Chat-Integration (Plan 07-04, CHAT-01): gleiche Partial-Quelle ----
+
+
+def test_index_shows_chat_section_for_existing_agent(authed_client, mocker, tmp_path, monkeypatch):
+    """CHAT-01: pro gewaehltem, existierendem Agent erscheint im Haupt-WebUI ein
+    Chat-Bereich (Marker: class="chat-section" + der geteilte #chat-log-Marker
+    aus _chat.html)."""
+    _setup_env(tmp_path, monkeypatch)
+    _mock_docker_running(mocker)
+    _write_agent("info")
+    response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert 'class="chat-section"' in response.text
+    assert 'id="chat-log"' in response.text
+    assert 'data-agent-id="info"' in response.text
+
+
+def test_index_without_agent_selected_shows_no_chat_section(authed_client, mocker, tmp_path, monkeypatch):
+    """Der Chat-Bereich erscheint nur innerhalb des {% if agent_id %}-Blocks —
+    im Anlege-Modus (kein Agent gewaehlt) darf er nicht auftauchen."""
+    _setup_env(tmp_path, monkeypatch)
+    _mock_docker_running(mocker)
+    response = authed_client.get("/", auth=("admin", "pw"))
+    assert response.status_code == 200
+    assert 'class="chat-section"' not in response.text
+
+
+def test_index_and_embed_share_identical_chat_fragment_markup(authed_client, mocker, tmp_path, monkeypatch):
+    """CHAT-01/CHAT-05/T-07-14: index.html und /chat/{id}/embed rendern
+    dasselbe _chat.html-Fragment — EINE Markup-Quelle statt eines Duplikats.
+    Beweis: ein woertlicher, aus _chat.html stammender Markup-Block ist in
+    beiden Responses byte-identisch vorhanden (fuer denselben agent_id)."""
+    _setup_env(tmp_path, monkeypatch)
+    _mock_docker_running(mocker)
+    _write_agent("info")
+
+    embed_response = authed_client.get("/chat/info/embed", auth=("admin", "pw"))
+    index_response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    assert embed_response.status_code == 200
+    assert index_response.status_code == 200
+
+    shared_fragment = (
+        '<div id="chat-root" data-agent-id="info">\n'
+        '  <div id="chat-log" aria-live="polite"></div>\n'
+        '  <form id="chat-form">'
+    )
+    assert shared_fragment in embed_response.text
+    assert shared_fragment in index_response.text
 
 
 def test_chat_send_streams_sse(authed_client, mocker, tmp_path, monkeypatch):

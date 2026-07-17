@@ -1,9 +1,14 @@
 /* Minimales Chat-Styling für das chrome-lose Partial (D-61) — nur lokale Regeln,
- * keine externen @import/url(). */
-html, body {
+ * keine externen @import/url(). Wird von ZWEI Kontexten geladen (07-04,
+ * CHAT-01/CHAT-05 — eine Markup-Quelle über _chat.html):
+ * (a) dem eigenstaendigen chrome-losen chat.html (Klasse "chat-standalone"
+ *     auf <body> — volle Viewport-Hoehe, eigener Rahmen);
+ * (b) dem eingebetteten Chat-Bereich im Haupt-WebUI (index.html, OHNE die
+ *     Klasse) — dort bleibt style.css/base.html-Chrome unangetastet, der
+ *     Chat-Bereich bekommt stattdessen eine feste Hoehe statt 100vh. */
+body.chat-standalone {
   margin: 0;
   padding: 0;
-  height: 100%;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background: #f5f5f5;
 }
@@ -11,9 +16,13 @@ html, body {
 #chat-root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 480px;
   box-sizing: border-box;
   padding: 0.75rem;
+}
+
+body.chat-standalone #chat-root {
+  height: 100vh;
 }
 
 #chat-log {
