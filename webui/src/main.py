@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -11,10 +12,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from . import agents_io, auth, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader
+from . import agents_io, auth, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
+
+logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -89,12 +92,16 @@ def index(
     if active_id and active_id in agents:
         env_vals = agents_io.read_env_masked(active_id)
         context_md = agents_io.read_context_md(active_id)
+        style_md = agents_io.read_style_md(active_id)
+        style_note = agents_io.read_style_note(active_id)
         drafts_status = state_reader.get_agent_status_json(active_id)
         missing = agents_io.get_missing_config(active_id)
     else:
         active_id = ""
         env_vals = {}
         context_md = ""
+        style_md = ""
+        style_note = ""
         drafts_status = {}
         missing = []
 
@@ -108,6 +115,8 @@ def index(
             "env": env_vals,
             "global_env": config_io.read_env_masked(),
             "context_md": context_md,
+            "style_md": style_md,
+            "style_note": style_note,
             "saved": saved,
             "reset": reset,
             "error": error,
@@ -254,6 +263,46 @@ def context_generate(
     return PlainTextResponse(seed_text)
 
 
+STY05_HINT = (
+    "Zu wenig verwertbares Mail-Material und kein Freitext — bitte Stil kurz im "
+    "Feld beschreiben oder später erneut versuchen."
+)
+
+
+@app.post("/style/relearn")
+@limiter.limit("5/minute")
+def style_relearn(
+    request: Request,
+    agent_id: str = Form(...),
+    style_note: str = Form("", max_length=5000),
+    user: str = Depends(auth.require_auth),
+):
+    """Schreibstil neu lernen (STY-03). Provider-agnostisch (D-55) — bewusst KEIN
+    Anthropic-only-Gate wie bei /context/generate. Persistiert style_note VOR der
+    Extraktion, damit die manuelle Angabe auch bei einem Fehlschlag erhalten bleibt
+    (überlebt Re-Learn laut D-54)."""
+    try:
+        agents_io.read_env_raw(agent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid agent_id")
+
+    agents_io.write_style_note_atomic(agent_id, style_note)
+
+    try:
+        style_md = style_extract.extract_style(agent_id)
+    except style_extract.StyleExtractionEmpty:
+        raise HTTPException(status_code=400, detail=STY05_HINT)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Stil-Extraktion fehlgeschlagen")
+
+    agents_io.write_style_md_atomic(agent_id, style_md)
+    return PlainTextResponse(style_md)
+
+
 def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redirect_query: str) -> object:
     """Section-Save (HTMX) → inline HTML-Fragment.
     Full-Form-Save → Redirect zu / mit Query-Flag."""
@@ -275,6 +324,9 @@ def save(
     imap_drafts_folder: str | None = Form(None),
     autostart_enabled: str | None = Form(None),
     context_md: str | None = Form(None),
+    style_md: str | None = Form(None),
+    style_note: str | None = Form(None),
+    enable_style_adaption: str | None = Form(None),
     webui_user: str | None = Form(None),
     webui_password_current: str | None = Form(None),
     webui_password_new: str | None = Form(None),
@@ -282,6 +334,21 @@ def save(
 ):
     is_htmx = request.headers.get("HX-Request") == "true"
     existing = config_io.read_env_raw()
+
+    # --- Cred-Transition-Erfassung (Esso-Guard, D-53/D-54/SC5): Ist-Zustand VOR
+    # jeglichem Write dieses Requests. "style.md fehlt" ist BEWUSST NICHT der
+    # Auto-Trigger unten — nur der echte Cred-Uebergang unvollstaendig->vollstaendig
+    # durch DIESES Request-Delta. Ein migrierter Agent, dessen Creds schon vorher
+    # komplett waren, kann diese Bedingung nie erfuellen (creds_before_complete=True).
+    existing_agent_env: dict[str, str] = {}
+    if agent_id:
+        try:
+            existing_agent_env = agents_io.read_env_raw(agent_id)
+        except ValueError:
+            existing_agent_env = {}
+    creds_before_complete = all(
+        (existing_agent_env.get(k) or "").strip() for k in ("IMAP_USER", "IMAP_PASSWORD", "LLM_API_KEY")
+    )
 
     # --- WebUI-Login-Passwort-Change-Logik (global, Root-.env) ---
     hashed_new_pw: str | None = None
@@ -324,6 +391,28 @@ def save(
         global_updates["WEBUI_PASSWORD"] = hashed_new_pw
     if global_updates:
         config_io.write_env(global_updates)
+
+    # --- Schreibstil-Section (STY-03): eigenes Fieldset, unabhaengig speicherbar ---
+    style_fields_submitted = any(v is not None for v in (style_md, style_note, enable_style_adaption))
+    if style_fields_submitted:
+        if not agent_id:
+            return _save_response(request, is_htmx, False, "Kein Agent ausgewählt.", "error")
+        try:
+            if style_md is not None:
+                agents_io.write_style_md_atomic(agent_id, style_md)
+            if style_note is not None:
+                agents_io.write_style_note_atomic(agent_id, style_note)
+            if enable_style_adaption is not None:
+                agents_io.write_env(
+                    agent_id,
+                    {
+                        "ENABLE_STYLE_ADAPTION": (
+                            "true" if enable_style_adaption in ("true", "on", "1") else "false"
+                        )
+                    },
+                )
+        except ValueError:
+            return _save_response(request, is_htmx, False, "Ungültiger Agent.", "error")
 
     # --- Agent-spezifische Updates (D-51: Provider-Autodetect aus llm_api_key) ---
     agent_fields_submitted = any(
@@ -371,6 +460,31 @@ def save(
                 agents_io.write_context_md_atomic(agent_id, context_md)
         except ValueError:
             return _save_response(request, is_htmx, False, "Ungültiger Agent.", "error")
+
+        # --- Auto-Extraktion bei Neuanlage-Transition (STY-01, Esso-Guard) ---
+        # Feuert best-effort NUR wenn Creds durch DIESES Request-Delta von
+        # unvollstaendig auf vollstaendig wechseln, noch kein style.md existiert
+        # und ENABLE_STYLE_ADAPTION != "false". Vollstaendig in try/except (T-06-07,
+        # graceful) — ein Fehlschlag der Extraktion darf den Save nie blockieren.
+        try:
+            agent_env_after = agents_io.read_env_raw(agent_id)
+        except ValueError:
+            agent_env_after = {}
+        creds_after_complete = all(
+            (agent_env_after.get(k) or "").strip() for k in ("IMAP_USER", "IMAP_PASSWORD", "LLM_API_KEY")
+        )
+        style_adaption_enabled = (agent_env_after.get("ENABLE_STYLE_ADAPTION") or "true").strip().lower() != "false"
+        if (
+            not creds_before_complete
+            and creds_after_complete
+            and not agents_io.read_style_md(agent_id)
+            and style_adaption_enabled
+        ):
+            try:
+                auto_style_md = style_extract.extract_style(agent_id)
+                agents_io.write_style_md_atomic(agent_id, auto_style_md)
+            except Exception as e:
+                logger.warning("auto_style_extract_failed", extra={"agent_id": agent_id, "error": str(e)})
 
         if "LLM_PROVIDER" in updates:
             provider_label = PROVIDER_LABELS.get(updates["LLM_PROVIDER"], updates["LLM_PROVIDER"])
