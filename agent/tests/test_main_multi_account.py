@@ -200,6 +200,32 @@ def test_zero_agents_waits_idle_without_crash(agent_env, mocker):
     assert main_module._shutdown is True
 
 
+def test_wait_for_agents_surfaces_error_for_sole_broken_agent(agent_env, mocker):
+    """WR-03: Ein einziger Agent mit unentschlüsselbarer/kaputter Config darf nicht
+    ewig still im Idle-Wait hängen — sein Fehler MUSS in seine agent_status.json
+    geschrieben werden (SEC-03 fail-fast-Sichtbarkeit), ohne den Wait-Loop zu crashen."""
+    agents_root, data_root = agent_env["agents_root"], agent_env["data_root"]
+    _make_agent_dir(agents_root, "agent-a", enabled=True)
+
+    mocker.patch(
+        "src.main.load_agent_config",
+        side_effect=DecryptionError("kaputter Fernet-Key (agent 'agent-a')"),
+    )
+
+    def _fake_sleep(seconds):
+        # Nach dem ersten "Schlaf" Shutdown simulieren, damit der Loop terminiert.
+        main_module._shutdown = True
+
+    mocker.patch("src.main.time.sleep", side_effect=_fake_sleep)
+
+    logger = __import__("logging").getLogger("test")
+    main_module._wait_for_agents(logger)  # darf NICHT hängen / NICHT crashen
+
+    status = _read_status(data_root, "agent-a")
+    assert "kaputter Fernet-Key" in status["error"]
+    assert status["last_cycle"] is not None
+
+
 def test_successful_cycle_preserves_detected_drafts_source(agent_env, mocker):
     """WR-02: der Erfolgs-Status-Write darf die echte detection_source
     (special-use/provider/explicit) nicht mit einem generischen Wert

@@ -304,7 +304,14 @@ def _wait_for_agents(logger: logging.Logger) -> None:
         for agent_id, agent_dir in agents:
             try:
                 cfg = load_agent_config(agent_id, agent_dir)
-            except (DecryptionError, RuntimeError):
+            except (DecryptionError, RuntimeError) as e:
+                # WR-03: Fehler SICHTBAR machen statt still weiterzuwarten — sonst
+                # hängt ein einziger Agent mit kaputtem Fernet-Token (SEC-03-Fall)
+                # oder fehlendem Pflichtfeld ewig in "Wartet auf nächsten Zyklus",
+                # ohne dass je ein error in seine agent_status.json geschrieben wird.
+                # _fail_agent isoliert den Fehler pro Agent; der Wait-Loop (und damit
+                # alle übrigen Agenten) läuft normal weiter.
+                _fail_agent(agent_id, _status_file_for(agent_id), logger, e)
                 continue
             if cfg.agent_enabled:
                 ready += 1
