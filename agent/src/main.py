@@ -53,9 +53,14 @@ def _compute_since(config: Config) -> datetime:
 
 def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient") -> None:
     """Process a single email: classify, generate draft if needed, append to Drafts."""
-    message_id = msg.headers.get("message-id", [""])
-    if isinstance(message_id, tuple):
-        message_id = message_id[0] if message_id else ""
+    # CR-01: Default MUSS ein String sein — ein Listen-Default wie [""] ist truthy,
+    # rutscht am Skip-Guard vorbei und crasht später in sqlite
+    # ("type 'list' is not supported"). imap-tools liefert Header-Werte je nach
+    # Version als tuple ODER list — beide Container-Typen normalisieren.
+    raw_message_id = msg.headers.get("message-id", "")
+    if isinstance(raw_message_id, (tuple, list)):
+        raw_message_id = raw_message_id[0] if raw_message_id else ""
+    message_id = (raw_message_id or "").strip()
     if not message_id:
         logger.warning("skip_no_message_id", extra={"from": msg.from_, "subject": msg.subject})
         return
