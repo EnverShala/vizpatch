@@ -220,12 +220,12 @@ Plans:
 **Depends on:** Phase 5 (per-Agent-Layout `/config/agents/<id>/`, LLM-Adapter, agents_io)
 **Motivation:** Drafts klingen nach dem Betreiber statt nach generischem LLM-Ton — direkter Qualitätshebel auf die Ø-Draft-Bewertung, ohne dass der Kunde etwas konfigurieren muss.
 
-**Plans:** 4 plans (Wave 1: 06-01, 06-02 parallel | Wave 2: 06-03 | Wave 3: 06-04 Checkpoint)
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 06-01-PLAN.md — Agent-Injection: style.md-Feld + {style_md}-Prompt-Block mit Hierarchie (STY-02)
 - [x] 06-02-PLAN.md — WebUI-Extraktions-Service: extract_style() + pii/llm-Duplikate (Drift-Guard) + \Sent-Detection + agents_io-style-I/O (STY-01/04/05)
-- [ ] 06-03-PLAN.md — WebUI-UI+Endpoints: style-Fieldset + Freitext + Enable-Schalter + /style/relearn + Auto-Extraktion beim Setup (STY-01/03/05)
+- [x] 06-03-PLAN.md — WebUI-UI+Endpoints: style-Fieldset + Freitext + Enable-Schalter + /style/relearn + Auto-Extraktion beim Setup (STY-01/03/05)
 - [ ] 06-04-PLAN.md — A/B-Abnahme (Checkpoint): Ton-Unterschied sichtbar, Beschwerde-Hierarchie hält (SC2)
 
 **Success Criteria:**
