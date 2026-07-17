@@ -13,6 +13,20 @@ Deckt ab:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _chat_system_prompt_path(monkeypatch):
+    """/chat/{id}/send ruft seit Plan 07-02 build_system_prompt() auf — das
+    braucht ein lesbares Template. Zeigt in allen Endpoint-Tests auf das echte,
+    produktive `webui/prompts/chat-system.txt` (kein Docker-Pfad /app/... auf
+    dem lokalen Test-Rechner verfügbar)."""
+    real_path = Path(__file__).resolve().parent.parent / "prompts" / "chat-system.txt"
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(real_path))
+
 
 def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
@@ -60,6 +74,34 @@ def test_chat_send_streams_sse(authed_client, mocker, tmp_path, monkeypatch):
     assert "data: Hallo " in response.text
     assert "data: Welt" in response.text
     assert "event: done" in response.text
+
+
+def test_chat_send_injects_context_md_into_system_prompt(authed_client, mocker, tmp_path, monkeypatch):
+    """CHAT-02/CHAT-03 (Plan 07-02): build_system_prompt wird NICHT gemockt —
+    nur stream_chat. Prüft, dass das echte prompt-Argument an stream_chat
+    sowohl den wörtlichen context.md-Inhalt als auch die User-Message enthält."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    import src.agents_io as agents_io
+
+    agents_io.write_context_md_atomic(
+        "info", "## About\nWir sind die Tankstelle Leonberg, 24h geöffnet."
+    )
+
+    mock_stream = mocker.patch(
+        "src.main.chat.stream_chat",
+        return_value=iter(["Antwort"]),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Was steht in meiner context.md?"},
+    )
+    assert response.status_code == 200
+
+    sent_prompt = mock_stream.call_args.kwargs["prompt"]
+    assert "Wir sind die Tankstelle Leonberg, 24h geöffnet." in sent_prompt
+    assert "Was steht in meiner context.md?" in sent_prompt
 
 
 def test_chat_send_unknown_agent_returns_400_config_error(authed_client, tmp_path, monkeypatch):

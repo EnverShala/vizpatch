@@ -327,15 +327,17 @@ def chat_send(
 ):
     """Streamt eine Chat-Antwort via SSE (D-62, Walking-Skeleton). Provider/Key/
     Modell werden GENAU für `agent_id` aufgelöst (D-59-Intent) — kein Anthropic-
-    Sonderweg. Rate-Limit + History/System-Prompt kommen erst in 07-02/07-03."""
+    Sonderweg. Der System-Prompt injiziert context.md/style.md/Status (CHAT-02,
+    D-64); Rate-Limit + echte Multi-Turn-History kommen erst in 07-03."""
     try:
         provider, api_key, model = chat.resolve_chat_target(agent_id)
+        system_prompt = chat.build_system_prompt(agent_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid agent_id")
     except chat.ChatConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    prompt = message
+    prompt = f"{system_prompt}\n\n# Nachricht des Betreibers\n\n{message}"
 
     def _stream():
         try:
