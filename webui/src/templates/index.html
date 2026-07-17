@@ -188,6 +188,35 @@
     </div>
   </fieldset>
 
+  <fieldset>
+    <legend>Schreibstil (style.md)</legend>
+    <p class="hint">
+      Wird bei jedem Draft zusätzlich zu context.md injiziert — bestimmt nur WIE geschrieben wird
+      (Anrede, Du/Sie, Grußformel, Satzlänge, Formalität, typische Wendungen), niemals WAS fachlich
+      gesagt wird. Entsteht automatisch beim ersten Speichern gültiger Zugangsdaten oder per Klick
+      auf „Schreibstil neu lernen" unten.
+    </p>
+
+    <label>
+      <input type="checkbox" name="enable_style_adaption" value="true" {% if env.ENABLE_STYLE_ADAPTION != 'false' %}checked{% endif %}>
+      Schreibstil-Adaption aktiv (Default an)
+    </label>
+
+    <label for="style_note">Stil-Beschreibung (optional)</label>
+    <textarea id="style_note" name="style_note" rows="3" maxlength="5000" placeholder="Optional: Schreibstil kurz beschreiben oder Beispiel einfügen — vor allem für neue/leere Postfächer">{{ style_note }}</textarea>
+
+    <label for="style_md">style.md-Inhalt (wird gespeichert)</label>
+    <textarea id="style_md" name="style_md" rows="16">{{ style_md }}</textarea>
+
+    <button type="button" id="style-relearn-btn" onclick="relearnStyle(this)">Schreibstil neu lernen</button>
+    <p class="hint" id="style-relearn-hint" style="display:none">&#9888; Analysiert die letzten gesendeten Mails + die Stil-Beschreibung neu und überschreibt style.md oben.</p>
+
+    <div class="section-save">
+      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, #active-agent-id" hx-target="#save-msg-style" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
+      <span id="save-msg-style" class="save-inline-msg"></span>
+    </div>
+  </fieldset>
+
   <button type="submit" class="btn-save-all">Alles speichern</button>
 </form>
 
@@ -232,6 +261,34 @@ async function generateContext(btn) {
     fd.append('firma_input', desc);
     fd.append('agent_id', '{{ agent_id }}');
     const res = await fetch('/context/generate', {method: 'POST', body: fd});
+    if (!res.ok) {
+      const err = await res.text();
+      alert('Fehler ' + res.status + ':\n' + err);
+      return;
+    }
+    target.value = await res.text();
+    hint.style.display = 'block';
+  } catch (e) {
+    alert('Netzwerkfehler: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function relearnStyle(btn) {
+  if (!confirm('Bestehendes Stil-Profil überschreiben und aus den aktuellen gesendeten Mails neu lernen?')) return;
+  const target = document.getElementById('style_md');
+  const noteField = document.getElementById('style_note');
+  const hint = document.getElementById('style-relearn-hint');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '⏳ Lerne Stil (~30–60s)…';
+  try {
+    const fd = new FormData();
+    fd.append('agent_id', '{{ agent_id }}');
+    fd.append('style_note', noteField.value);
+    const res = await fetch('/style/relearn', {method: 'POST', body: fd});
     if (!res.ok) {
       const err = await res.text();
       alert('Fehler ' + res.status + ':\n' + err);
