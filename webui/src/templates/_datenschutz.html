@@ -1,0 +1,152 @@
+{# ==========================================================================
+   Datenschutzbestimmungen (DSGVO) für Vizpatch — wiederverwendbares Fragment.
+   Eingebunden (a) aufklappbar im Setup-Formular (index.html) und
+   (b) als eigenständige Seite unter GET /datenschutz.
+
+   MUSTER — vor dem Live-Betrieb mit echten Kundenmails von einer/einem
+   Datenschutzbeauftragten oder Anwalt/Anwältin prüfen lassen. Platzhalter in
+   [eckigen Klammern] muss der Betreiber mit seinen echten Angaben ersetzen.
+   ========================================================================== #}
+<div class="datenschutz-text">
+
+  <p><strong>Stand:</strong> 2026-07-17 · <em>Muster/Entwurf — vor dem Produktivbetrieb rechtlich prüfen lassen und die Platzhalter in [eckigen Klammern] ausfüllen.</em></p>
+
+  <p>Diese Datenschutzbestimmungen beschreiben, wie die selbst gehostete Software
+  <strong>Vizpatch</strong> (KI-gestützter E-Mail-Assistent) personenbezogene Daten
+  verarbeitet. Mit dem Setzen des Häkchens „Ich stimme den Datenschutzbestimmungen zu"
+  bestätigt der Betreiber, diese Bestimmungen gelesen zu haben, und willigt in die hier
+  beschriebene Verarbeitung ein.</p>
+
+  <h3>1. Verantwortlicher und Anbieter</h3>
+  <p><strong>Verantwortlicher</strong> im Sinne der DSGVO für die im E-Mail-Postfach
+  verarbeiteten personenbezogenen Daten ist der Betreiber des Postfachs:</p>
+  <ul>
+    <li>[Firmenname des Betreibers]</li>
+    <li>[Anschrift]</li>
+    <li>[E-Mail / Telefon]</li>
+    <li>[ggf. Datenschutzbeauftragte:r]</li>
+  </ul>
+  <p><strong>Anbieter der Software</strong> ist die Vizionists (im Folgenden „Anbieter").
+  Vizpatch läuft ausschließlich auf dem eigenen Server des Betreibers (Self-Hosting via
+  Docker). Der Anbieter betreibt keine zentrale Datenverarbeitung der Postfachinhalte.
+  Soweit der Anbieter im Rahmen von Einrichtung, Wartung oder Support Zugriff auf den
+  Server oder auf personenbezogene Daten erhält, geschieht dies als Auftragsverarbeiter
+  auf Grundlage eines Auftragsverarbeitungsvertrags (AVV) mit dem Betreiber (siehe Ziffer 9).</p>
+
+  <h3>2. Zweck und Art der Verarbeitung</h3>
+  <p>Vizpatch liest eingehende E-Mails des konfigurierten Postfachs, klassifiziert sie
+  (Kundenanfrage ja/nein) und erstellt für relevante Anfragen einen Antwort-<em>Entwurf</em>,
+  der ausschließlich im Entwürfe-Ordner des Postfachs abgelegt wird.
+  <strong>Vizpatch versendet niemals selbstständig E-Mails</strong> („Kein-Auto-Send").
+  Zusätzlich kann Vizpatch aus dem Gesendet-Ordner ein Schreibstil-Profil ableiten und
+  einen Assistenz-Chat bereitstellen (Ziffern 4–6).</p>
+
+  <h3>3. Welche Daten gespeichert werden</h3>
+  <p>Auf dem Server des Betreibers werden gespeichert:</p>
+  <ul>
+    <li><strong>Zugangsdaten:</strong> E-Mail-Adresse (IMAP-Benutzer), IMAP-Passwort und der
+      API-Schlüssel des KI-Anbieters. Passwort und API-Schlüssel werden
+      <strong>verschlüsselt at-rest</strong> (Fernet/AES) gespeichert; der Schlüssel liegt als
+      Datei mit eingeschränkten Rechten (chmod 600) im Konfigurationsverzeichnis.</li>
+    <li><strong>Betriebs-/Unternehmensinformationen</strong> (<code>context.md</code>): nur die
+      für den E-Mail-Kontext <em>nötigsten</em> Angaben (z. B. Öffnungszeiten, Angebote, Ton,
+      Signatur, FAQ). Der Betreiber entscheidet über den Inhalt und pflegt ihn selbst.</li>
+    <li><strong>Schreibstil-Profil</strong> (<code>style.md</code>): eine aus gesendeten Mails
+      abgeleitete Beschreibung des Stils (Anrede, Du/Sie, Grußformel, Formalität u. Ä.) —
+      <em>kein</em> Mail-Inhalt, sondern eine abstrahierte Stil-Zusammenfassung.</li>
+    <li><strong>Verarbeitungs-Status</strong>: eine lokale Datenbank speichert lediglich
+      technische Kennungen bereits verarbeiteter Mails (Message-IDs), <strong>nicht</strong>
+      deren Inhalt, um Doppel-Entwürfe zu vermeiden.</li>
+  </ul>
+
+  <h3>4. Verarbeitung von E-Mails — was <em>nicht</em> gespeichert wird</h3>
+  <ul>
+    <li>Eingehende Mails werden zur Klassifikation und Entwurfserstellung <strong>nur
+      vorübergehend im Arbeitsspeicher</strong> verarbeitet und danach nicht dauerhaft
+      gespeichert. Weder fremde (eingehende) noch eigene (gesendete) E-Mail-Inhalte werden
+      von Vizpatch dauerhaft abgelegt.</li>
+    <li>Zur einmaligen Ableitung des Schreibstils liest Vizpatch die letzten Mails des
+      Gesendet-Ordners; auch diese werden nur vorübergehend verarbeitet und nicht gespeichert.
+      Gespeichert wird ausschließlich das abstrahierte Stil-Profil (Ziffer 3).</li>
+    <li>Entwürfe werden ausschließlich im Postfach des Betreibers (Entwürfe-Ordner) abgelegt —
+      die Datenhoheit bleibt beim Betreiber.</li>
+    <li>Die Erstellung von Entwürfen aus E-Mails erfolgt nur nach <strong>ausdrücklicher
+      Zustimmung des Betreibers</strong> (diese Einwilligung) und nur für das ausdrücklich
+      konfigurierte Postfach.</li>
+    <li><strong>PII-Redaction:</strong> Vor der Übermittlung an den KI-Dienst werden
+      bestimmte sensible Muster (z. B. IBAN, Kreditkartennummern) standardmäßig maskiert.</li>
+  </ul>
+
+  <h3>5. Einsatz von KI-Diensten (Auftragsverarbeiter)</h3>
+  <p>Zur Klassifikation, Entwurfserstellung, Stil-Ableitung und für den Chat übermittelt
+  Vizpatch die dafür erforderlichen Inhalte an den vom Betreiber gewählten KI-Anbieter über
+  dessen API. Je nach hinterlegtem API-Schlüssel ist das:</p>
+  <ul>
+    <li><strong>Anthropic</strong> (Claude) — Standard;</li>
+    <li>optional <strong>OpenAI</strong> oder <strong>Google</strong> (Gemini).</li>
+  </ul>
+  <p>Der jeweilige KI-Anbieter verarbeitet diese Daten als <strong>Auftragsverarbeiter</strong>.
+  Für den tatsächlich genutzten Anbieter ist ein Auftragsverarbeitungsvertrag (Data Processing
+  Addendum) abzuschließen bzw. zu akzeptieren (siehe Ziffer 9). Da diese Anbieter Daten auch
+  <strong>außerhalb der EU (z. B. USA)</strong> verarbeiten können, erfolgt der Transfer auf
+  Grundlage der EU-Standardvertragsklauseln (SCC) bzw. eines Angemessenheitsbeschlusses.
+  Soweit vom Anbieter unterstützt, wird eine <strong>Zero-Data-Retention</strong>-Verarbeitung
+  angefragt (keine Speicherung/kein Training durch den KI-Anbieter).</p>
+
+  <h3>6. Agenten-Chat</h3>
+  <p>Vizpatch stellt optional einen Assistenz-Chat bereit, der über den hinterlegten
+  API-Schlüssel Zugriff auf den KI-Dienst hat. Der Chat kennt den Firmen-Kontext, das
+  Stil-Profil und den Betriebsstatus des Agenten und kann auf Anweisung des Betreibers
+  Aufgaben rund um E-Mails unterstützen (z. B. eine Mail zu einem bestimmten Thema
+  heraussuchen, einen Entwurf umformulieren, Inhalte erklären). Mit dieser Einwilligung
+  stimmt der Betreiber ausdrücklich zu, dass für Chat-Anfragen Inhalte an den KI-Dienst
+  übermittelt werden. <strong>Auch im Chat gilt Kein-Auto-Send</strong>: der Chat versendet
+  keine E-Mails eigenständig. Soweit der Chat lesende oder verändernde Aktionen am Postfach
+  ausführt, geschieht dies ausschließlich auf ausdrückliche Anweisung des Betreibers.</p>
+
+  <h3>7. Rechtsgrundlagen</h3>
+  <ul>
+    <li>Einwilligung des Betreibers, Art. 6 Abs. 1 lit. a DSGVO (diese Zustimmung);</li>
+    <li>Vertragserfüllung/vorvertragliche Maßnahmen, Art. 6 Abs. 1 lit. b DSGVO;</li>
+    <li>berechtigtes Interesse an effizienter Kundenkommunikation, Art. 6 Abs. 1 lit. f DSGVO;</li>
+    <li>für Drittlandübermittlungen: Art. 44 ff. DSGVO i. V. m. SCC.</li>
+  </ul>
+
+  <h3>8. Speicherdauer und Löschung</h3>
+  <p>Zugangsdaten, Kontext- und Stil-Profil werden gespeichert, solange der jeweilige Agent
+  konfiguriert ist. Über die „Zurücksetzen"-Funktion des WebUI werden Konfiguration,
+  Kontext, Stil-Profil, der lokale Verarbeitungs-Status und der Verschlüsselungsschlüssel
+  gelöscht. Message-ID-Kennungen werden nur so lange vorgehalten, wie es zur Vermeidung von
+  Doppelverarbeitung nötig ist.</p>
+
+  <h3>9. Empfänger und Auftragsverarbeitung (AVV)</h3>
+  <ul>
+    <li><strong>KI-Anbieter</strong> (Anthropic bzw. OpenAI/Google) als Auftragsverarbeiter —
+      AVV/DPA erforderlich für den tatsächlich genutzten Anbieter.</li>
+    <li><strong>Anbieter (Vizionists)</strong> als Auftragsverarbeiter, soweit im Rahmen von
+      Einrichtung/Wartung/Support Zugriff auf personenbezogene Daten besteht — AVV mit dem
+      Betreiber, in dem die KI-Anbieter als Unter-Auftragsverarbeiter benannt sind.</li>
+  </ul>
+
+  <h3>10. Ihre Rechte</h3>
+  <p>Betroffene Personen haben das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16),
+  Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit
+  (Art. 20) und Widerspruch (Art. 21) sowie das Recht auf Beschwerde bei einer
+  Aufsichtsbehörde (Art. 77). Zuständige Aufsichtsbehörde: [zuständige Landesbehörde].</p>
+
+  <h3>11. Datensicherheit</h3>
+  <p>Betrieb ausschließlich auf dem Server des Betreibers; Secrets verschlüsselt at-rest
+  (Fernet/AES) mit zugriffsbeschränkter Schlüsseldatei; kein automatischer Mailversand;
+  PII-Maskierung vor KI-Übermittlung. Der Betreiber ist für die Absicherung seines Servers
+  (Zugriffsschutz, Backups, ggf. HTTPS-Reverse-Proxy) verantwortlich.</p>
+
+  <h3>12. Einwilligung und Widerruf</h3>
+  <p>Die Einwilligung ist freiwillig und kann jederzeit mit Wirkung für die Zukunft
+  widerrufen werden — z. B. durch Deaktivieren bzw. Löschen des Agenten oder Zurücksetzen
+  der Anwendung. Die Rechtmäßigkeit der bis zum Widerruf erfolgten Verarbeitung bleibt
+  unberührt.</p>
+
+  <h3>13. Kontakt</h3>
+  <p>Bei Fragen zum Datenschutz: [Kontakt des Verantwortlichen].</p>
+
+</div>

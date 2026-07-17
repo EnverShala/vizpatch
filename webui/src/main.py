@@ -182,6 +182,14 @@ def index(
     )
 
 
+@app.get("/datenschutz", response_class=HTMLResponse)
+def datenschutz(request: Request, user: str = Depends(auth.require_auth)):
+    """Eigenständige Datenschutz-Seite (D-68) — dasselbe Fragment wie das
+    aufklappbare Inline-Vorkommen in index.html, hier als Vollseite (z. B. zum
+    Verlinken/Ausdrucken)."""
+    return templates.TemplateResponse(request, "datenschutz.html", {})
+
+
 @app.get("/agents/status", response_class=HTMLResponse)
 def agents_status(request: Request, user: str = Depends(auth.require_auth)):
     return templates.TemplateResponse(
