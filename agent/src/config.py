@@ -127,6 +127,12 @@ class Config:
     agent_id: str = ""
     agent_enabled: bool = True
 
+    # Schreibstil-Adaption (06.01, STY-02) — defaultete Trailing-Felder analog
+    # zu agent_id/agent_enabled: bestehende Config(...)-Konstruktionsstellen
+    # (mock_config-Fixture etc.) bleiben ohne Änderung baubar.
+    style_md: str = ""
+    enable_style_adaption: bool = True
+
 
 def _build_config(
     env: Mapping[str, Optional[str]],
@@ -170,6 +176,12 @@ def _build_config(
     prompt_generate = (prompts_dir / "generate.txt").read_text(encoding="utf-8")
     context_md = context_file.read_text(encoding="utf-8") if context_file.exists() else ""
 
+    # style.md liegt neben context.md (gleiches Verzeichnis: agent_dir bzw. /config).
+    # Fehler-Isolation (T-06-02): fehlendes/leeres style.md darf den Draft-Pfad nie
+    # brechen — analoges if-exists-else-""-Guard wie bei context_md.
+    style_file = context_file.parent / "style.md"
+    style_md = style_file.read_text(encoding="utf-8") if style_file.exists() else ""
+
     llm_provider = (env.get("LLM_PROVIDER") or "anthropic").strip().lower()
     model_defaults = _resolve_model_defaults(llm_provider)
 
@@ -206,6 +218,8 @@ def _build_config(
         prompt_generate=prompt_generate,
         agent_id=agent_id,
         agent_enabled=agent_enabled,
+        style_md=style_md,
+        enable_style_adaption=(env.get("ENABLE_STYLE_ADAPTION") or "true").lower() == "true",
     )
 
 
