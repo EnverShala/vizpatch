@@ -15,7 +15,7 @@
 | 4 | Web-UI & Multi-Kunde | Browser-UI für Setup/Config/Update, KI-generierter Context-Seed, Autostart-Checkbox | UI-01…05 | 5 | 📋 5 plans, 5 waves (sequentiell) |
 | 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 | 6 | Schreibstil-Adaption pro Agent (v1.3) | Automatische Stil-Extraktion aus dem Gesendet-Ordner beim Agent-Setup (style.md pro Agent), Re-Learn-Button, Prompt-Hierarchie context.md > style.md | STY-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
-| 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
+| 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
 | 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase 7 |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
@@ -263,6 +263,25 @@ Plans:
 5. Chat-Frontend ist als einbettbares Partial gebaut (eigene Route ohne WebUI-Chrome) — nachweisbar durch Einbettung in einer nackten Test-HTML-Seite (Vorarbeit Phase 8)
 
 **Requirements mapped:** CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05
+
+**Plans:** 4 plans (4 sequentielle Waves — alle teilen webui/src/main.py + webui/src/chat.py)
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — SSE-Walking-Skeleton: chrome-loses Chat-Partial + Streaming-Adapter chat.py + /chat/{id}/embed + /chat/{id}/send (CHAT-01/03/05)
+
+**Wave 2** *(blocked on 07-01)*
+
+- [ ] 07-02-PLAN.md — System-Prompt-Wissen: context.md + style.md + Agent-Status + Injection-Anker (CHAT-02/03)
+
+**Wave 3** *(blocked on 07-02)*
+
+- [ ] 07-03-PLAN.md — Browser-Verlauf + Reset + Rate-Limit + max-tokens + Verlaufs-Trunkierung + optionales mail_context + Kein-Auto-Send-Guard (CHAT-01/04)
+
+**Wave 4** *(blocked on 07-03)*
+
+- [ ] 07-04-PLAN.md — Haupt-WebUI-Integration (gleiche Partial-Quelle) + Einbettbarkeits-Nachweis + CHAT_*-Env-Doku (CHAT-01/05)
 
 **Hauptrisiken:**
 
