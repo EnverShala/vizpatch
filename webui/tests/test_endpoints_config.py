@@ -7,6 +7,11 @@ def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
     monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    # D-68: config_io (Root-.env) faellt sonst auf den echten Default-Pfad
+    # ("/config/.env") zurueck -- seit die Datenschutz-Zustimmung ueber
+    # config_io.write_env persistiert wird, muessen auch diese Save-Tests
+    # isoliert bleiben (sonst Schreibzugriff auf den echten Host-Pfad).
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
 
 
 def _mock_docker_running(mocker):
@@ -133,7 +138,7 @@ def test_save_anthropic_key_sets_provider(authed_client, mocker, tmp_path, monke
     response = authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "llm_api_key": "sk-ant-real-key"},
+        data={"agent_id": "info", "llm_api_key": "sk-ant-real-key", "privacy_consent": "on"},
     )
     assert response.status_code in (200, 303)
     raw = agents_io.read_env_raw("info")
@@ -149,7 +154,7 @@ def test_save_google_key_sets_provider(authed_client, mocker, tmp_path, monkeypa
     authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "llm_api_key": "AIzaSyABCDEF"},
+        data={"agent_id": "info", "llm_api_key": "AIzaSyABCDEF", "privacy_consent": "on"},
     )
     raw = agents_io.read_env_raw("info")
     assert raw["LLM_PROVIDER"] == "google"
@@ -163,7 +168,7 @@ def test_save_openai_key_sets_provider(authed_client, mocker, tmp_path, monkeypa
     authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "llm_api_key": "sk-proj-abc123"},
+        data={"agent_id": "info", "llm_api_key": "sk-proj-abc123", "privacy_consent": "on"},
     )
     raw = agents_io.read_env_raw("info")
     assert raw["LLM_PROVIDER"] == "openai"
@@ -178,7 +183,7 @@ def test_save_unrecognized_key_format_rejected(authed_client, mocker, tmp_path, 
         "/save",
         auth=("admin", "pw"),
         headers={"HX-Request": "true"},
-        data={"agent_id": "info", "llm_api_key": "foobar"},
+        data={"agent_id": "info", "llm_api_key": "foobar", "privacy_consent": "on"},
     )
     assert response.status_code == 200
     assert "save-err" in response.text
@@ -197,7 +202,7 @@ def test_save_empty_key_leaves_provider_and_key_unchanged(authed_client, mocker,
     authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "llm_api_key": ""},
+        data={"agent_id": "info", "llm_api_key": "", "privacy_consent": "on"},
     )
     after = agents_io.read_env_raw("info")
     assert after["LLM_API_KEY"] == before["LLM_API_KEY"]
@@ -213,7 +218,7 @@ def test_save_masked_key_leaves_provider_and_key_unchanged(authed_client, mocker
     authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "llm_api_key": "****"},
+        data={"agent_id": "info", "llm_api_key": "****", "privacy_consent": "on"},
     )
     after = agents_io.read_env_raw("info")
     assert after["LLM_API_KEY"] == before["LLM_API_KEY"]
@@ -228,7 +233,7 @@ def test_save_success_message_names_detected_provider(authed_client, mocker, tmp
         "/save",
         auth=("admin", "pw"),
         headers={"HX-Request": "true"},
-        data={"agent_id": "info", "llm_api_key": "sk-ant-real-key"},
+        data={"agent_id": "info", "llm_api_key": "sk-ant-real-key", "privacy_consent": "on"},
     )
     assert "Anthropic" in response.text
 
@@ -240,7 +245,7 @@ def test_save_without_agent_id_when_agent_fields_submitted_returns_error(authed_
         "/save",
         auth=("admin", "pw"),
         headers={"HX-Request": "true"},
-        data={"imap_user": "u@x.de"},
+        data={"imap_user": "u@x.de", "privacy_consent": "on"},
     )
     assert response.status_code == 200
     assert "save-err" in response.text
@@ -260,6 +265,7 @@ def test_save_updates_imap_fields_for_agent(authed_client, mocker, tmp_path, mon
             "imap_user": "new@x.de",
             "imap_password": "",
             "imap_drafts_folder": "KI-Entwürfe",
+            "privacy_consent": "on",
         },
     )
     assert response.status_code in (303, 200)
@@ -285,7 +291,7 @@ def test_save_preserves_custom_own_email_address(authed_client, mocker, tmp_path
         "/save",
         auth=("admin", "pw"),
         follow_redirects=False,
-        data={"agent_id": "info", "imap_user": "login-neu@x.de"},
+        data={"agent_id": "info", "imap_user": "login-neu@x.de", "privacy_consent": "on"},
     )
     assert response.status_code in (303, 200)
     raw = agents_io.read_env_raw("info")
@@ -307,7 +313,7 @@ def test_save_keeps_own_email_coupled_when_previously_equal_to_imap_user(authed_
         "/save",
         auth=("admin", "pw"),
         follow_redirects=False,
-        data={"agent_id": "info", "imap_user": "new@x.de"},
+        data={"agent_id": "info", "imap_user": "new@x.de", "privacy_consent": "on"},
     )
     assert response.status_code in (303, 200)
     raw = agents_io.read_env_raw("info")
@@ -324,7 +330,7 @@ def test_save_context_md_for_active_agent(authed_client, mocker, tmp_path, monke
         "/save",
         auth=("admin", "pw"),
         headers={"HX-Request": "true"},
-        data={"agent_id": "info", "context_md": "# Neuer Inhalt"},
+        data={"agent_id": "info", "context_md": "# Neuer Inhalt", "privacy_consent": "on"},
     )
     assert agents_io.read_context_md("info") == "# Neuer Inhalt"
 

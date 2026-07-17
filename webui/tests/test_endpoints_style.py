@@ -12,6 +12,11 @@ def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
     monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
+    # D-68: config_io (Root-.env) faellt sonst auf den echten Default-Pfad
+    # ("/config/.env") zurueck -- seit die Datenschutz-Zustimmung ueber
+    # config_io.write_env persistiert wird, muessen auch diese Save-Tests
+    # isoliert bleiben (sonst Schreibzugriff auf den echten Host-Pfad).
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
 
 
 def _complete_creds() -> dict:
@@ -190,6 +195,7 @@ def test_save_auto_triggers_extraction_on_creds_transition(authed_client, mocker
             "imap_user": "info@example.com",
             "imap_password": "secret-pw",
             "llm_api_key": "sk-ant-real-key",
+            "privacy_consent": "on",
         },
     )
     assert response.status_code in (200, 303)
@@ -212,6 +218,7 @@ def test_save_auto_trigger_graceful_on_extraction_failure(authed_client, mocker,
             "imap_user": "info@example.com",
             "imap_password": "secret-pw",
             "llm_api_key": "sk-ant-real-key",
+            "privacy_consent": "on",
         },
     )
     assert response.status_code in (200, 303)
@@ -232,6 +239,7 @@ def test_save_auto_trigger_skipped_when_disabled_via_flag(authed_client, mocker,
             "imap_user": "info@example.com",
             "imap_password": "secret-pw",
             "llm_api_key": "sk-ant-real-key",
+            "privacy_consent": "on",
         },
     )
     assert response.status_code in (200, 303)
@@ -252,7 +260,7 @@ def test_save_migrated_agent_context_save_never_auto_triggers(authed_client, moc
     response = authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "context_md": "# Firma\nNeuer Inhalt"},
+        data={"agent_id": "info", "context_md": "# Firma\nNeuer Inhalt", "privacy_consent": "on"},
     )
     assert response.status_code in (200, 303)
     mock_extract.assert_not_called()
@@ -269,7 +277,7 @@ def test_save_migrated_agent_password_rotation_never_auto_triggers(authed_client
     response = authed_client.post(
         "/save",
         auth=("admin", "pw"),
-        data={"agent_id": "info", "imap_password": "neues-passwort-rotiert"},
+        data={"agent_id": "info", "imap_password": "neues-passwort-rotiert", "privacy_consent": "on"},
     )
     assert response.status_code in (200, 303)
     mock_extract.assert_not_called()
@@ -291,6 +299,7 @@ def test_save_auto_trigger_skipped_when_style_md_already_exists(authed_client, m
             "imap_user": "info@example.com",
             "imap_password": "secret-pw",
             "llm_api_key": "sk-ant-real-key",
+            "privacy_consent": "on",
         },
     )
     assert response.status_code in (200, 303)
