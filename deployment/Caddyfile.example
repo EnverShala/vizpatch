@@ -1,0 +1,47 @@
+# Caddyfile.example — Reverse-Proxy-Vorlage für HTTPS vor der Vizpatch-WebUI
+#
+# Warum: Outlook lädt Add-in-Ressourcen (Taskpane, Manifest, Office.js-Postback)
+# NUR über HTTPS — ein Mixed-Content-Block verhindert HTTP. Die WebUI selbst
+# spricht nur HTTP auf Port 8080 (Docker-Netz) — Caddy übernimmt die
+# TLS-Terminierung davor.
+#
+# WICHTIG: Die Domain hier MUSS exakt zu ADDIN_BASE_URL in der .env passen
+# (siehe deployment/kunde-env.example, deployment/README.addin.md Kapitel 2).
+# Ein Mismatch führt zu einem falschen/kaputten Manifest (ADDIN_BASE_URL
+# templatisiert /addin/manifest.xml pro Installation).
+
+# ---- Variante A: öffentliche Domain, automatisches Let's-Encrypt-Zertifikat ----
+# (Standard-Fall — Domain zeigt per DNS A/AAAA-Record auf diesen Server,
+#  Port 80+443 sind extern erreichbar für den ACME-HTTP-Challenge)
+
+vizpatch.<kunde-domain>.de {
+	reverse_proxy localhost:8080
+	# Alternative im selben Docker-Netz statt localhost:
+	# reverse_proxy vizpatch-webui:8080
+
+	# frame-ancestors-Hinweis (siehe README.addin.md Kapitel 1):
+	# Die Add-in-Routen (/addin/*, /chat/*/embed) liefern selbst bereits die
+	# korrekte Content-Security-Policy (inkl. frame-ancestors) und KEIN
+	# X-Frame-Options. Caddy darf diese Header NICHT überschreiben oder
+	# entfernen — sonst blockiert der Outlook-Webview das Taskpane-iframe.
+	# (Keine header_up/header_down-Direktive für Security-Header nötig —
+	# einfach unverändert durchreichen, s.u.)
+}
+
+# ---- Variante B: reine LAN-Installation ohne öffentliche Domain ----
+# (kein DNS-Eintrag/öffentliche IP; Let's-Encrypt kann sich nicht verifizieren.
+#  Nutzt ein selbstsigniertes Caddy-internes Zertifikat oder ein eigenes Cert.
+#  Outlook-Clients im selben LAN müssen dem Zertifikat vertrauen — ggf. das
+#  Caddy-Root-CA-Cert einmalig auf den Client-Rechnern installieren.)
+
+# vizpatch.internal.lan {
+# 	tls internal
+# 	reverse_proxy localhost:8080
+# }
+
+# ---- Ports/Firewall ----
+# Caddy braucht 80 (ACME-Challenge, nur Variante A) + 443 (HTTPS) extern
+# erreichbar. Der WebUI-Port 8080 selbst darf NICHT extern exponiert werden
+# (siehe README.phase4.md Sicherheits-Warnung — Docker-Socket-Zugriff via
+# WebUI ist root-äquivalent). Nur Caddy terminiert extern, WebUI bleibt
+# innerhalb des Docker-Netzes/localhost.

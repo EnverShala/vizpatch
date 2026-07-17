@@ -55,3 +55,12 @@ CHAT_MAX_TOKENS=2000
 # CHAT_HISTORY_TOKEN_BUDGET: Token-Budget für den mitgeschickten Chat-Verlauf
 # im Prompt (ältere Turns fallen zuerst weg, wenn das Budget überschritten wird)
 CHAT_HISTORY_TOKEN_BUDGET=3000
+
+# ==== OUTLOOK-ADD-IN (Phase 8) ====
+# ADDIN_BASE_URL: öffentliche HTTPS-Basis-URL des Reverse-Proxys vor der WebUI
+# (muss von den Outlook-Clients erreichbar sein, https:// ist Pflicht — siehe
+# deployment/README.addin.md Kapitel 1+2 und deployment/Caddyfile.example)
+ADDIN_BASE_URL=https://vizpatch.<kunde-domain>.de
+# ADDIN_FRAME_ANCESTORS: leer lassen = Office-Standard-Origins (empfohlen);
+# nur bei Sonderfällen (z. B. abweichender Outlook-Host) explizit überschreiben
+ADDIN_FRAME_ANCESTORS=
