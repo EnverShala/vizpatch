@@ -273,7 +273,7 @@ Plans:
 
 **Wave 2** *(blocked on 07-01)*
 
-- [ ] 07-02-PLAN.md — System-Prompt-Wissen: context.md + style.md + Agent-Status + Injection-Anker (CHAT-02/03)
+- [x] 07-02-PLAN.md — System-Prompt-Wissen: context.md + style.md + Agent-Status + Injection-Anker (CHAT-02/03)
 
 **Wave 3** *(blocked on 07-02)*
 
