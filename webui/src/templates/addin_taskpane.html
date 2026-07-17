@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vizpatch Outlook-Add-in</title>
+  <link rel="stylesheet" href="/static/chat.css">
+  <!-- Einzige erlaubte externe Ressource der Phase (Office-Plattform-Pflicht,
+       darf laut Microsoft nicht selbst gehostet werden — T-08-SC). -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body class="chat-standalone">
+  <div id="addin-root">
+    {% if agents %}
+    <div id="addin-toolbar">
+      <label for="addin-agent-select">Agent auswählen</label>
+      <select id="addin-agent-select">
+        {% for a in agents %}
+        <option value="{{ a }}"{% if a == initial_agent %} selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <iframe id="addin-chat-frame" src="/chat/{{ initial_agent }}/embed" title="Vizpatch Agenten-Chat"></iframe>
+    {% else %}
+    <p id="addin-no-agents-hint">Kein Agent konfiguriert. Bitte zuerst im Vizpatch-WebUI einen Agenten anlegen.</p>
+    {% endif %}
+  </div>
+  <script>
+    (function () {
+      var select = document.getElementById("addin-agent-select");
+      var frame = document.getElementById("addin-chat-frame");
+      if (select && frame) {
+        select.addEventListener("change", function () {
+          frame.src = "/chat/" + encodeURIComponent(select.value) + "/embed";
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
