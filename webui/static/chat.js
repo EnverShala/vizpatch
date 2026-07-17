@@ -5,10 +5,13 @@
  * DB, kein localStorage. Verlauf endet mit dem Seitenleben (Reload/Tab-Schluss).
  * Reset-Button (D-58) leert history + #chat-log.
  *
- * mail_context (D-65, Phase-8-Vorarbeit): window.vizpatchGetMailContext ist ein
- * überschreibbarer Hook. In Phase 7 liefert er null (kein Mail-Kontext). Phase 8
- * (Outlook-Add-in) überschreibt diese Funktion via Office.js mit der gerade
- * geöffneten Mail — keine Änderung an chat.js nötig. */
+ * mail_context (D-65/D-69, Phase 8 — Outlook-Add-in): window.vizpatchGetMailContext
+ * ist der Hook, den sendMessage() abfragt. Dieses Skript läuft IM Embed-iframe
+ * (same-origin, D-66) und empfängt die gerade geöffnete Mail per postMessage von
+ * der Taskpane (webui/static/addin/taskpane.js). Der message-Listener prüft
+ * event.origin (T-08-04, Spoofing-Schutz) — Nachrichten von fremden Origins
+ * werden verworfen. Ohne Add-in (reiner Browser-Chat, Phase 7) läuft nie eine
+ * passende Nachricht ein, der Hook liefert dann weiterhin null. */
 (function () {
   const root = document.getElementById('chat-root');
   const agentId = root.dataset.agentId;
@@ -18,14 +21,32 @@
   const sendBtn = document.getElementById('chat-send-btn');
   const resetBtn = document.getElementById('chat-reset-btn');
 
-  /** Phase-8-Erweiterungspunkt (D-65): Office.js überschreibt diesen Hook, um
-   * die aktuell geöffnete Mail als {subject, sender, body} zurückzugeben.
-   * Phase 7: liefert bewusst null — kein Mail-Kontext vorhanden. */
-  if (typeof window.vizpatchGetMailContext !== 'function') {
-    window.vizpatchGetMailContext = function () {
-      return null;
+  /** Zuletzt per postMessage empfangene Mail (D-69) — Default null (kein
+   * Mail-Kontext), z. B. solange kein Add-in eingebettet ist oder noch keine
+   * Nachricht empfangen wurde. */
+  let lastMailContext = null;
+
+  window.addEventListener('message', function (event) {
+    // T-08-04: nur same-origin-Nachrichten akzeptieren — die Taskpane postet
+    // ausschließlich mit targetOrigin = window.location.origin, ein fremdes
+    // Fenster könnte sonst gefälschten Mail-Kontext einschleusen.
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+    const data = event.data;
+    if (!data || data.type !== 'vizpatch-mail-context') {
+      return;
+    }
+    lastMailContext = {
+      subject: data.subject || '',
+      sender: data.sender || '',
+      body: data.body || '',
     };
-  }
+  });
+
+  window.vizpatchGetMailContext = function () {
+    return lastMailContext;
+  };
 
   let history = [];
 
