@@ -309,6 +309,14 @@ Plans:
 
 **Requirements mapped:** OUT-01, OUT-02, OUT-03, OUT-04
 
+**Plans:** 4 plans (Wave 1: 08-01 | Wave 2: 08-02 | Wave 3: 08-03 | Wave 4: 08-04 - sequentiell, gemeinsame Dateien webui/src/main.py + addin_taskpane.html werden ueber die Waves erweitert)
+
+Plans:
+- [ ] 08-01-PLAN.md - Taskpane-Serving-Route (GET /addin/taskpane.html) + pfad-abhaengige CSP/frame-ancestors fuer Office-Einbettung (OUT-02)
+- [ ] 08-02-PLAN.md - XML-Manifest-Template (ADDIN_BASE_URL, ReadItem) + Office.js-Mail-Kontext via postMessage -> chat.js-Listener + Read-only-Waechter (OUT-01, OUT-03, OUT-04)
+- [ ] 08-03-PLAN.md - HTTPS-Runbook (Caddy Reverse-Proxy) + Sideloading/M365-Doku + Auth-Fluss + Deployment-Template-Env (OUT-01, OUT-02, OUT-04)
+- [ ] 08-04-PLAN.md - Menschlicher Sideload-Abnahme-Checkpoint (Manifest validieren, Live-HTTPS, Mail-Kontext, Kein-Auto-Send) - autonomous: false (OUT-01...04)
+
 **Hauptrisiken:**
 
 - HTTPS-Erreichbarkeit des Kundenservers vom Outlook-Client (LAN vs. extern) → Vorab-Preflight-Kriterium, ggf. nur-LAN-Doku
