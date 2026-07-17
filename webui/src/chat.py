@@ -16,12 +16,14 @@ api_key wird NIE in Log-Statements eingebettet (T-05-08/T-07-02-Muster wie llm.p
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from typing import Callable, Iterator
 
 from anthropic import Anthropic
 
-from . import crypto
-from .agents_io import read_env_raw
+from . import crypto, state_reader
+from .agents_io import get_agent_enabled, read_context_md, read_env_raw, read_style_md
 from .style_extract import MODEL_DRAFT_DEFAULTS
 
 logger = logging.getLogger("vizpatch.chat")
@@ -49,6 +51,58 @@ def resolve_chat_target(agent_id: str) -> tuple[str, str, str]:
         provider, MODEL_DRAFT_DEFAULTS["anthropic"]
     )
     return provider, api_key, model
+
+
+def _format_agent_status(agent_id: str) -> str:
+    """Baut die kompakte Status-Zusammenfassung fürs Injection-Template (CHAT-02).
+
+    Graceful bei jeglicher fehlenden Info (T-07-06: keine Secrets im
+    agent_status.json, daher unbedenklich in den Prompt zu geben) — nie
+    ein Crash, nur Platzhalter-Zeilen.
+    """
+    status_json = state_reader.get_agent_status_json(agent_id)
+    enabled = get_agent_enabled(agent_id)
+    running = state_reader.is_running(enabled, status_json)
+    last_poll = state_reader.get_last_poll(agent_id)
+    error = (status_json or {}).get("error") or "kein Fehler bekannt"
+
+    lines = [
+        f"- Aktiv (Betreiber-Flag): {'ja' if enabled else 'nein'}",
+        f"- Läuft aktuell (Heuristik): {'ja' if running else 'nein'}",
+        f"- Drafts-Ordner: {status_json.get('drafts_folder') or '[unbekannt]'}",
+        f"- Erkennungs-Methode Drafts-Ordner: {status_json.get('detection_source') or '[unbekannt]'}",
+        f"- Letzter Poll (verarbeitete Mails): {last_poll.isoformat() if last_poll else 'noch kein Poll'}",
+        f"- Letzter Zyklus (Heartbeat): {status_json.get('last_cycle') or '[unbekannt]'}",
+        f"- Letzter Fehler: {error}",
+    ]
+    return "\n".join(lines)
+
+
+def build_system_prompt(agent_id: str) -> str:
+    """Assembliert den Chat-System-Prompt (CHAT-02/CHAT-03, D-64): injiziert
+    context.md + style.md (falls vorhanden) + kompakten Agent-Status via
+    Injection-Anker-Template (`webui/prompts/chat-system.txt`, Muster:
+    `context-seed.txt`/`style-extract.py`).
+
+    `ValueError` propagiert unverändert bei invalidem `agent_id`
+    (agents_io._agent_dir-Guard über `read_context_md`).
+
+    Nutzt String-`replace` statt Python-String-Templating (str-Methode mit
+    geschweiften Klammern), weil context.md/style.md beliebige `{`/`}`-Zeichen
+    enthalten können (T-07-07) — Templating würde dabei mit `KeyError`/
+    `IndexError` crashen.
+    """
+    context_md = read_context_md(agent_id) or "[keine context.md hinterlegt]"
+    style_md = read_style_md(agent_id) or "[kein Schreibstil-Profil hinterlegt]"
+    agent_status = _format_agent_status(agent_id)
+
+    prompt_path = Path(os.getenv("WEBUI_CHAT_SYSTEM_PROMPT", "/app/prompts/chat-system.txt"))
+    template = prompt_path.read_text(encoding="utf-8")
+    return (
+        template.replace("{context_md}", context_md)
+        .replace("{style_md}", style_md)
+        .replace("{agent_status}", agent_status)
+    )
 
 
 def _stream_anthropic(
