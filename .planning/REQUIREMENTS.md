@@ -90,16 +90,16 @@
 
 - [ ] **LLM-01**: Generisches API-Key-Feld `LLM_API_KEY` (masked) im WebUI-Agent-Formular, Label „API-Key (Anthropic / OpenAI / Google)"; Provider wird beim Save aus dem Key-Prefix autodetektiert (`sk-ant-` → Anthropic, `AIza` → Google, sonst `sk-` → OpenAI; kein Treffer → Fehlermeldung) und als `LLM_PROVIDER` in die Agent-`.env` geschrieben — kein Provider-Dropdown (D-51); pro Agent unabhängig
 - [ ] **LLM-02**: Interner LLM-Adapter im Agent (`llm_call(provider, model, prompt, ...) -> str`) routet zum jeweiligen SDK (`anthropic`, `openai`, `google-genai`); `classify.py` + `generate.py` nutzen nur noch den Adapter
-- [ ] **LLM-03**: Modell-Defaults pro Provider hart verdrahtet als Classify+Draft-Paar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI + Google → aktuelle Äquivalente, im Research verifiziert); kein Modell-Auswahlfeld im UI
-- [ ] **LLM-04**: Pre-Deployment-Fixtures (14 `.eml`) je Provider erneut durchlaufen: ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; AVV-Hinweis pro erkanntem Provider im WebUI-Setup-Hinweis
+- [ ] **LLM-03**: Modell-Defaults pro Provider hart verdrahtet als Classify+Draft-Paar (Anthropic → Haiku 4.5 / Sonnet 4.6; OpenAI + Google → aktuelle Äquivalente, im Research verifiziert); kein Modell-Auswahlfeld im UI — **DEFERRED (05.06 Task 1):** Code-Plumbing (MODEL_DEFAULTS-Dict + `.env`-Override) fertig und unit-getestet, aber die konkreten OpenAI-/Google-Modell-IDs sind NICHT gegen echte Keys via `client.models.list()` verifiziert (fehlende `OPENAI_API_KEY`/`GOOGLE_API_KEY`). Nachholen: siehe 05.06-SUMMARY.md
+- [ ] **LLM-04**: Pre-Deployment-Fixtures (14 `.eml`) je Provider erneut durchlaufen: ≥ 11/14 korrekt klassifiziert (≈ 80 %), Ø Draft-Qualität ≥ 3.5/5; AVV-Hinweis pro erkanntem Provider im WebUI-Setup-Hinweis — **DEFERRED (05.06 Task 2):** Fixture-Durchlauf gegen echte OpenAI-/Google-Keys nicht durchführbar (fehlende Keys). Nachholen: siehe 05.06-SUMMARY.md
 
 ### Multi-Agent — mehrere Mail-Accounts (MA)
 
-- [x] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`)
+- [x] **MA-01**: Config-Layout `/config/agents/<agent-id>/` mit je eigener `.env` + `context.md`; Agent-ID slug-basiert (aus E-Mail-Adresse oder Name); bestehendes Single-Agent-Layout (`/config/.env`) wird beim ersten Start automatisch als Agent `default` migriert (inkl. `ANTHROPIC_API_KEY` → `LLM_API_KEY` + `LLM_PROVIDER=anthropic`) — Code + synthetische tmp_path-Tests fertig (05.04); **Live-Abnahme gegen echte Esso-Layout-Kopie NOCH OFFEN (05.06 Task 3, deferred)** — Nachholen: siehe 05.06-SUMMARY.md
 - [ ] **MA-02**: Agent-Dropdown im WebUI — leer, wenn kein Agent gespeichert; "Neuen Agent anlegen"-Aktion (API-Key + E-Mail + IMAP-Passwort + Context eingeben, Provider wird autodetektiert (D-51) → Agent erscheint im Dropdown); Auswahl lädt das Konfig-Formular des gewählten Agenten; Umbenennen + Löschen (Zwei-Stufen-Bestätigung: Config + State)
 - [x] **MA-03**: Ein einziger Agent-Container (bestehender Compose-Service) mit Multi-Account-Poll-Loop — `main.py` liest pro Zyklus alle `/config/agents/*/` ein und verarbeitet sequentiell jeden Agenten mit gesetztem Aktiv-Flag (`AGENT_ENABLED`); Start/Stop-Button je Agent schreibt nur das Flag (wirkt ab nächstem Zyklus, kein Container-Restart, kein Docker-SDK pro Agent); Fehler eines Agenten (Auth/IMAP/LLM) wird geloggt und isoliert, übrige Agenten laufen im selben Zyklus weiter
 - [x] **MA-04**: Getrennter State pro Agent — SQLite (`state.db`) + `agent_status.json` je Agent unter `/data/agents/<agent-id>/`; Status-Übersicht im WebUI listet alle Agenten (Läuft/Gestoppt via Aktiv-Flag + Last-Poll-Heartbeat, letzter Poll, Start/Stop-Button je Zeile)
-- [ ] **MA-05**: Paralleler Betrieb verifiziert — mind. 2 Agenten gegen 2 verschiedene Test-Postfächer gleichzeitig, jeder Draft landet im richtigen Postfach, keine Cross-Kontamination
+- [ ] **MA-05**: Paralleler Betrieb verifiziert — mind. 2 Agenten gegen 2 verschiedene Test-Postfächer gleichzeitig, jeder Draft landet im richtigen Postfach, keine Cross-Kontamination — **DEFERRED (05.06 Task 2):** Erfordert 2 erreichbare Test-IMAP-Postfächer, die aktuell nicht bereitstehen. Nachholen: siehe 05.06-SUMMARY.md
 
 ### Secrets-Verschlüsselung (SEC)
 
@@ -176,9 +176,13 @@
 | OPS-01 … OPS-05 | Phase 3 | Pending |
 | UI-01 … UI-05 | Phase 4 | ✅ Done (2026-07-13) |
 | UI-06 … UI-10 | Phase 4 (Nachtrag) | ✅ Done (2026-07-14) |
-| LLM-01 … LLM-04 | Phase 5 (v1.2) | Pending |
-| MA-01 … MA-05 | Phase 5 (v1.2) | Pending |
-| SEC-01 … SEC-03 | Phase 5 (v1.2) | Pending |
+| LLM-01, LLM-02 | Phase 5 (v1.2) | Pending (Checkbox-Nachpflege — Code lt. 05.03-SUMMARY.md fertig) |
+| LLM-03, LLM-04 | Phase 5 (v1.2) | ⏸ Deferred (05.06 Task 1/2) — fehlende OPENAI_API_KEY/GOOGLE_API_KEY, siehe 05.06-SUMMARY.md |
+| MA-01 | Phase 5 (v1.2) | ✅ Done (Code+Synthetik, 05.04) — Live-Layout-Abnahme offen, siehe 05.06-SUMMARY.md |
+| MA-02, MA-03, MA-04 | Phase 5 (v1.2) | Pending (Checkbox-Nachpflege — MA-03/04 lt. 05.02/05.04-SUMMARY.md fertig; MA-02 lt. 05.05-SUMMARY.md fertig) |
+| MA-05 | Phase 5 (v1.2) | ⏸ Deferred (05.06 Task 2) — fehlende 2 Test-Postfächer, siehe 05.06-SUMMARY.md |
+| SEC-01, SEC-02 | Phase 5 (v1.2) | Pending (Checkbox-Nachpflege — Code lt. 05.01/05.04-SUMMARY.md fertig) |
+| SEC-03 | Phase 5 (v1.2) | ✅ Done (05.06 Task 4) |
 | STY-01 … STY-05 | Phase 6 (v1.3) | Pending |
 | CHAT-01 … CHAT-05 | Phase 7 (v1.3) | Pending |
 | OUT-01 … OUT-04 | Phase 8 (v1.4) | Pending |
