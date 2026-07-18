@@ -242,6 +242,126 @@ def mail_lesen(agent_id: str, uid: str, folder: str = "INBOX") -> dict:
     }
 
 
+def _threading_headers(msg) -> dict:
+    """Extrahiert In-Reply-To/References aus `msg.headers` (imap-tools lowercase-
+    Tuple-Muster, analog `agent/src/draft.py::build_reply_draft`) — 09-03 braucht sie
+    für `entwurf_bearbeiten`, um beim Neu-Anlegen des Entwurfs das Threading zu
+    erhalten."""
+
+    def _first(value):
+        if isinstance(value, (tuple, list)):
+            return value[0] if value else ""
+        return value or ""
+
+    headers = getattr(msg, "headers", None) or {}
+    return {
+        "in_reply_to": _first(headers.get("in-reply-to")),
+        "references": _first(headers.get("references")),
+    }
+
+
+def entwuerfe_auflisten(agent_id: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
+    """Read-only-Werkzeug (D-74, Teil 3): listet die Entwürfe im (erkannten)
+    Drafts-Ordner NUR mit Metadaten (uid/betreff/datum/an) auf — kein Mailtext
+    (Datenminimierung, T-09-08). Fehlender/nicht verfügbarer Drafts-Ordner oder
+    IMAP-Fehler -> leere Liste, kein Crash (T-09-10). `ValueError` bei invalidem
+    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`/`mail_lesen`)."""
+    try:
+        search_limit = int(limit) if limit else DEFAULT_SEARCH_LIMIT
+    except (TypeError, ValueError):
+        search_limit = DEFAULT_SEARCH_LIMIT
+    search_limit = max(1, min(search_limit, MAX_SEARCH_LIMIT))
+
+    try:
+        with open_agent_mailbox(agent_id) as mailbox:
+            env = read_env_raw(agent_id)
+            drafts_folder = _resolve_drafts_folder(mailbox, env)
+            try:
+                mailbox.folder.set(drafts_folder)
+            except Exception as e:
+                logger.warning(
+                    "entwuerfe_auflisten_folder_missing",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"ordner": drafts_folder, "anzahl": 0, "entwuerfe": []}
+            try:
+                messages = list(mailbox.fetch(reverse=True, mark_seen=False, limit=search_limit))
+            except Exception as e:
+                logger.warning(
+                    "entwuerfe_auflisten_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"ordner": drafts_folder, "anzahl": 0, "entwuerfe": []}
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("entwuerfe_auflisten_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+        return {"ordner": None, "anzahl": 0, "entwuerfe": []}
+
+    entwuerfe = [
+        {
+            "uid": str(getattr(msg, "uid", "") or ""),
+            "an": _mail_recipients(msg),
+            "betreff": msg.subject or "",
+            "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+        }
+        for msg in messages
+    ]
+    return {"ordner": drafts_folder, "anzahl": len(entwuerfe), "entwuerfe": entwuerfe}
+
+
+def entwurf_lesen(agent_id: str, uid: str) -> dict:
+    """Read-only-Werkzeug (D-74, Teil 4): liest genau EINEN Entwurf per `uid` aus dem
+    (erkannten) Drafts-Ordner vollständig, inklusive der Threading-Header
+    (In-Reply-To/References) für `entwurf_bearbeiten` (09-03). Body via `pii.redact`
+    VOR der Rückgabe (D-78, T-09-07), truncatet auf `MAX_TOOL_RESULT_BODY_CHARS`.
+    Fehlender Ordner/unbekannte `uid`/IMAP-Fehler -> dict mit `fehler`-Feld, kein
+    Crash (T-09-10). `ValueError` bei invalidem `agent_id` propagiert unverändert."""
+    uid_str = str(uid or "").strip()
+    if not uid_str:
+        return {"fehler": "Keine uid angegeben."}
+
+    try:
+        with open_agent_mailbox(agent_id) as mailbox:
+            env = read_env_raw(agent_id)
+            drafts_folder = _resolve_drafts_folder(mailbox, env)
+            try:
+                mailbox.folder.set(drafts_folder)
+            except Exception as e:
+                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar: {e}"}
+            try:
+                messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+            except Exception as e:
+                logger.warning(
+                    "entwurf_lesen_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("entwurf_lesen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+
+    if not messages:
+        return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
+
+    msg = messages[0]
+    body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    threading_headers = _threading_headers(msg)
+    return {
+        "uid": str(getattr(msg, "uid", "") or uid_str),
+        "ordner": drafts_folder,
+        "von": msg.from_ or "",
+        "an": _mail_recipients(msg),
+        "betreff": msg.subject or "",
+        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+        "body_redigiert": body,
+        "in_reply_to": threading_headers["in_reply_to"],
+        "references": threading_headers["references"],
+    }
+
+
 # Erweiterbares Register (D-73-Kontrakt) — 09-02…09-04 hängen sich hier nur an.
 TOOL_SCHEMAS: list[dict] = [
     {
@@ -298,11 +418,50 @@ TOOL_SCHEMAS: list[dict] = [
             "required": ["uid"],
         },
     },
+    {
+        "name": "entwuerfe_auflisten",
+        "description": (
+            "Listet die vorhandenen Entwürfe im Entwürfe-Ordner auf — nur Metadaten "
+            "(uid, Betreff, Datum, Empfänger), KEIN Mailtext. Nutze anschließend "
+            "entwurf_lesen mit der uid, um den vollständigen Text eines bestimmten "
+            "Entwurfs zu lesen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": f"Maximale Anzahl Entwürfe (Standard {DEFAULT_SEARCH_LIMIT}, max {MAX_SEARCH_LIMIT}).",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "entwurf_lesen",
+        "description": (
+            "Liest einen einzelnen Entwurf vollständig (Von/An/Betreff/Datum + PII-"
+            "redigierter Text) anhand seiner uid aus dem Entwürfe-Ordner. Die uid "
+            "stammt aus einem vorherigen entwuerfe_auflisten-Aufruf."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "uid": {
+                    "type": "string",
+                    "description": "uid des Entwurfs (aus einem vorherigen entwuerfe_auflisten-Ergebnis).",
+                },
+            },
+            "required": ["uid"],
+        },
+    },
 ]
 
 TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "mails_suchen": mails_suchen,
     "mail_lesen": mail_lesen,
+    "entwuerfe_auflisten": entwuerfe_auflisten,
+    "entwurf_lesen": entwurf_lesen,
 }
 
 

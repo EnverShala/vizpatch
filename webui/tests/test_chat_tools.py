@@ -46,14 +46,23 @@ def _write_agent_env(agent_id, provider="anthropic", api_key="sk-ant-test-key"):
     )
 
 
-def _msg(subject="Re: Frage", text="Hallo, hier ist die Antwort.", uid="42", from_="kunde@example.com"):
+def _msg(
+    subject="Re: Frage",
+    text="Hallo, hier ist die Antwort.",
+    uid="42",
+    from_="kunde@example.com",
+    to=(),
+    headers=None,
+):
     m = MagicMock()
     m.subject = subject
     m.text = text
     m.html = None
     m.uid = uid
     m.from_ = from_
+    m.to = to
     m.date = None
+    m.headers = headers or {}
     return m
 
 
@@ -146,12 +155,13 @@ def test_mails_suchen_respects_limit_and_folder(mocker, tmp_path, monkeypatch):
     assert result["ordner"] == "Archiv"
 
 
-def test_tool_handlers_registry_contains_at_least_mails_suchen_and_mail_lesen():
+def test_tool_handlers_registry_contains_all_readonly_tools():
     import src.chat_tools as chat_tools
 
-    assert {"mails_suchen", "mail_lesen"} <= set(chat_tools.TOOL_HANDLERS.keys())
+    expected = {"mails_suchen", "mail_lesen", "entwuerfe_auflisten", "entwurf_lesen"}
+    assert set(chat_tools.TOOL_HANDLERS.keys()) == expected
     schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
-    assert {"mails_suchen", "mail_lesen"} <= schema_names
+    assert schema_names == expected
 
 
 def test_wrap_tool_result_contains_untrusted_data_anchor():
@@ -309,6 +319,117 @@ def test_mail_lesen_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         chat_tools.mail_lesen("../evil", uid="42")
+
+
+# --- 09-02 Task 2: entwuerfe_auflisten + entwurf_lesen ----------------------------
+
+
+def test_entwuerfe_auflisten_returns_metadata_list_without_body(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    messages = [
+        _msg(uid="1", subject="Entwurf 1", to=("kunde1@example.com",)),
+        _msg(uid="2", subject="Entwurf 2", to=("kunde2@example.com",)),
+    ]
+    mock_mailbox = _fake_mailbox(messages)
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwuerfe_auflisten("info")
+
+    assert result["anzahl"] == 2
+    for entry in result["entwuerfe"]:
+        assert "body_redigiert" not in entry
+        assert "body" not in entry
+        assert set(entry.keys()) == {"uid", "an", "betreff", "datum"}
+    assert result["entwuerfe"][0]["uid"] == "1"
+    assert result["entwuerfe"][0]["an"] == "kunde1@example.com"
+
+
+def test_entwuerfe_auflisten_missing_folder_returns_empty_list_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox(folder_set_raises=True)
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwuerfe_auflisten("info")
+
+    assert result["anzahl"] == 0
+    assert result["entwuerfe"] == []
+
+
+def test_entwuerfe_auflisten_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.entwuerfe_auflisten("../evil")
+
+
+def test_entwurf_lesen_returns_redacted_body_and_threading_headers(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "Bitte überweisen Sie auf DE89370400440532013000, danke."
+    headers = {
+        "in-reply-to": ("<orig-msgid@example.com>",),
+        "references": ("<orig-msgid@example.com>",),
+    }
+    mock_mailbox = _fake_mailbox(
+        [_msg(uid="7", text=iban_body, to=("kunde@example.com",), headers=headers)]
+    )
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_lesen("info", uid="7")
+
+    assert "fehler" not in result
+    assert "DE89370400440532013000" not in result["body_redigiert"]
+    assert "[IBAN_REDACTED]" in result["body_redigiert"]
+    assert result["in_reply_to"] == "<orig-msgid@example.com>"
+    assert result["references"] == "<orig-msgid@example.com>"
+
+
+def test_entwurf_lesen_unknown_uid_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_lesen("info", uid="999")
+
+    assert "fehler" in result
+
+
+def test_entwurf_lesen_missing_folder_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox(folder_set_raises=True)
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_lesen("info", uid="7")
+
+    assert "fehler" in result
+
+
+def test_entwurf_lesen_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.entwurf_lesen("../evil", uid="1")
 
 
 # --- Task 2: run_agentic_chat — Anthropic-Tool-Use-Schleife + Fallback -------------
