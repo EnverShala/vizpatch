@@ -1149,3 +1149,191 @@ def test_run_agentic_chat_max_tool_rounds_applies_to_destructive_tool(mocker, tm
     assert mock_client.messages.create.call_count == chat_tools.MAX_TOOL_ROUNDS
     mock_mailbox.move.assert_not_called()
     assert events[-1]["type"] == "text"
+
+
+# --- 09-05 Task 1: Struktureller Kein-Auto-Send-Waechter (CTOOL-05/D-77) ----------
+#
+# Analog zum Phase-8-Muster (test_addin_readonly.py): dedizierte Scan-Helfer +
+# Positiv-Fall (realer Werkzeugsatz bleibt clean) + Negativ-Fall (Wächter schlägt
+# tatsächlich an, wenn ein Sende-Werkzeug/eine SMTP-API hinzukommt) + Gegenprobe
+# (bewusste No-Send-Hinweise/Kommentare/Docstrings loesen KEINEN False-Positive
+# aus). Ein reiner `#`-Kommentar-Zeilenfilter (wie ursprünglich angedacht) hätte
+# hier eine Lücke: chat_tools.py enthält an einer Docstring-Zeile die erklärende
+# Erwähnung "kein Sende-Pfad, kein SMTP (D-77)" — das ist KEIN `#`-Kommentar und
+# würde einen naiven Text-Grep selbst-invalidieren. Der AST-Scan unten prüft
+# stattdessen echte Imports/Funktionsaufrufe und ignoriert Docstring-/
+# Kommentar-Inhalte strukturell (ast.parse erfasst sie nur als String-Konstanten,
+# nicht als Import-/Call-Knoten).
+
+_FORBIDDEN_SMTP_IMPORT_MODULES = {"smtplib"}
+_FORBIDDEN_SMTP_SEND_CALL_NAMES = {"sendmail", "send_message", "SMTP", "SMTP_SSL"}
+
+
+def _scan_ast_for_forbidden_smtp_send_api(source_text: str) -> list[str]:
+    """Strukturelle AST-Analyse: findet echte `import smtplib`-Importe und
+    Aufrufe von `sendmail(...)`/`send_message(...)`/`SMTP(...)`/`SMTP_SSL(...)` —
+    ignoriert Docstrings/Kommentare naturgemäß (siehe Kommentarblock oberhalb)."""
+    import ast
+
+    tree = ast.parse(source_text)
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in _FORBIDDEN_SMTP_IMPORT_MODULES:
+                    findings.append(f"import {alias.name}")
+        elif isinstance(node, ast.ImportFrom):
+            module_root = (node.module or "").split(".")[0]
+            if module_root in _FORBIDDEN_SMTP_IMPORT_MODULES:
+                findings.append(f"from {node.module} import ...")
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute):
+                call_name = func.attr
+            elif isinstance(func, ast.Name):
+                call_name = func.id
+            else:
+                call_name = None
+            if call_name in _FORBIDDEN_SMTP_SEND_CALL_NAMES:
+                findings.append(f"call: {call_name}(...)")
+    return findings
+
+
+def test_chat_tools_source_has_no_smtp_or_send_api_structurally():
+    """CTOOL-05/D-77 — Positiv-Fall: chat_tools.py importiert/nutzt strukturell
+    keine SMTP-/Send-API (kein `import smtplib`, kein `sendmail(...)`/
+    `send_message(...)`/`SMTP(...)`-Aufruf); TOOL_HANDLERS enthält nur IMAP-
+    SEARCH/FETCH/APPEND/MOVE-basierte Werkzeuge."""
+    from pathlib import Path
+
+    source_path = Path(__file__).resolve().parent.parent / "src" / "chat_tools.py"
+    findings = _scan_ast_for_forbidden_smtp_send_api(source_path.read_text(encoding="utf-8"))
+    assert findings == [], f"Verbotene SMTP-/Send-API strukturell gefunden: {findings}"
+
+
+def test_guard_ast_scan_detects_injected_smtplib_send_call():
+    """Negativ-Fall: belegt, dass `_scan_ast_for_forbidden_smtp_send_api`
+    tatsächlich anschlägt, wenn jemand künftig ein Sende-Tool/SMTP-Aufruf
+    hinzufügt — der Wächter ist kein Blindgänger und würde eine Regression
+    fangen (T-09-20)."""
+    poisoned_source = (
+        "import smtplib\n\n"
+        "def evil():\n"
+        "    server = smtplib.SMTP('localhost')\n"
+        "    server.sendmail('a@x.de', 'b@x.de', 'hi')\n"
+    )
+    findings = _scan_ast_for_forbidden_smtp_send_api(poisoned_source)
+    assert findings != []
+
+
+def test_guard_ast_scan_ignores_smtp_mentioned_only_in_docstrings_or_comments():
+    """Gegenprobe zur realen Docstring-Zeile in chat_tools.py ('kein Sende-Pfad,
+    kein SMTP (D-77)'): eine reine Erwähnung in Docstring/Kommentar darf den
+    Wächter NICHT triggern (False-Positive-Schutz) — im Unterschied zu einem
+    naiven Text-Grep, der hier fälschlich anschlagen würde."""
+    commented_only = (
+        '"""Reine Bytes für IMAP APPEND — kein Sende-Pfad, kein SMTP (D-77)."""\n'
+        "# kein smtplib, kein sendmail, kein .send_message( hier\n"
+        "def ok():\n"
+        "    return 1\n"
+    )
+    findings = _scan_ast_for_forbidden_smtp_send_api(commented_only)
+    assert findings == []
+
+
+_FORBIDDEN_SEND_TOOL_PATTERNS = ("send", "senden", "versend", "smtp", "reply", "verschick")
+# Bekannte, ausdrückliche No-Send-Negationen bzw. legitime technische Begriffe,
+# die vor dem Scan aus der Beschreibung entfernt werden, damit sie den Wächter
+# nicht selbst-invalidieren:
+# - "sendet nichts" / "kein senden" / "kein-auto-send": bewusste No-Send-Hinweise.
+# - "in-reply-to": der IMAP-Threading-Header-NAME (kein Sende-Bezug, D-75/09-03).
+_ALLOWED_NO_SEND_NEGATIONS = ("sendet nichts", "kein senden", "kein-auto-send", "in-reply-to")
+
+
+def _scan_tool_schemas_for_forbidden_send_patterns(schemas: list[dict]) -> list[str]:
+    """Scan über TOOL_SCHEMAS-Namen + descriptions auf verbotene Sende-Muster
+    (D-77) per Wortanfangs-Grenze (`\\b`), damit deutsche Komposita wie
+    'Absender' (enthält die reine Teilzeichenkette 'send', aber KEINEN
+    eigenständigen Wortanfang 'send') keinen False-Positive auslösen. Bekannte,
+    ausdrückliche No-Send-Negationen ('Sendet NICHTS', 'kein Senden', 'Kein-
+    Auto-Send') und der legitime Threading-Header-Name ('In-Reply-To') werden
+    vor dem Scan entfernt, damit die GEWOLLTEN Hinweise/Fachbegriffe in den
+    echten Beschreibungen den Wächter nicht selbst-invalidieren — ein
+    tatsächlich hinzugefügtes Sende-Werkzeug (Name oder Beschreibung mit z. B.
+    'send_reply'/'SMTP-Versand') schlägt weiterhin an (siehe Negativ-Fall-Test)."""
+    import re
+
+    findings = []
+    for schema in schemas:
+        name = schema.get("name", "")
+        description = schema.get("description", "")
+        haystack = f"{name} {description}".lower()
+        for negation in _ALLOWED_NO_SEND_NEGATIONS:
+            haystack = haystack.replace(negation, "")
+        for pattern in _FORBIDDEN_SEND_TOOL_PATTERNS:
+            if re.search(r"\b" + re.escape(pattern), haystack):
+                findings.append(f"{pattern!r} in Tool {name!r}")
+    return findings
+
+
+def test_no_tool_schema_name_or_description_matches_forbidden_send_patterns():
+    """CTOOL-05/D-77 — Positiv-Fall: kein TOOL_SCHEMAS-Name/keine description
+    matcht ein verbotenes Sende-Muster (send/senden/versend/smtp/reply/
+    verschick) auf dem realen Werkzeugsatz. Die bekannten expliziten No-Send-
+    Hinweise wie 'Sendet NICHTS' sind erlaubt und werden vor dem Scan entfernt,
+    siehe `_scan_tool_schemas_for_forbidden_send_patterns`."""
+    import src.chat_tools as chat_tools
+
+    findings = _scan_tool_schemas_for_forbidden_send_patterns(chat_tools.TOOL_SCHEMAS)
+    assert findings == [], f"Verbotene Sende-Muster in TOOL_SCHEMAS gefunden: {findings}"
+
+
+def test_guard_detects_injected_send_tool_schema():
+    """Negativ-Fall: ein hinzugefügtes Sende-Werkzeug (Name ODER Beschreibung
+    mit einem verbotenen Muster) wird vom Scan erkannt — kein Blindgänger."""
+    poisoned_schemas = [
+        {
+            "name": "mail_senden",
+            "description": "Versendet eine Mail per SMTP an den Kunden.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    findings = _scan_tool_schemas_for_forbidden_send_patterns(poisoned_schemas)
+    assert findings != []
+
+
+def test_guard_ignores_allowed_no_send_negations_in_description():
+    """Gegenprobe: die bewusst gewollten No-Send-Hinweise ('Sendet NICHTS',
+    'kein Senden', 'Kein-Auto-Send') triggern den Wächter NICHT (False-
+    Positive-Schutz)."""
+    safe_schemas = [
+        {
+            "name": "entwurf_bearbeiten",
+            "description": "Legt eine neue Fassung ab. Sendet NICHTS. Kein-Auto-Send gilt.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    findings = _scan_tool_schemas_for_forbidden_send_patterns(safe_schemas)
+    assert findings == []
+
+
+def test_tool_handlers_whitelist_is_exactly_the_seven_allowed_tools_no_send_tool():
+    """CTOOL-05/D-77 — struktureller Nachweis, dass der Werkzeugsatz
+    AUSSCHLIESSLICH die sieben erlaubten (nicht-sendenden) Werkzeuge enthält:
+    kein zusätzliches, insbesondere kein Sende-Werkzeug wurde registriert.
+    Ergänzt `test_tool_handlers_registry_contains_all_registered_tools` (09-04)
+    um den expliziten Kein-Auto-Send-Rahmen dieses Plans (letzte Ergänzung des
+    Werkzeugsatzes aus Phase 9, D-74..D-77)."""
+    import src.chat_tools as chat_tools
+
+    allowed = {
+        "mails_suchen",
+        "mail_lesen",
+        "entwuerfe_auflisten",
+        "entwurf_lesen",
+        "entwurf_bearbeiten",
+        "mail_in_papierkorb",
+        "entwurf_in_papierkorb",
+    }
+    assert set(chat_tools.TOOL_HANDLERS.keys()) == allowed
+    assert {schema["name"] for schema in chat_tools.TOOL_SCHEMAS} == allowed
