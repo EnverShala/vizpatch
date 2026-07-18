@@ -325,6 +325,34 @@ Plans:
 
 ---
 
+### Phase 9: Agentischer Chat mit Postfach-Werkzeugen (v1.5)
+
+**Goal:** Der Agenten-Chat aus Phase 7 wird von „rein beratend" zu „handelnd": das LLM erhält Werkzeuge (Tool-Use), mit denen es auf ausdrückliche Anweisung des Betreibers das Postfach bearbeitet — Mails suchen/lesen, Entwürfe auflisten/lesen/bearbeiten und Mails/Entwürfe in den Papierkorb verschieben. Der LLM-Adapter wird von reinem Text-Streaming auf eine agentische Tool-Use-Schleife erweitert (Start mit Anthropic; OpenAI/Google folgen bzw. degradieren sauber auf den beratenden Chat). **Kein-Auto-Send bleibt strukturell** (kein Sende-Tool). **Löschen = Verschieben in den Papierkorb** (kein endgültiges Expunge, reversibel) und **immer nur nach expliziter Bestätigung** des Betreibers.
+**Mode:** mvp
+**Ziel-Aufwand:** ~2–3 Werktage Vizionists
+**Depends on:** Phase 7 (Chat-Backend + `/chat`-API), Phase 5 (LLM-Adapter, per-Agent-Layout + IMAP-Zugriff wie in Stil-Extraktion)
+**Motivation:** Der Betreiber erwartet vom Chat echte Postfach-Hilfe („such mir die Mail zu Thema X", „ändere diesen Entwurf", „verschieb das in den Papierkorb") — nicht nur Auskunft über Konfiguration/Status. Die Datenschutzerklärung (Ziffer 6) beschreibt diese Fähigkeiten bereits; Phase 9 löst sie ein.
+
+**Success Criteria:**
+
+1. Der Chat kann eingehende Mails und Entwürfe **suchen und lesen** (read-only), Ergebnisse im Chat zusammenfassen; PII-Redaction läuft vor der LLM-Übergabe.
+2. Der Chat kann bestehende **Entwürfe bearbeiten** (umformulieren/anpassen) und die neue Fassung im Entwürfe-Ordner ablegen; die Original-Threading-Header bleiben erhalten.
+3. **Destruktiv (Löschen):** Mails/Entwürfe werden in den Papierkorb verschoben (nicht expunged) und **nur nach expliziter Bestätigung** im Chat; jede Löschung wird protokolliert.
+4. **Kein-Auto-Send strukturell:** es existiert kein Werkzeug, das Mail versendet (IMAP-APPEND in Drafts/Trash + Move, aber niemals SMTP/Send).
+5. Tool-Use-Adapter für Anthropic funktioniert end-to-end; bei OpenAI/Google entweder ebenfalls Tools oder sauberer Fallback auf den beratenden Chat (kein Absturz).
+6. Datenschutzerklärung (Ziffer 6) und AVV-Verarbeitungszwecke sind auf die tatsächlichen Fähigkeiten angeglichen.
+
+**Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
+
+**Hauptrisiken:**
+
+- Destruktive Aktion auf echte Kundenmails durch KI → Papierkorb statt Expunge, harte Bestätigungs-Gate im Backend (Tool löscht nur mit `confirmed=true` nach expliziter Nutzer-Zusage), Protokollierung.
+- Tool-Use unterscheidet sich je Provider (Anthropic/OpenAI/Google) → Anthropic zuerst, andere mit Fallback; nicht am Streaming-Pfad hängenbleiben.
+- Prompt-Injection über Mail-Inhalte, die das LLM zu Tool-Aufrufen verleiten → Werkzeug-Ergebnisse als Daten kennzeichnen (Anker), destruktive Tools nie ohne explizite Nutzer-Bestätigung.
+- Postfach-Mutation aus dem WebUI-Container → gleiche IMAP-Zugriffsmechanik wie Stil-Extraktion, per-Agent entschlüsselte Creds, Timeouts.
+
+---
+
 ## Estimation
 
 | Phase | Vizionists-Aufwand | Kunden-Beteiligung |
