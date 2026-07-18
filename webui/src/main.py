@@ -15,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from . import agents_io, auth, chat, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
+from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -482,37 +482,38 @@ def chat_send(
     mail_context: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
-    """Streamt eine Chat-Antwort via SSE (D-62). Provider/Key/Modell werden
-    GENAU für `agent_id` aufgelöst (D-59-Intent) — kein Anthropic-Sonderweg.
-    build_chat_prompt() (CHAT-01/02/04) injiziert System-Prompt + auf
-    CHAT_HISTORY_TOKEN_BUDGET getrimmten Verlauf + optionalen mail_context-
-    DATEN-Block (D-65). Rate-Limit CHAT_RATE_LIMIT_PER_MIN (D-60, per
-    Remote-Address) + max-tokens-Deckel CHAT_MAX_TOKENS greifen serverseitig,
-    beide .env-konfigurierbar zur Laufzeit gelesen."""
+    """Streamt eine agentische Chat-Antwort via SSE (D-62/D-72/D-80). Provider/
+    Key/Modell werden GENAU für `agent_id` aufgelöst (D-59-Intent) —
+    `chat_tools.run_agentic_chat()` (CTOOL-01/02) läuft für Anthropic-Agenten
+    die Tool-Use-Schleife (mit `mails_suchen`, D-74 Teil 1) und fällt für alle
+    anderen Provider sauber auf den beratenden, werkzeuglosen Chat zurück
+    (D-72/T-09-06, kein Absturz). Rate-Limit CHAT_RATE_LIMIT_PER_MIN (D-60, per
+    Remote-Address) greift serverseitig weiter.
+
+    PLAN-CHECKER-W1: `run_agentic_chat` ist ein Generator — dessen Rumpf läuft
+    erst beim ersten `next()`, also NACH dem 200-Commit der StreamingResponse.
+    Damit ein invalider `agent_id` (ValueError) oder ein fehlender Key
+    (`ChatConfigError`) weiterhin EAGER als 400 ankommt (Phase-7-Regression,
+    T-07-01), löst chat_send die Provider-Auflösung HIER — VOR dem Aufbau der
+    StreamingResponse — bewusst noch einmal separat auf, bevor der Generator
+    startet."""
     parsed_history = _parse_chat_history(history)
     parsed_mail_context = _parse_mail_context(mail_context)
 
     try:
-        provider, api_key, model = chat.resolve_chat_target(agent_id)
-        prompt = chat.build_chat_prompt(agent_id, message, parsed_history, parsed_mail_context)
+        chat.resolve_chat_target(agent_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid agent_id")
     except chat.ChatConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    max_tokens = int(os.getenv("CHAT_MAX_TOKENS", "2000"))
-
     def _stream():
         try:
-            for piece in chat.stream_chat(
-                provider=provider,
-                api_key=api_key,
-                model=model,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=0.7,
-            ):
-                yield _sse_data_frame(piece)
+            for event in chat_tools.run_agentic_chat(agent_id, message, parsed_history, parsed_mail_context):
+                if event.get("type") == "tool":
+                    yield f"event: tool\ndata: {event.get('label', '')}\n\n"
+                else:
+                    yield _sse_data_frame(event.get("text", ""))
             yield "event: done\ndata: \n\n"
         except Exception as e:
             logger.warning("chat_stream_error", extra={"agent_id": agent_id, "error": str(e)})

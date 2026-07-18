@@ -36,10 +36,16 @@ def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
 
 
-def _write_agent(agent_id, api_key="sk-ant-test-key"):
+def _write_agent(agent_id, api_key="sk-openai-test-key", provider="openai"):
+    """Default-Provider ist bewusst NICHT anthropic (Plan 09-01, CTOOL-01/02):
+    die meisten Tests in dieser Datei prüfen SSE-Mechanik/Prompt-Bau über einen
+    gemockten `chat.stream_chat` — das ist seit `chat_tools.run_agentic_chat`
+    genau der Fallback-Pfad für Nicht-Anthropic-Provider (D-72), der Prompt-Bau
+    (`chat.build_chat_prompt`) unverändert durchläuft. Die eigentliche
+    Anthropic-Tool-Use-Schleife wird separat in `test_chat_tools.py` getestet."""
     import src.agents_io as agents_io
 
-    agents_io.write_env(agent_id, {"LLM_API_KEY": api_key, "LLM_PROVIDER": "anthropic"})
+    agents_io.write_env(agent_id, {"LLM_API_KEY": api_key, "LLM_PROVIDER": provider})
 
 
 def _mock_docker_running(mocker):
@@ -138,6 +144,49 @@ def test_chat_send_streams_sse(authed_client, mocker, tmp_path, monkeypatch):
     assert "data: Hallo " in response.text
     assert "data: Welt" in response.text
     assert "event: done" in response.text
+
+
+def test_chat_send_streams_tool_activity_and_final_answer(authed_client, mocker, tmp_path, monkeypatch):
+    """Plan 09-01 (CTOOL-01/02, D-80): chat_send ruft chat_tools.run_agentic_chat
+    statt chat.stream_chat direkt auf — die SSE-Antwort übersetzt `type=="tool"`
+    Events zu einem eigenen `event: tool`-Frame (Tool-Aktivität) und `type=="text"`
+    Events zu normalen `data:`-Frames, gefolgt vom bestehenden `event: done`."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter(
+            [
+                {"type": "tool", "label": "🔧 durchsuche Postfach…"},
+                {"type": "text", "text": "Ich habe 2 Mails gefunden."},
+            ]
+        ),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Suche bitte nach Rechnungen"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: tool" in response.text
+    assert "durchsuche Postfach" in response.text
+    assert "data: Ich habe 2 Mails gefunden." in response.text
+    assert "event: done" in response.text
+
+
+def test_chat_send_run_agentic_chat_not_bypassed_by_direct_stream_chat_call(authed_client, mocker, tmp_path, monkeypatch):
+    """T-09-Regressions-Nachweis: chat_send ruft chat.stream_chat NICHT mehr
+    direkt auf — nur noch über chat_tools.run_agentic_chat (der interne
+    Fallback-Zweig für Nicht-Anthropic-Provider ruft stream_chat weiterhin
+    intern auf, das bleibt unbenannt/unbetroffen von dieser Prüfung)."""
+    import inspect
+
+    import src.main as main_module
+
+    source = inspect.getsource(main_module.chat_send)
+    assert "chat.stream_chat" not in source
+    assert "chat_tools.run_agentic_chat" in source
 
 
 def test_chat_send_injects_context_md_into_system_prompt(authed_client, mocker, tmp_path, monkeypatch):
