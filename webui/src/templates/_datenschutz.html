@@ -95,14 +95,30 @@
 
   <h3>6. Agenten-Chat</h3>
   <p>Vizpatch stellt optional einen Assistenz-Chat bereit, der über den hinterlegten
-  API-Schlüssel Zugriff auf den KI-Dienst hat. Der Chat kennt den Firmen-Kontext, das
-  Stil-Profil und den Betriebsstatus des Agenten und kann auf Anweisung des Betreibers
-  Aufgaben rund um E-Mails unterstützen (z. B. eine Mail zu einem bestimmten Thema
-  heraussuchen, einen Entwurf umformulieren, Inhalte erklären). Mit dieser Einwilligung
-  stimmt der Betreiber ausdrücklich zu, dass für Chat-Anfragen Inhalte an den KI-Dienst
-  übermittelt werden. <strong>Auch im Chat gilt Kein-Auto-Send</strong>: der Chat versendet
-  keine E-Mails eigenständig. Soweit der Chat lesende oder verändernde Aktionen am Postfach
-  ausführt, geschieht dies ausschließlich auf ausdrückliche Anweisung des Betreibers.</p>
+  API-Schlüssel Zugriff auf den KI-Dienst hat und kennt den Firmen-Kontext, das
+  Stil-Profil und den Betriebsstatus des Agenten. Je nach genutztem KI-Anbieter kann der
+  Chat zusätzlich mit Werkzeugen auf das Postfach zugreifen — <strong>ausschließlich auf
+  ausdrückliche Anweisung des Betreibers</strong>, niemals ungefragt. Konkret kann der Chat:</p>
+  <ul>
+    <li><strong>Mails und Entwürfe durchsuchen und lesen</strong> (read-only) — der
+      Mailtext wird vor der Übermittlung an den KI-Dienst durch die PII-Redaction
+      (Ziffer 4) maskiert;</li>
+    <li>einen bestehenden <strong>Entwurf umformulieren</strong> — die neue Fassung wird im
+      Entwürfe-Ordner abgelegt, die alte Fassung in den Papierkorb verschoben (siehe
+      nächster Punkt); dabei wird nichts versendet;</li>
+    <li><strong>Mails oder Entwürfe in den Papierkorb verschieben</strong> — <strong>kein
+      endgültiges Löschen</strong>, die Nachricht bleibt reversibel im Papierkorb-Ordner
+      erhalten (kein IMAP-Expunge). Diese Aktion läuft <strong>ausschließlich nach
+      ausdrücklicher Bestätigung des Betreibers im Chat</strong>: der Chat nennt zunächst
+      nur das betroffene Ziel (Betreff/Absender/Datum) und verschiebt erst nach einem
+      expliziten „ja" des Betreibers tatsächlich etwas.</li>
+  </ul>
+  <p>Mit dieser Einwilligung stimmt der Betreiber ausdrücklich zu, dass für Chat-Anfragen
+  (inkl. der oben genannten Werkzeug-Ergebnisse) Inhalte an den KI-Dienst übermittelt
+  werden. <strong>Kein-Auto-Send gilt auch hier uneingeschränkt</strong>: der Chat verfügt
+  über kein Werkzeug zum Versenden von E-Mails und versendet daher niemals eigenständig
+  eine Nachricht — unabhängig davon, was in einer Mail steht oder welche Anweisung dort
+  suggeriert wird.</p>
 
   <h3>7. Rechtsgrundlagen</h3>
   <ul>

@@ -116,6 +116,7 @@ Maßnahmen:                   - PII-Redaction für IBAN/Kreditkarten vor LLM-Cal
 - [ ] **Schreibstil-Ableitung (Phase 6):** einmalige LLM-Verarbeitung der letzten Mails des *Gesendet*-Ordners; gespeichert wird nur ein abstrahiertes Stil-Profil (`style.md`), keine Mail-Inhalte.
 - [ ] **Agenten-Chat (Phase 7):** Betreiber-Anfragen + injizierter Kontext/Status gehen an den KI-Anbieter; Kein-Auto-Send gilt auch hier.
 - [ ] **Outlook-Add-in (Phase 8):** die geöffnete Mail (Betreff/Absender/Body) wird via Office.js in den Chat gereicht → an den KI-Anbieter; rein lesend (ReadItem).
+- [ ] **Agentische Postfach-Werkzeuge (Phase 9):** auf ausdrückliche Betreiber-Anweisung im Chat kann das LLM Mails/Entwürfe im Postfach **suchen/lesen** (read-only, PII-redigiert vor Übermittlung), einen bestehenden **Entwurf umformulieren** (neue Fassung im Entwürfe-Ordner, altes Original in den Papierkorb verschoben) sowie Mails/Entwürfe **in den Papierkorb verschieben** (IMAP-MOVE, **kein** Expunge/endgültiges Löschen, reversibel) — Letzteres **nur nach expliziter Bestätigung** des Betreibers im Chat, jede Verschiebung wird protokolliert. An den KI-Anbieter gehen dafür die jeweils benötigten (PII-redigierten) Postfach-Inhalte als Werkzeug-Ergebnis. **Kein-Auto-Send bleibt strukturell** — es existiert kein Werkzeug, das eine Mail versendet (kein SMTP-/Send-Pfad).
 
 ### 6.3 Vizionists als Auftragsverarbeiter — AVV-Pflichtinhalt (Art. 28 Abs. 3)
 
