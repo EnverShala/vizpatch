@@ -344,7 +344,7 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans executed — Phase 9 code-komplett
 
 Plans:
 **Wave 1**
@@ -365,7 +365,7 @@ Plans:
 
 **Wave 5** *(blocked on 09-04)*
 
-- [ ] 09-05-PLAN.md — struktureller Kein-Auto-Send-Waechter + Datenschutz-Ziffer-6/AVV-Paragraph-6.2-Angleichung + Phasen-Verifikation (CTOOL-05)
+- [x] 09-05-PLAN.md — struktureller Kein-Auto-Send-Waechter + Datenschutz-Ziffer-6/AVV-Paragraph-6.2-Angleichung + Phasen-Verifikation (CTOOL-05)
 
 **Hauptrisiken:**
 

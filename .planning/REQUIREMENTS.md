@@ -144,7 +144,7 @@
 - [x] **CTOOL-02**: Read-only-Werkzeuge — Mails suchen/lesen (INBOX) und Entwürfe auflisten/lesen; PII-Redaction vor LLM-Übergabe der Mail-Inhalte
 - [x] **CTOOL-03**: Entwurf-Bearbeitung — bestehenden Entwurf umformulieren/anpassen und im Entwürfe-Ordner ablegen, Threading-Header erhalten; kein Senden
 - [x] **CTOOL-04**: Destruktiv (Löschen) — Mails/Entwürfe in den Papierkorb verschieben (kein Expunge), nur nach expliziter Bestätigung (`confirmed=true` nach Nutzer-Zusage), jede Löschung protokolliert
-- [ ] **CTOOL-05**: Kein-Auto-Send strukturell (kein Sende-/SMTP-Werkzeug); Datenschutzerklärung (Ziffer 6) + AVV-Verarbeitungszwecke auf die tatsächlichen Fähigkeiten angeglichen
+- [x] **CTOOL-05**: Kein-Auto-Send strukturell (kein Sende-/SMTP-Werkzeug); Datenschutzerklärung (Ziffer 6) + AVV-Verarbeitungszwecke auf die tatsächlichen Fähigkeiten angeglichen
 
 ---
 
