@@ -432,6 +432,72 @@ def test_entwurf_lesen_invalid_agent_id_raises_value_error(tmp_path, monkeypatch
         chat_tools.entwurf_lesen("../evil", uid="1")
 
 
+# --- 09-03 Task 1: Papierkorb-Erkennung + Move-Helfer (kein Expunge) -------------
+
+
+def test_detect_trash_folder_returns_special_use_match():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [
+        _fake_folder_info("INBOX", flags=()),
+        _fake_folder_info("Mein Papierkorb", flags=("\\Trash",)),
+    ]
+
+    result = chat_tools._detect_trash_folder(mailbox)
+
+    assert result == "Mein Papierkorb"
+
+
+def test_detect_trash_folder_falls_back_to_candidate_list_match():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [
+        _fake_folder_info("INBOX", flags=()),
+        _fake_folder_info("Papierkorb", flags=()),
+    ]
+
+    result = chat_tools._detect_trash_folder(mailbox)
+
+    assert result == "Papierkorb"
+
+
+def test_detect_trash_folder_raises_when_nothing_matches():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+
+    with pytest.raises(chat_tools.TrashFolderNotFound):
+        chat_tools._detect_trash_folder(mailbox)
+
+
+def test_move_to_trash_calls_mailbox_move_never_expunge():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+
+    trash_folder = chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    mailbox.folder.set.assert_any_call("Drafts")
+    mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    assert trash_folder == "Papierkorb"
+    mailbox.expunge.assert_not_called()
+    mailbox.delete.assert_not_called()
+
+
+def test_move_to_trash_propagates_trash_folder_not_found():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+
+    with pytest.raises(chat_tools.TrashFolderNotFound):
+        chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+
 # --- Task 2: run_agentic_chat — Anthropic-Tool-Use-Schleife + Fallback -------------
 
 

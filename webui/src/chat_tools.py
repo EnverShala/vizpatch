@@ -141,6 +141,70 @@ def _resolve_drafts_folder(mailbox, env: dict) -> str:
     return _detect_drafts_folder(mailbox, settings.get("drafts") or "Drafts")
 
 
+class TrashFolderNotFound(RuntimeError):
+    """Kein Papierkorb-Ordner erkannt (SPECIAL-USE \\Trash noch Kandidatenliste-Treffer)
+    — D-76: wird NIE geraten oder automatisch angelegt, da eine Fehleinschätzung hier
+    zu stillem Datenverlust führen könnte (T-09-13)."""
+
+
+# `provider_config.resolve_imap_config` liefert keinen 'trash'-Schlüssel (nur
+# drafts/sent) — feste Kandidatenliste für die häufigsten deutschen/internationalen
+# Provider-Ordnernamen, analog der Drafts-/Sent-Fallback-Muster.
+_TRASH_FOLDER_CANDIDATES: tuple[str, ...] = (
+    "Trash",
+    "Papierkorb",
+    "Deleted Items",
+    "[Gmail]/Trash",
+    "INBOX.Trash",
+)
+
+
+def _detect_trash_folder(mailbox, fallback: str | None = None) -> str:
+    """SPECIAL-USE-Erkennung (RFC 6154) analog `_detect_drafts_folder` (D-79) —
+    \\Trash statt \\Drafts. Ohne SPECIAL-USE-Announcement wird eine feste
+    Kandidatenliste gegen die TATSÄCHLICHE Ordnerliste geprüft (kein blindes
+    Zurückfallen wie bei Drafts) — kein Treffer -> `TrashFolderNotFound` (D-76)."""
+    try:
+        folder_infos = list(mailbox.folder.list())
+    except Exception as e:
+        logger.warning("trash_folder_list_failed", extra={"error": str(e)})
+        folder_infos = []
+
+    for folder_info in folder_infos:
+        flags = tuple(str(f) for f in (folder_info.flags or ()))
+        if any("Trash" in f for f in flags):
+            logger.info(
+                "trash_folder_detected_via_special_use",
+                extra={"folder": folder_info.name, "flags": flags},
+            )
+            return folder_info.name
+
+    existing_names = {fi.name for fi in folder_infos}
+    candidates = list(_TRASH_FOLDER_CANDIDATES)
+    if fallback and fallback not in candidates:
+        candidates.append(fallback)
+    for candidate in candidates:
+        if candidate in existing_names:
+            return candidate
+
+    raise TrashFolderNotFound(
+        "Kein Papierkorb-Ordner erkannt (SPECIAL-USE \\Trash fehlt, keine "
+        "Kandidaten-Übereinstimmung in der Ordnerliste) — wird nicht geraten "
+        "oder automatisch angelegt."
+    )
+
+
+def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
+    """D-76: verschiebt `uid` per IMAP MOVE aus `source_folder` in den erkannten
+    Papierkorb-Ordner — REVERSIBEL, kein vollständiges/endgültiges Löschen (kein
+    IMAP EXPUNGE, kein Delete-Aufruf). Kein erkannter Papierkorb ->
+    `TrashFolderNotFound` propagiert unverändert (kein stiller Datenverlust, T-09-13)."""
+    mailbox.folder.set(source_folder)
+    trash_folder = _detect_trash_folder(mailbox)
+    mailbox.move([uid], trash_folder)
+    return trash_folder
+
+
 def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
     """Read-only-Werkzeug (D-74, Teil 1): durchsucht `folder` (Standard INBOX)
     per Volltext-Suche über Betreff/Text, redigiert jeden Body via `pii.redact`
