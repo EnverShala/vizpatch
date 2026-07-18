@@ -344,7 +344,7 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -361,7 +361,7 @@ Plans:
 
 **Wave 4** *(blocked on 09-03)*
 
-- [ ] 09-04-PLAN.md — destruktive Werkzeuge mail_in_papierkorb/entwurf_in_papierkorb mit confirmed=true-Gate + Protokollierung + Zwei-Schritt-Bestaetigungs-Flow (CTOOL-04)
+- [x] 09-04-PLAN.md — destruktive Werkzeuge mail_in_papierkorb/entwurf_in_papierkorb mit gehärtetem Bestätigungs-Token-Gate (statt bloßem confirmed=true) + Protokollierung + Zwei-Schritt-Bestaetigungs-Flow (CTOOL-04)
 
 **Wave 5** *(blocked on 09-04)*
 
