@@ -64,8 +64,8 @@ _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 def _agent_imap_settings(env: dict) -> dict:
     """Analog `style_extract._resolve_imap_connection_settings` (D-79): IMAP_HOST-
-    Override sonst `resolve_imap_config`. Nur host/port/ssl nötig — kein
-    Drafts-/Sent-Ordner-Bedarf für die bisherigen (read-only-)Werkzeuge."""
+    Override sonst `resolve_imap_config`. Liefert zusätzlich den provider-spezifischen
+    Drafts-Fallback-Namen (für `_resolve_drafts_folder`, T-09-08/D-79)."""
     imap_host_override = (env.get("IMAP_HOST") or "").strip()
     imap_user = (env.get("IMAP_USER") or "").strip()
     if imap_host_override:
@@ -73,9 +73,15 @@ def _agent_imap_settings(env: dict) -> dict:
             "host": imap_host_override,
             "port": int(env.get("IMAP_PORT") or "993"),
             "ssl": (env.get("IMAP_USE_SSL") or "true").lower() == "true",
+            "drafts": "Drafts",
         }
     cfg = resolve_imap_config(imap_user)
-    return {"host": cfg["host"], "port": cfg["port"], "ssl": cfg["ssl"]}
+    return {
+        "host": cfg["host"],
+        "port": cfg["port"],
+        "ssl": cfg["ssl"],
+        "drafts": cfg.get("drafts") or "Drafts",
+    }
 
 
 @contextlib.contextmanager
@@ -101,6 +107,38 @@ def open_agent_mailbox(agent_id: str) -> Iterator:
 def _mail_body(msg) -> str:
     body = msg.text or (_HTML_TAG_RE.sub(" ", msg.html).strip() if msg.html else "") or ""
     return body.strip()
+
+
+def _mail_recipients(msg) -> str:
+    to = getattr(msg, "to", None)
+    return ", ".join(to) if to else ""
+
+
+def _detect_drafts_folder(mailbox, fallback: str) -> str:
+    """SPECIAL-USE-Erkennung (RFC 6154) analog `style_extract._detect_sent_folder`
+    (D-79) — \\Drafts statt \\Sent. Fallback bei fehlender Announcement oder Fehler."""
+    try:
+        for folder_info in mailbox.folder.list():
+            flags = tuple(str(f) for f in (folder_info.flags or ()))
+            if any("Drafts" in f for f in flags):
+                logger.info(
+                    "drafts_folder_detected_via_special_use",
+                    extra={"folder": folder_info.name, "flags": flags},
+                )
+                return folder_info.name
+    except Exception as e:
+        logger.warning("special_use_drafts_detection_failed", extra={"error": str(e)})
+    return fallback
+
+
+def _resolve_drafts_folder(mailbox, env: dict) -> str:
+    """IMAP_DRAFTS_FOLDER-Override > SPECIAL-USE \\Drafts (`_detect_drafts_folder`) >
+    `provider_config`-Fallback (D-79, analog `style_extract._resolve_imap_connection_settings`)."""
+    explicit = (env.get("IMAP_DRAFTS_FOLDER") or "").strip()
+    if explicit:
+        return explicit
+    settings = _agent_imap_settings(env)
+    return _detect_drafts_folder(mailbox, settings.get("drafts") or "Drafts")
 
 
 def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
@@ -156,6 +194,54 @@ def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: i
     return {"ordner": target_folder, "anzahl": len(treffer), "treffer": treffer}
 
 
+def mail_lesen(agent_id: str, uid: str, folder: str = "INBOX") -> dict:
+    """Read-only-Werkzeug (D-74, Teil 2): liest genau EINE Mail per `uid` aus `folder`
+    (Standard INBOX) vollständig, redigiert den Body via `pii.redact` VOR der
+    Rückgabe (D-78, T-09-07) und truncatet ihn auf `MAX_TOOL_RESULT_BODY_CHARS`.
+    Crasht nie hart (T-09-05/T-09-10): IMAP-/Fetch-/Login-Fehler oder unbekannte
+    `uid` -> dict mit `fehler`-Feld statt Exception. `ValueError` bei invalidem
+    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`)."""
+    uid_str = str(uid or "").strip()
+    if not uid_str:
+        return {"fehler": "Keine uid angegeben."}
+    target_folder = (folder or "INBOX").strip() or "INBOX"
+
+    try:
+        with open_agent_mailbox(agent_id) as mailbox:
+            try:
+                mailbox.folder.set(target_folder)
+            except Exception as e:
+                return {"fehler": f"Ordner '{target_folder}' nicht verfügbar: {e}"}
+            try:
+                messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+            except Exception as e:
+                logger.warning(
+                    "mail_lesen_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
+                )
+                return {"fehler": f"Lesen der Mail uid={uid_str} in '{target_folder}' fehlgeschlagen: {e}"}
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("mail_lesen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+
+    if not messages:
+        return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
+
+    msg = messages[0]
+    body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    return {
+        "uid": str(getattr(msg, "uid", "") or uid_str),
+        "ordner": target_folder,
+        "von": msg.from_ or "",
+        "an": _mail_recipients(msg),
+        "betreff": msg.subject or "",
+        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+        "body_redigiert": body,
+    }
+
+
 # Erweiterbares Register (D-73-Kontrakt) — 09-02…09-04 hängen sich hier nur an.
 TOOL_SCHEMAS: list[dict] = [
     {
@@ -188,10 +274,35 @@ TOOL_SCHEMAS: list[dict] = [
             "required": [],
         },
     },
+    {
+        "name": "mail_lesen",
+        "description": (
+            "Liest eine einzelne Mail vollständig (Von/An/Betreff/Datum + PII-"
+            "redigierter, gekürzter Mailtext) anhand ihrer uid aus dem angegebenen "
+            "Ordner (Standard INBOX). Die uid stammt aus einem vorherigen "
+            "mails_suchen-Aufruf. Nur auf ausdrückliche Anweisung des Betreibers "
+            "nutzen — niemals ungefragt."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "uid": {
+                    "type": "string",
+                    "description": "uid der Mail (aus einem vorherigen mails_suchen-Ergebnis).",
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "IMAP-Ordner, in dem die Mail liegt. Standard: INBOX.",
+                },
+            },
+            "required": ["uid"],
+        },
+    },
 ]
 
 TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "mails_suchen": mails_suchen,
+    "mail_lesen": mail_lesen,
 }
 
 

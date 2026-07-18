@@ -146,12 +146,12 @@ def test_mails_suchen_respects_limit_and_folder(mocker, tmp_path, monkeypatch):
     assert result["ordner"] == "Archiv"
 
 
-def test_tool_handlers_registry_contains_exactly_mails_suchen():
+def test_tool_handlers_registry_contains_at_least_mails_suchen_and_mail_lesen():
     import src.chat_tools as chat_tools
 
-    assert set(chat_tools.TOOL_HANDLERS.keys()) == {"mails_suchen"}
+    assert {"mails_suchen", "mail_lesen"} <= set(chat_tools.TOOL_HANDLERS.keys())
     schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
-    assert schema_names == {"mails_suchen"}
+    assert {"mails_suchen", "mail_lesen"} <= schema_names
 
 
 def test_wrap_tool_result_contains_untrusted_data_anchor():
@@ -201,6 +201,114 @@ def test_chat_tools_does_not_import_llm_module_but_calls_pii_crypto_provider_con
     assert "crypto" in top_level_import_names
     assert "pii" in top_level_import_names
     assert any("provider_config" in n or n == "resolve_imap_config" for n in top_level_import_names)
+
+
+# --- 09-02 Task 1: mail_lesen + Drafts-Ordner-Erkennung ---------------------------
+
+
+def _fake_folder_info(name, flags=()):
+    return types.SimpleNamespace(name=name, flags=flags)
+
+
+def test_detect_drafts_folder_returns_special_use_match():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [
+        _fake_folder_info("INBOX", flags=()),
+        _fake_folder_info("KI-Entwürfe", flags=("\\Drafts",)),
+    ]
+
+    result = chat_tools._detect_drafts_folder(mailbox, fallback="Drafts")
+
+    assert result == "KI-Entwürfe"
+
+
+def test_detect_drafts_folder_falls_back_when_no_special_use_flag():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+
+    result = chat_tools._detect_drafts_folder(mailbox, fallback="Entwürfe")
+
+    assert result == "Entwürfe"
+
+
+def test_detect_drafts_folder_falls_back_on_exception():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.side_effect = RuntimeError("no special-use support")
+
+    result = chat_tools._detect_drafts_folder(mailbox, fallback="Drafts")
+
+    assert result == "Drafts"
+
+
+def test_mail_lesen_redacts_pii_before_returning(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    cc_body = "Bitte die Kartennummer 4111 1111 1111 1111 notieren."
+    mock_mailbox = _fake_mailbox([_msg(uid="99", text=cc_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_lesen("info", uid="99")
+
+    assert "fehler" not in result
+    assert result["uid"] == "99"
+    assert "4111 1111 1111 1111" not in result["body_redigiert"]
+    assert "[CC_REDACTED]" in result["body_redigiert"]
+
+
+def test_mail_lesen_unknown_uid_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_lesen("info", uid="999")
+
+    assert "fehler" in result
+
+
+def test_mail_lesen_missing_uid_returns_error_dict_no_crash(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_lesen("info", uid="")
+
+    assert "fehler" in result
+
+
+def test_mail_lesen_login_failure_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox(login_raises=True)
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_lesen("info", uid="42")
+
+    assert "fehler" in result
+
+
+def test_mail_lesen_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.mail_lesen("../evil", uid="42")
 
 
 # --- Task 2: run_agentic_chat — Anthropic-Tool-Use-Schleife + Fallback -------------
