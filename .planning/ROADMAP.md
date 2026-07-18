@@ -344,12 +344,12 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
-**Plans:** 5 plans (5 waves, sequentiell — alle erweitern das neue webui/src/chat_tools.py + Tests, echte Datei-Abhaengigkeit; geplant 2026-07-18)
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Walking Skeleton: Anthropic-Tool-Use-Schleife (run_agentic_chat) + mails_suchen + per-Agent-IMAP-Helfer + SSE-Tool-Aktivitaet + OpenAI/Google-Fallback (CTOOL-01, CTOOL-02)
+- [x] 09-01-PLAN.md — Walking Skeleton: Anthropic-Tool-Use-Schleife (run_agentic_chat) + mails_suchen + per-Agent-IMAP-Helfer + SSE-Tool-Aktivitaet + OpenAI/Google-Fallback (CTOOL-01, CTOOL-02)
 
 **Wave 2** *(blocked on 09-01)*
 
