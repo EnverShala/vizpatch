@@ -344,7 +344,7 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -353,7 +353,7 @@ Plans:
 
 **Wave 2** *(blocked on 09-01)*
 
-- [ ] 09-02-PLAN.md — restliche read-only-Werkzeuge: mail_lesen, entwuerfe_auflisten, entwurf_lesen + Drafts-Ordner-Erkennung (CTOOL-02)
+- [x] 09-02-PLAN.md — restliche read-only-Werkzeuge: mail_lesen, entwuerfe_auflisten, entwurf_lesen + Drafts-Ordner-Erkennung (CTOOL-02)
 
 **Wave 3** *(blocked on 09-02)*
 
