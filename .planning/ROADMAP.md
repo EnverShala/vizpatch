@@ -344,7 +344,7 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
-**Plans:** 2/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -357,7 +357,7 @@ Plans:
 
 **Wave 3** *(blocked on 09-02)*
 
-- [ ] 09-03-PLAN.md — entwurf_bearbeiten (Threading erhalten, neue Fassung in Drafts, Original in Papierkorb) + \Trash-Erkennung + Move-Helfer ohne Expunge (CTOOL-03)
+- [x] 09-03-PLAN.md — entwurf_bearbeiten (Threading erhalten, neue Fassung in Drafts, Original in Papierkorb) + \Trash-Erkennung + Move-Helfer ohne Expunge (CTOOL-03)
 
 **Wave 4** *(blocked on 09-03)*
 
