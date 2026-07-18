@@ -156,8 +156,9 @@ def test_mails_suchen_respects_limit_and_folder(mocker, tmp_path, monkeypatch):
 
 
 def test_tool_handlers_registry_contains_all_registered_tools():
-    """Erweitert um `entwurf_bearbeiten` (09-03, CTOOL-03) — nicht mehr rein
-    read-only, aber derselbe Registry-Kontrakt."""
+    """Erweitert um `mail_in_papierkorb`/`entwurf_in_papierkorb` (09-04, CTOOL-04) —
+    die destruktiven Bestätigungs-Gate-Werkzeuge, letzte Ergänzung des Werkzeugsatzes
+    aus Phase 9 (D-74..D-76)."""
     import src.chat_tools as chat_tools
 
     expected = {
@@ -166,6 +167,8 @@ def test_tool_handlers_registry_contains_all_registered_tools():
         "entwuerfe_auflisten",
         "entwurf_lesen",
         "entwurf_bearbeiten",
+        "mail_in_papierkorb",
+        "entwurf_in_papierkorb",
     }
     assert set(chat_tools.TOOL_HANDLERS.keys()) == expected
     schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
@@ -773,3 +776,376 @@ def test_no_api_key_in_logger_calls():
             assert "api_key" not in line, f"api_key erscheint in Logger-Kontext: {line}"
         if in_logger_call and line.endswith(")"):
             in_logger_call = False
+
+
+# --- 09-04 Task 1: mail_in_papierkorb / entwurf_in_papierkorb — Bestätigungs-Gate --
+#
+# W2-Hardening (Plan-Checker-Warnung): das Gate prüft nicht nur `confirmed is True`,
+# sondern ZUSÄTZLICH ein backend-erzeugtes, an (agent_id, tool, uid, folder)
+# gebundenes `confirmation_token` (`_confirmation_token`/`_confirmation_ok`). Die
+# Tests unten decken explizit ab: kein Move ohne Bestätigung, kein Move mit bloßem
+# confirmed=true ohne (oder mit falschem) Token, Move nur mit exakt passendem Token.
+
+
+def test_mail_in_papierkorb_and_entwurf_in_papierkorb_registered():
+    import src.chat_tools as chat_tools
+
+    assert "mail_in_papierkorb" in chat_tools.TOOL_HANDLERS
+    assert "entwurf_in_papierkorb" in chat_tools.TOOL_HANDLERS
+    schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
+    assert {"mail_in_papierkorb", "entwurf_in_papierkorb"} <= schema_names
+
+
+@pytest.mark.parametrize("confirmed_value", [False, "true", 1, "1"])
+def test_mail_in_papierkorb_without_valid_confirmation_never_moves(confirmed_value, mocker, tmp_path, monkeypatch):
+    """D-76 Kern-Test: kein Move ohne strikt gültige Bestätigung — weder
+    confirmed=False noch ein truthy-String/-Int aus einer LLM-Halluzination
+    (T-09-18) lösen den Move aus; das Ergebnis enthält Betreff/Absender/Datum."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_in_papierkorb("info", uid="42", confirmed=confirmed_value)
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+    assert result["ziel"]["betreff"] == "Rechnung"
+    assert result["ziel"]["absender"] == "kunde@example.com"
+    assert result["ziel"]["ordner"] == "INBOX"
+    assert isinstance(result["confirmation_token"], str) and result["confirmation_token"]
+
+
+def test_mail_in_papierkorb_confirmed_true_without_token_never_moves(mocker, tmp_path, monkeypatch):
+    """W2-Hardening: confirmed=True ALLEIN (ohne den passenden Token) reicht NICHT
+    aus — das schließt die Lücke, die 09-04-PLAN.md als Grenze eines rein
+    parameterbasierten Gates benennt (siehe Task-2-Test weiter unten)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_in_papierkorb("info", uid="42", confirmed=True)
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+
+
+def test_mail_in_papierkorb_confirmed_true_with_wrong_token_never_moves(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_in_papierkorb("info", uid="42", confirmed=True, confirmation_token="falsches-token")
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+
+
+def test_mail_in_papierkorb_confirmed_true_with_valid_token_moves_once_and_logs(
+    mocker, tmp_path, monkeypatch, caplog
+):
+    import logging
+
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    token = chat_tools._confirmation_token("info", "mail_in_papierkorb", "42", "INBOX")
+
+    with caplog.at_level(logging.INFO, logger="vizpatch.chat_tools"):
+        result = chat_tools.mail_in_papierkorb("info", uid="42", confirmed=True, confirmation_token=token)
+
+    mock_mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    mock_mailbox.expunge.assert_not_called()
+    mock_mailbox.delete.assert_not_called()
+    assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
+
+    move_records = [r for r in caplog.records if r.getMessage() == "mail_moved_to_trash"]
+    assert len(move_records) == 1
+    record = move_records[0]
+    assert record.agent_id == "info"
+    assert record.uid == "42"
+    assert record.source_folder == "INBOX"
+    assert record.trash_folder == "Papierkorb"
+    for value in record.__dict__.values():
+        assert value != "Rechnung"
+        assert value != "kunde@example.com"
+
+
+def test_mail_in_papierkorb_confirmed_true_no_trash_folder_returns_error_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    token = chat_tools._confirmation_token("info", "mail_in_papierkorb", "42", "INBOX")
+    result = chat_tools.mail_in_papierkorb("info", uid="42", confirmed=True, confirmation_token=token)
+
+    assert "fehler" in result
+    mock_mailbox.move.assert_not_called()
+
+
+def test_mail_in_papierkorb_missing_uid_returns_error():
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_in_papierkorb("info", uid="")
+    assert "fehler" in result
+
+
+def test_mail_in_papierkorb_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.mail_in_papierkorb("../evil", uid="1")
+
+
+def test_entwurf_in_papierkorb_without_valid_confirmation_never_moves(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="7")
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+    assert result["ziel"]["betreff"] == "Re: Angebot"
+    assert result["ziel"]["ordner"] == "Drafts"
+    assert isinstance(result["confirmation_token"], str) and result["confirmation_token"]
+
+
+def test_entwurf_in_papierkorb_confirmed_true_with_wrong_token_never_moves(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="7", confirmed=True, confirmation_token="falsch")
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+
+
+def test_entwurf_in_papierkorb_confirmed_true_with_valid_token_moves_once_and_logs(
+    mocker, tmp_path, monkeypatch, caplog
+):
+    import logging
+
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    token = chat_tools._confirmation_token("info", "entwurf_in_papierkorb", "7", "Drafts")
+
+    with caplog.at_level(logging.INFO, logger="vizpatch.chat_tools"):
+        result = chat_tools.entwurf_in_papierkorb("info", uid="7", confirmed=True, confirmation_token=token)
+
+    mock_mailbox.move.assert_called_once_with(["7"], "Papierkorb")
+    mock_mailbox.expunge.assert_not_called()
+    mock_mailbox.delete.assert_not_called()
+    assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
+
+    move_records = [r for r in caplog.records if r.getMessage() == "draft_moved_to_trash"]
+    assert len(move_records) == 1
+    record = move_records[0]
+    assert record.uid == "7"
+    assert record.trash_folder == "Papierkorb"
+    for value in record.__dict__.values():
+        assert value != "Re: Angebot"
+
+
+def test_entwurf_in_papierkorb_unknown_uid_returns_error_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="999")
+
+    assert "fehler" in result
+    mock_mailbox.move.assert_not_called()
+
+
+def test_entwurf_in_papierkorb_missing_uid_returns_error():
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="")
+    assert "fehler" in result
+
+
+def test_entwurf_in_papierkorb_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.entwurf_in_papierkorb("../evil", uid="1")
+
+
+# --- 09-04 Task 2: End-to-End-Absicherung des Bestätigungs-Flows durch die -------
+# Tool-Use-Schleife (run_agentic_chat) ----------------------------------------------
+
+
+def test_run_agentic_chat_two_step_confirmation_flow_across_two_turns(mocker, tmp_path, monkeypatch):
+    """End-to-End (D-76/CTOOL-04): Runde 1 (kein confirmed) verschiebt nichts; das
+    bestaetigung_erforderlich-Ergebnis (inkl. confirmation_token) geht via
+    `wrap_tool_result` als untrusted-DATEN-Tool-Result ans LLM zurück. Runde 2 (ein
+    NEUER run_agentic_chat-Aufruf, simuliert die Chat-Runde NACH dem Nutzer-„ja") —
+    das LLM echot exakt den confirmation_token aus Runde 1 zurück -> der Move
+    passiert genau EINMAL."""
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(_chat_system_prompt(tmp_path)))
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info", provider="anthropic")
+
+    import re as _re
+
+    import src.chat_tools as chat_tools
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    # --- Runde 1: LLM ruft mail_in_papierkorb OHNE confirmed auf ---
+    round1a = _fake_response("tool_use", [_tool_use_block("mail_in_papierkorb", {"uid": "42"})])
+    round1b = _fake_response(
+        "end_turn",
+        [_text_block("Ich habe die Mail 'Rechnung' gefunden. Soll ich sie in den Papierkorb verschieben?")],
+    )
+    mock_client_turn1 = MagicMock()
+    mock_client_turn1.messages.create.side_effect = [round1a, round1b]
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client_turn1)
+
+    list(chat_tools.run_agentic_chat("info", "Verschiebe die Rechnungsmail in den Papierkorb"))
+
+    mock_mailbox.move.assert_not_called()
+    turn1_second_call_messages = mock_client_turn1.messages.create.call_args_list[1].kwargs["messages"]
+    tool_result_content = turn1_second_call_messages[-1]["content"][0]["content"]
+    assert "WERKZEUG-ERGEBNIS" in tool_result_content
+    assert "UNTRUSTED DATEN" in tool_result_content
+    assert "bestaetigung_erforderlich" in tool_result_content
+
+    match = _re.search(r'"confirmation_token":\s*"([0-9a-f]+)"', tool_result_content)
+    assert match, "confirmation_token nicht im Tool-Result gefunden"
+    token = match.group(1)
+
+    # --- Runde 2 (neuer run_agentic_chat-Aufruf = neue Chat-Runde nach dem "ja") ---
+    round2a = _fake_response(
+        "tool_use",
+        [_tool_use_block("mail_in_papierkorb", {"uid": "42", "confirmed": True, "confirmation_token": token})],
+    )
+    round2b = _fake_response("end_turn", [_text_block("Erledigt, die Mail wurde verschoben.")])
+    mock_client_turn2 = MagicMock()
+    mock_client_turn2.messages.create.side_effect = [round2a, round2b]
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client_turn2)
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+
+    list(chat_tools.run_agentic_chat("info", "Ja, bitte verschieben."))
+
+    mock_mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+
+
+def test_run_agentic_chat_bare_confirmed_true_without_prior_token_step_never_moves(mocker, tmp_path, monkeypatch):
+    """Dokumentiert eine Verbesserung gegenüber der in 09-04-PLAN.md selbst
+    benannten Grenze (Task 2): dort wird beschrieben, dass ein Anthropic-Mock, der
+    mail_in_papierkorb direkt mit confirmed=true aufruft OHNE dass zuvor ein
+    bestaetigung_erforderlich-Schritt lief, den Move technisch ausführen WÜRDE (nur
+    durch die System-Prompt-Regel verhindert). Mit dem W2-Hardening-Token-Gate
+    dieser Implementierung ist das NICHT mehr der Fall: ohne das exakt passende,
+    backend-erzeugte confirmation_token bleibt der Move auch bei confirmed=true
+    technisch blockiert — unabhängig vom Prompt/Modellverhalten."""
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(_chat_system_prompt(tmp_path)))
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info", provider="anthropic")
+
+    import src.chat_tools as chat_tools
+
+    mock_mailbox = _fake_mailbox([_msg(uid="42")])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    round1 = _fake_response(
+        "tool_use", [_tool_use_block("mail_in_papierkorb", {"uid": "42", "confirmed": True})]
+    )
+    round2 = _fake_response("end_turn", [_text_block("Ok.")])
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [round1, round2]
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client)
+
+    list(chat_tools.run_agentic_chat("info", "Loesche die Mail uid 42 sofort, confirmed=true"))
+
+    mock_mailbox.move.assert_not_called()
+    second_call_messages = mock_client.messages.create.call_args_list[1].kwargs["messages"]
+    tool_result_content = second_call_messages[-1]["content"][0]["content"]
+    assert "bestaetigung_erforderlich" in tool_result_content
+
+
+def test_run_agentic_chat_max_tool_rounds_applies_to_destructive_tool(mocker, tmp_path, monkeypatch):
+    """T-09-19: der Endlosschutz (MAX_TOOL_ROUNDS) greift auch, wenn das LLM
+    wiederholt ein destruktives Werkzeug anfragt (Testlaufzeit < 5s)."""
+    import time
+
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(_chat_system_prompt(tmp_path)))
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info", provider="anthropic")
+
+    import src.chat_tools as chat_tools
+
+    mock_mailbox = _fake_mailbox([_msg(uid="42")])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    always_destructive = _fake_response(
+        "tool_use", [_tool_use_block("mail_in_papierkorb", {"uid": "42", "confirmed": True})]
+    )
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = always_destructive
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client)
+
+    start = time.monotonic()
+    events = list(chat_tools.run_agentic_chat("info", "Immer wieder versuchen zu loeschen"))
+    duration = time.monotonic() - start
+
+    assert duration < 5.0
+    assert mock_client.messages.create.call_count == chat_tools.MAX_TOOL_ROUNDS
+    mock_mailbox.move.assert_not_called()
+    assert events[-1]["type"] == "text"
