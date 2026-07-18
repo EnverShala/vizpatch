@@ -152,6 +152,15 @@ class TrashFolderNotFound(RuntimeError):
     zu stillem Datenverlust führen könnte (T-09-13)."""
 
 
+class MailboxMoveError(RuntimeError):
+    """`_move_to_trash` konnte auch nach dem Fallback-`delete()` NICHT bestätigen,
+    dass `uid` aus dem Quell-Ordner verschwunden ist (Live-Bug gegen IONOS: ein
+    reines `MailBox.move()` hinterließ dort eine Kopie statt zu verschieben, weil
+    der serverseitige Quell-Expunge offenbar nicht griff) — bewusst KEIN stiller
+    Erfolg (T-09-13): wird propagiert statt einen Teil-/Kopier-Zustand als Erfolg
+    zu melden."""
+
+
 # `provider_config.resolve_imap_config` liefert keinen 'trash'-Schlüssel (nur
 # drafts/sent) — feste Kandidatenliste für die häufigsten deutschen/internationalen
 # Provider-Ordnernamen, analog der Drafts-/Sent-Fallback-Muster.
@@ -199,14 +208,73 @@ def _detect_trash_folder(mailbox, fallback: str | None = None) -> str:
     )
 
 
+def _uid_still_in_folder(mailbox, uid: str, folder: str) -> bool:
+    """Post-Move-/Post-Delete-Verifikationshelfer (Live-Bug-Fix, T-09-13): selektiert
+    `folder` und prüft per reinem Lese-Fetch (`mark_seen=False`, `bulk=False` — keine
+    Nebenwirkung auf den Ordnerinhalt), ob `uid` dort NOCH existiert. `True` heißt:
+    die Quelle wurde NICHT bereinigt (Kopie statt Move)."""
+    mailbox.folder.set(folder)
+    remaining = list(mailbox.fetch(AND(uid=uid), mark_seen=False, bulk=False))
+    return bool(remaining)
+
+
 def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
-    """D-76: verschiebt `uid` per IMAP MOVE aus `source_folder` in den erkannten
-    Papierkorb-Ordner — REVERSIBEL, kein vollständiges/endgültiges Löschen (kein
-    IMAP EXPUNGE, kein Delete-Aufruf). Kein erkannter Papierkorb ->
-    `TrashFolderNotFound` propagiert unverändert (kein stiller Datenverlust, T-09-13)."""
+    """D-76: verschiebt `uid` aus `source_folder` in den erkannten Papierkorb-Ordner
+    — REVERSIBEL (die Nachricht bleibt im Papierkorb erhalten und wird DORT NIE
+    expunged). Live-Bug-Fix (IONOS, T-09-13): `MailBox.move()` sollte laut
+    imap-tools bereits serverseitig (`'MOVE'`-Capability) ODER via `copy()`+
+    `delete()` (STORE \\Deleted + EXPUNGE auf dem QUELL-Ordner) die Quelle
+    entfernen — der Quell-Expunge ist dabei NÖTIG (korrigiert eine frühere, falsche
+    Aussage an dieser Stelle: "kein EXPUNGE" gilt nur für den PAPIERKORB, nicht für
+    die Quelle). Gegen einen Server, bei dem der Quell-Expunge trotzdem nicht
+    greift, würde ein blindes `move()` sonst STILL eine Kopie hinterlassen, ohne
+    dass das je auffällt.
+
+    Deshalb robust + selbstverifizierend statt eines blinden Aufrufs: loggt vorab
+    strukturiert (ohne Secrets) MOVE-Capability/Quelle/Ziel/uid, führt den Move aus
+    und verifiziert danach auf dem QUELL-Ordner (`_uid_still_in_folder`), ob `uid`
+    dort verschwunden ist. Bleibt sie sichtbar, expliziter Fallback
+    `mailbox.delete([uid])` (STORE \\Deleted + Expunge NUR des Quell-Ordners,
+    niemals des Papierkorbs) + erneute Verifikation. Bleibt `uid` selbst danach
+    noch da, wirft `MailboxMoveError` — kein stiller Erfolg.
+
+    Kein erkannter Papierkorb -> `TrashFolderNotFound` propagiert unverändert
+    (kein stiller Datenverlust, unverändertes Verhalten)."""
     mailbox.folder.set(source_folder)
     trash_folder = _detect_trash_folder(mailbox)
+
+    capabilities = tuple(getattr(mailbox.client, "capabilities", ()) or ())
+    server_supports_move = "MOVE" in capabilities
+    logger.info(
+        "move_to_trash_start",
+        extra={
+            "uid": uid,
+            "source_folder": source_folder,
+            "trash_folder": trash_folder,
+            "server_supports_move": server_supports_move,
+        },
+    )
+
     mailbox.move([uid], trash_folder)
+
+    if _uid_still_in_folder(mailbox, uid, source_folder):
+        logger.warning(
+            "move_to_trash_source_still_present_after_move_fallback_delete",
+            extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
+        )
+        mailbox.delete([uid])
+        if _uid_still_in_folder(mailbox, uid, source_folder):
+            raise MailboxMoveError(
+                f"uid={uid} ist nach move() UND anschließendem delete()-Fallback "
+                f"weiterhin im Quell-Ordner '{source_folder}' vorhanden — das "
+                f"Verschieben nach '{trash_folder}' konnte nicht sicher bestätigt "
+                f"werden (kein stiller Erfolg, bitte IMAP-Server-Log prüfen)."
+            )
+
+    logger.info(
+        "move_to_trash_verified",
+        extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
+    )
     return trash_folder
 
 

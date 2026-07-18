@@ -67,6 +67,13 @@ def _msg(
 
 
 def _fake_mailbox(messages=None, login_raises=False, fetch_raises=False, folder_set_raises=False):
+    """Live-Bug-Fix-Nachweis (`_move_to_trash` verifiziert jetzt per Fetch, ob eine
+    uid nach `mailbox.move()` noch im Quell-Ordner liegt): der `fetch`-Mock liefert
+    standardmäßig `messages`, SOLANGE `mailbox.move` noch nicht aufgerufen wurde —
+    genau wie eine echte Quelle vor dem Move — und danach eine LEERE Liste, wie eine
+    erfolgreich bereinigte Quelle NACH dem Move (kein Fallback-`delete()` nötig).
+    Tests, die den Live-IONOS-Bug (Quelle bleibt trotz Move stehen) nachbilden
+    wollen, überschreiben `mailbox.fetch.side_effect` gezielt selbst."""
     mailbox = MagicMock()
     mailbox.__enter__ = MagicMock(return_value=mailbox)
     mailbox.__exit__ = MagicMock(return_value=False)
@@ -77,7 +84,12 @@ def _fake_mailbox(messages=None, login_raises=False, fetch_raises=False, folder_
     if fetch_raises:
         mailbox.fetch.side_effect = RuntimeError("search failed")
     else:
-        mailbox.fetch.return_value = list(messages or [])
+        msgs = list(messages or [])
+
+        def _fetch_side_effect(*_args, **_kwargs):
+            return [] if mailbox.move.called else list(msgs)
+
+        mailbox.fetch.side_effect = _fetch_side_effect
     return mailbox
 
 
@@ -507,6 +519,82 @@ def test_move_to_trash_propagates_trash_folder_not_found():
 
     with pytest.raises(chat_tools.TrashFolderNotFound):
         chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+
+def test_move_to_trash_without_move_capability_uses_copy_delete_path_and_verifies_source_empty(caplog):
+    """Live-Bug-Kontext: Server ohne 'MOVE'-Capability -> `MailBox.move()` läuft
+    intern über copy()+delete(). Die Post-Verifikation auf dem Quell-Ordner findet
+    die uid dort nicht mehr (Mock: fetch liefert nach `move()` leer) -> KEIN
+    Fallback-`delete()` durch `_move_to_trash` selbst nötig. Die MOVE-Capability
+    wird strukturiert geloggt (ohne Secrets)."""
+    import logging
+
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.client.capabilities = ()  # kein 'MOVE' auf diesem Server
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mailbox.fetch.side_effect = lambda *a, **kw: [] if mailbox.move.called else [_msg(uid="42")]
+
+    with caplog.at_level(logging.INFO, logger="vizpatch.chat_tools"):
+        trash_folder = chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    assert trash_folder == "Papierkorb"
+    mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    mailbox.delete.assert_not_called()
+    mailbox.expunge.assert_not_called()
+
+    start_records = [r for r in caplog.records if r.getMessage() == "move_to_trash_start"]
+    assert len(start_records) == 1
+    assert start_records[0].server_supports_move is False
+    assert start_records[0].source_folder == "Drafts"
+    assert start_records[0].trash_folder == "Papierkorb"
+
+
+def test_move_to_trash_source_left_behind_triggers_fallback_delete_then_succeeds():
+    """Nachbildung des Live-IONOS-Symptoms: `move()` hinterlässt die uid trotzdem
+    im Quell-Ordner (Mock: erster Verifikations-Fetch nach dem Move liefert die
+    Nachricht noch). `_move_to_trash` MUSS dann explizit `mailbox.delete([uid])`
+    (Fallback) auf dem Quell-Ordner aufrufen — nach dessen Erfolg (zweiter Fetch
+    leer) kein stiller Datenverlust, kein Papierkorb-Expunge."""
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    call_count = {"n": 0}
+
+    def _fetch_side_effect(*_args, **_kwargs):
+        call_count["n"] += 1
+        return [_msg(uid="42")] if call_count["n"] == 1 else []
+
+    mailbox.fetch.side_effect = _fetch_side_effect
+
+    trash_folder = chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    assert trash_folder == "Papierkorb"
+    mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    mailbox.delete.assert_called_once_with(["42"])
+    mailbox.expunge.assert_not_called()
+
+
+def test_move_to_trash_source_still_present_after_fallback_delete_raises():
+    """Härtester Fall: selbst der Fallback-`delete()` bereinigt die Quelle nicht
+    (Mock: fetch liefert IMMER die Nachricht zurück) -> `_move_to_trash` darf
+    NIEMALS stillschweigend Erfolg melden, sondern muss `MailboxMoveError`
+    werfen (T-09-13) — und dabei weiterhin nur den Quell-Ordner anfassen, nie den
+    Papierkorb expungen."""
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mailbox.fetch.return_value = [_msg(uid="42")]
+
+    with pytest.raises(chat_tools.MailboxMoveError):
+        chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    mailbox.delete.assert_called_once_with(["42"])
+    mailbox.expunge.assert_not_called()
 
 
 # --- 09-03 Task 2: entwurf_bearbeiten ---------------------------------------------
