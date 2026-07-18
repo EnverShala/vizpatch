@@ -737,6 +737,120 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
     }
 
 
+def _build_new_draft(text: str, betreff: str, an: str = "", reply_to=None, von: str = "") -> tuple[bytes, str, str]:
+    """Baut einen NEUEN Entwurf als RFC-5322-Bytes für IMAP APPEND (kein Sende-Pfad,
+    kein SMTP — D-77). Bei `reply_to` (imap-tools MailMessage der Bezugs-Mail) werden
+    Empfänger (An = Absender des Originals), Betreff ('Re: …') und Threading-Header
+    (In-Reply-To/References aus Message-ID + References des Originals) automatisch
+    gesetzt, sofern nicht explizit überschrieben. Gibt (bytes, effektiver_betreff,
+    effektiver_empfaenger) zurück."""
+    to_addr = (an or "").strip()
+    subject = (betreff or "").strip()
+    domain = (von or "").split("@")[-1] if "@" in (von or "") else "localhost"
+
+    msg = EmailMessage()
+    if (von or "").strip():
+        msg["From"] = von.strip()
+
+    if reply_to is not None:
+        orig_from = (getattr(reply_to, "from_", "") or "").strip()
+        if not to_addr:
+            to_addr = orig_from
+        if not subject:
+            orig_subj = (getattr(reply_to, "subject", "") or "").strip()
+            subject = orig_subj if orig_subj.lower().startswith("re:") else (f"Re: {orig_subj}".strip() if orig_subj else "")
+        orig_mid = ""
+        orig_refs = ""
+        try:
+            orig_mid = (reply_to.headers.get("message-id", ("",)) or ("",))[0]
+            orig_refs = (reply_to.headers.get("references", ("",)) or ("",))[0]
+        except Exception:
+            pass
+        if orig_mid:
+            msg["In-Reply-To"] = orig_mid
+            msg["References"] = f"{orig_refs} {orig_mid}".strip() if orig_refs else orig_mid
+
+    if to_addr:
+        msg["To"] = to_addr
+    msg["Subject"] = subject
+    msg["Date"] = format_datetime(datetime.now(timezone.utc))
+    msg["Message-ID"] = make_msgid(domain=domain or "localhost")
+    msg.set_content(text, subtype="plain", charset="utf-8")
+    return bytes(msg), subject, to_addr
+
+
+def entwurf_erstellen(
+    agent_id: str,
+    text: str,
+    betreff: str = "",
+    an: str | None = None,
+    in_reply_to_uid: str | None = None,
+    quell_ordner: str = "INBOX",
+) -> dict:
+    """Handelndes Werkzeug (CTOOL-03): legt einen NEUEN Entwurf im (erkannten)
+    Entwürfe-Ordner an (IMAP APPEND mit `\\Draft`-Flag) — z.B. um einen im Chat
+    verfassten Antworttext als echten Entwurf zu speichern. Kein Senden (D-77).
+
+    Ist `in_reply_to_uid` gesetzt, wird die Bezugs-Mail aus `quell_ordner` (Standard
+    INBOX) gelesen und Empfänger/Betreff/Threading automatisch abgeleitet (Antwort im
+    selben Thread). Sonst müssen `an`/`betreff` angegeben werden. Fehler -> dict mit
+    `fehler`-Feld. `ValueError` bei invalidem `agent_id` propagiert unverändert."""
+    text_str = (text or "").strip()
+    if not text_str:
+        return {"fehler": "Kein Text angegeben."}
+
+    drafts_folder = None
+    is_reply = False
+    try:
+        with open_agent_mailbox(agent_id) as mailbox:
+            env = read_env_raw(agent_id)
+            own = (env.get("IMAP_USER") or "").strip()
+            drafts_folder = _resolve_drafts_folder(mailbox, env)
+
+            reply_to = None
+            uid_str = str(in_reply_to_uid or "").strip()
+            if uid_str:
+                is_reply = True
+                folder = (quell_ordner or "INBOX").strip() or "INBOX"
+                try:
+                    mailbox.folder.set(folder)
+                    msgs = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+                except Exception as e:
+                    return {"fehler": f"Lesen der Bezugs-Mail uid={uid_str} in '{folder}' fehlgeschlagen: {e}"}
+                if not msgs:
+                    return {"fehler": f"Bezugs-Mail uid={uid_str} in '{folder}' nicht gefunden."}
+                reply_to = msgs[0]
+
+            new_bytes, eff_betreff, eff_an = _build_new_draft(
+                text_str, betreff or "", an=an or "", reply_to=reply_to, von=own
+            )
+            try:
+                mailbox.append(new_bytes, folder=drafts_folder, flag_set=[MailMessageFlags.DRAFT])
+            except Exception as e:
+                logger.warning(
+                    "entwurf_erstellen_append_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Ablegen des Entwurfs im Ordner '{drafts_folder}' fehlgeschlagen: {e}"}
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("entwurf_erstellen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+
+    logger.info(
+        "entwurf_erstellt",
+        extra={"agent_id": agent_id, "drafts_folder": drafts_folder, "antwort": is_reply},
+    )
+    return {
+        "ok": True,
+        "ordner": drafts_folder,
+        "betreff": eff_betreff,
+        "an": eff_an,
+        "antwort_auf_uid": uid_str if is_reply else None,
+    }
+
+
 # --- CTOOL-04 (D-76, HIGH RISK): Bestätigungs-Token für destruktive Werkzeuge ---
 #
 # W2-Hardening (Plan-Checker-Warnung zu 09-04): ein bloßes `confirmed=true`, das
@@ -1101,6 +1215,44 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
+        "name": "entwurf_erstellen",
+        "description": (
+            "Legt einen NEUEN E-Mail-Entwurf im Entwürfe-Ordner an (IMAP APPEND, "
+            "kein Senden). Nutze dies, um einen im Chat verfassten Antwort-/Mailtext "
+            "als echten Entwurf zu speichern, den der Betreiber später prüft und "
+            "freigibt. Für eine Antwort auf eine bestimmte Mail 'in_reply_to_uid' (und "
+            "ggf. 'quell_ordner', Standard INBOX) angeben — Empfänger, Betreff ('Re: "
+            "…') und Threading werden dann automatisch gesetzt. Sonst 'an' und "
+            "'betreff' angeben. Sendet NICHTS."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Der Nachrichtentext des Entwurfs.",
+                },
+                "betreff": {
+                    "type": "string",
+                    "description": "Betreff. Bei Antwort optional (wird aus der Bezugs-Mail als 'Re: …' abgeleitet).",
+                },
+                "an": {
+                    "type": "string",
+                    "description": "Empfänger-Adresse. Bei Antwort optional (wird aus der Bezugs-Mail übernommen).",
+                },
+                "in_reply_to_uid": {
+                    "type": "string",
+                    "description": "Optional: uid der Mail, auf die geantwortet wird (für Empfänger/Betreff/Threading).",
+                },
+                "quell_ordner": {
+                    "type": "string",
+                    "description": "Ordner der Bezugs-Mail für 'in_reply_to_uid' (Standard INBOX).",
+                },
+            },
+            "required": ["text"],
+        },
+    },
+    {
         "name": "mail_in_papierkorb",
         "description": (
             "Verschiebt eine Mail in den Papierkorb (KEIN endgültiges Löschen — "
@@ -1192,6 +1344,7 @@ TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "entwuerfe_auflisten": entwuerfe_auflisten,
     "entwurf_lesen": entwurf_lesen,
     "entwurf_bearbeiten": entwurf_bearbeiten,
+    "entwurf_erstellen": entwurf_erstellen,
     "mail_in_papierkorb": mail_in_papierkorb,
     "entwurf_in_papierkorb": entwurf_in_papierkorb,
 }

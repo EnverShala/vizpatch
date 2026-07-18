@@ -217,6 +217,7 @@ def test_tool_handlers_registry_contains_all_registered_tools():
         "entwuerfe_auflisten",
         "entwurf_lesen",
         "entwurf_bearbeiten",
+        "entwurf_erstellen",
         "mail_in_papierkorb",
         "entwurf_in_papierkorb",
     }
@@ -1459,8 +1460,103 @@ def test_tool_handlers_whitelist_is_exactly_the_seven_allowed_tools_no_send_tool
         "entwuerfe_auflisten",
         "entwurf_lesen",
         "entwurf_bearbeiten",
+        "entwurf_erstellen",
         "mail_in_papierkorb",
         "entwurf_in_papierkorb",
     }
     assert set(chat_tools.TOOL_HANDLERS.keys()) == allowed
     assert {schema["name"] for schema in chat_tools.TOOL_SCHEMAS} == allowed
+
+
+# --- entwurf_erstellen (CTOOL-03): neuen Entwurf im Entwürfe-Ordner anlegen ---
+
+def test_entwurf_erstellen_standalone_appends_draft(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_erstellen(
+        "info", text="Guten Tag, gerne helfe ich weiter.", betreff="Ihre Anfrage", an="kunde@example.com"
+    )
+
+    assert "fehler" not in result and result["ok"] is True
+    assert result["ordner"] == "Entwürfe"
+    mock_mailbox.append.assert_called_once()
+    appended = mock_mailbox.append.call_args.args[0]
+    assert b"Guten Tag, gerne helfe ich weiter." in appended
+    assert b"kunde@example.com" in appended
+    assert b"Ihre Anfrage" in appended
+    # Kein Sende-Pfad: nur APPEND, kein move/delete/expunge
+    mock_mailbox.expunge.assert_not_called()
+
+
+def test_entwurf_erstellen_reply_sets_recipient_subject_and_threading(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(
+        uid="5",
+        subject="Frage zu Öffnungszeiten",
+        from_="kunde@example.com",
+        headers={
+            "message-id": ("<orig-5@example.com>",),
+            "references": ("<thread-a@example.com>",),
+        },
+    )
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_erstellen("info", text="Wir haben Mo–Fr 8–20 Uhr geöffnet.", in_reply_to_uid="5")
+
+    assert "fehler" not in result and result["ok"] is True
+    assert result["antwort_auf_uid"] == "5"
+    assert result["betreff"] == "Re: Frage zu Öffnungszeiten"
+    assert result["an"] == "kunde@example.com"
+    appended = mock_mailbox.append.call_args.args[0]
+    assert b"<orig-5@example.com>" in appended          # In-Reply-To + References (ASCII, roh)
+    assert b"In-Reply-To" in appended
+    assert b"References" in appended
+    # Betreff wird MIME-kodiert (Umlaut) -> per Parsen prüfen, nicht per Rohbytes
+    import email as _email
+    parsed = _email.message_from_bytes(appended)
+    assert str(_email.header.make_header(_email.header.decode_header(parsed["Subject"]))) == "Re: Frage zu Öffnungszeiten"
+    assert parsed["To"] == "kunde@example.com"
+
+
+def test_entwurf_erstellen_missing_text_returns_error_no_append(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_erstellen("info", text="   ")
+    assert "fehler" in result
+
+
+def test_entwurf_erstellen_reply_uid_not_found_returns_error_no_append(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])  # fetch liefert nichts
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_erstellen("info", text="Antwort", in_reply_to_uid="999")
+    assert "fehler" in result
+    mock_mailbox.append.assert_not_called()
+
+
+def test_entwurf_erstellen_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.entwurf_erstellen("../evil", text="Text")
