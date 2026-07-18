@@ -66,23 +66,60 @@ def _msg(
     return m
 
 
-def _fake_mailbox(messages=None, login_raises=False, fetch_raises=False, folder_set_raises=False):
+def _fake_mailbox(
+    messages=None,
+    login_raises=False,
+    fetch_raises=False,
+    folder_set_raises=False,
+    per_folder_messages=None,
+    folder_set_raises_for=None,
+    fetch_raises_for=None,
+):
     """Live-Bug-Fix-Nachweis (`_move_to_trash` verifiziert jetzt per Fetch, ob eine
     uid nach `mailbox.move()` noch im Quell-Ordner liegt): der `fetch`-Mock liefert
     standardmäßig `messages`, SOLANGE `mailbox.move` noch nicht aufgerufen wurde —
     genau wie eine echte Quelle vor dem Move — und danach eine LEERE Liste, wie eine
     erfolgreich bereinigte Quelle NACH dem Move (kein Fallback-`delete()` nötig).
     Tests, die den Live-IONOS-Bug (Quelle bleibt trotz Move stehen) nachbilden
-    wollen, überschreiben `mailbox.fetch.side_effect` gezielt selbst."""
+    wollen, überschreiben `mailbox.fetch.side_effect` gezielt selbst.
+
+    Für die "alle Ordner"-Suche (`mails_suchen`, `ordner_auflisten`) zusätzlich
+    per-Ordner konfigurierbar: `per_folder_messages` (dict Ordnername ->
+    Nachrichtenliste, ausgewertet gegen den zuletzt per `folder.set()`
+    selektierten Ordner) sowie `folder_set_raises_for`/`fetch_raises_for` (Sets
+    von Ordnernamen, bei denen NUR dieser eine Ordner beim Selektieren bzw.
+    Fetchen fehlschlägt — simuliert einen einzelnen kaputten Ordner inmitten
+    einer sonst funktionierenden Ordnerliste, ohne die bestehenden globalen
+    `folder_set_raises`/`fetch_raises`-Flags zu verändern)."""
     mailbox = MagicMock()
     mailbox.__enter__ = MagicMock(return_value=mailbox)
     mailbox.__exit__ = MagicMock(return_value=False)
     if login_raises:
         mailbox.login.side_effect = RuntimeError("auth failed")
-    if folder_set_raises:
-        mailbox.folder.set.side_effect = RuntimeError("no such mailbox")
+
+    current_folder = {"name": None}
+
+    def _folder_set_side_effect(name, *_args, **_kwargs):
+        if folder_set_raises:
+            raise RuntimeError("no such mailbox")
+        if folder_set_raises_for and name in folder_set_raises_for:
+            raise RuntimeError(f"no such mailbox: {name}")
+        current_folder["name"] = name
+
+    mailbox.folder.set.side_effect = _folder_set_side_effect
+
     if fetch_raises:
         mailbox.fetch.side_effect = RuntimeError("search failed")
+    elif per_folder_messages is not None or fetch_raises_for:
+        def _fetch_side_effect(*_args, **_kwargs):
+            name = current_folder["name"]
+            if fetch_raises_for and name in fetch_raises_for:
+                raise RuntimeError(f"search failed: {name}")
+            if mailbox.move.called:
+                return []
+            return list((per_folder_messages or {}).get(name, []))
+
+        mailbox.fetch.side_effect = _fetch_side_effect
     else:
         msgs = list(messages or [])
 
@@ -174,6 +211,7 @@ def test_tool_handlers_registry_contains_all_registered_tools():
     import src.chat_tools as chat_tools
 
     expected = {
+        "ordner_auflisten",
         "mails_suchen",
         "mail_lesen",
         "entwuerfe_auflisten",
@@ -1415,6 +1453,7 @@ def test_tool_handlers_whitelist_is_exactly_the_seven_allowed_tools_no_send_tool
     import src.chat_tools as chat_tools
 
     allowed = {
+        "ordner_auflisten",
         "mails_suchen",
         "mail_lesen",
         "entwuerfe_auflisten",
