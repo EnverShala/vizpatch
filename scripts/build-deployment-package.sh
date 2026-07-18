@@ -59,8 +59,15 @@ docker save "${AGENT_IMAGE_TAG}" -o "${DIST_DIR}/${AGENT_TAR}"
 echo "==> docker save WebUI -> Tarball"
 docker save "${WEBUI_IMAGE_TAG}" -o "${DIST_DIR}/${WEBUI_TAR}"
 
-echo "==> docker-compose.yml kopieren (Phase-4-Compose mit beiden Services)"
-cp deployment/docker-compose.phase4.yml "${DIST_DIR}/docker-compose.yml"
+echo "==> docker-compose.yml kopieren + Image-Tags auf ${VERSION} umschreiben"
+# Die Quell-Vorlage hat feste Image-Tags; hier auf die tatsächlich gebaute
+# VERSION umschreiben, sonst startet das Paket veraltete Images (Bug bis v1.4.0).
+sed -E "s#(vizpatch(-webui)?):v[0-9]+\.[0-9]+\.[0-9]+#\1:${VERSION}#g" \
+  deployment/docker-compose.phase4.yml > "${DIST_DIR}/docker-compose.yml"
+# Verifikation: die erwarteten Tags müssen jetzt drinstehen
+grep -q "vizpatch:${VERSION}" "${DIST_DIR}/docker-compose.yml" \
+  && grep -q "vizpatch-webui:${VERSION}" "${DIST_DIR}/docker-compose.yml" \
+  || { echo "FEHLER: Image-Tag-Rewrite auf ${VERSION} fehlgeschlagen" >&2; exit 1; }
 
 echo "==> Prompts kopieren (Agent-Prompts + WebUI context-seed.txt)"
 cp agent/prompts/*.txt "${DIST_DIR}/prompts/"
