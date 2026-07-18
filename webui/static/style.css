@@ -160,6 +160,14 @@ code {
   background: #ccc;
 }
 
+/* "Agent umbenennen" / "Agent löschen" (index.html, .agent-picker) sind reine
+ * <details><summary>-Aufklapper ohne eigene Klasse — nicht alle Browser geben
+ * <summary> per UA-Default einen Zeigefinger-Cursor, daher hier gezielt gesetzt
+ * (analog details.ki-helper/.danger-zone details weiter unten in dieser Datei). */
+.agent-picker details summary {
+  cursor: pointer;
+}
+
 .config-warning {
   background: #fff3cd;
   border-left: 4px solid #ffc107;
