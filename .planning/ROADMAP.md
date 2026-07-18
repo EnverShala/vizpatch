@@ -344,6 +344,29 @@ Plans:
 
 **Requirements mapped:** CTOOL-01, CTOOL-02, CTOOL-03, CTOOL-04, CTOOL-05
 
+**Plans:** 5 plans (5 waves, sequentiell — alle erweitern das neue webui/src/chat_tools.py + Tests, echte Datei-Abhaengigkeit; geplant 2026-07-18)
+
+Plans:
+**Wave 1**
+
+- [ ] 09-01-PLAN.md — Walking Skeleton: Anthropic-Tool-Use-Schleife (run_agentic_chat) + mails_suchen + per-Agent-IMAP-Helfer + SSE-Tool-Aktivitaet + OpenAI/Google-Fallback (CTOOL-01, CTOOL-02)
+
+**Wave 2** *(blocked on 09-01)*
+
+- [ ] 09-02-PLAN.md — restliche read-only-Werkzeuge: mail_lesen, entwuerfe_auflisten, entwurf_lesen + Drafts-Ordner-Erkennung (CTOOL-02)
+
+**Wave 3** *(blocked on 09-02)*
+
+- [ ] 09-03-PLAN.md — entwurf_bearbeiten (Threading erhalten, neue Fassung in Drafts, Original in Papierkorb) + \Trash-Erkennung + Move-Helfer ohne Expunge (CTOOL-03)
+
+**Wave 4** *(blocked on 09-03)*
+
+- [ ] 09-04-PLAN.md — destruktive Werkzeuge mail_in_papierkorb/entwurf_in_papierkorb mit confirmed=true-Gate + Protokollierung + Zwei-Schritt-Bestaetigungs-Flow (CTOOL-04)
+
+**Wave 5** *(blocked on 09-04)*
+
+- [ ] 09-05-PLAN.md — struktureller Kein-Auto-Send-Waechter + Datenschutz-Ziffer-6/AVV-Paragraph-6.2-Angleichung + Phasen-Verifikation (CTOOL-05)
+
 **Hauptrisiken:**
 
 - Destruktive Aktion auf echte Kundenmails durch KI → Papierkorb statt Expunge, harte Bestätigungs-Gate im Backend (Tool löscht nur mit `confirmed=true` nach expliziter Nutzer-Zusage), Protokollierung.
