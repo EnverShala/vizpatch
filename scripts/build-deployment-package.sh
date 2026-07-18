@@ -72,6 +72,10 @@ cp deployment/vizionists-test-env.example             "${DIST_DIR}/deployment/vi
 cp deployment/context.md.tankstelle-erstversion.md    "${DIST_DIR}/deployment/context.md.tankstelle-erstversion.md"
 cp deployment/context.md.vizionists-test.md           "${DIST_DIR}/deployment/context.md.vizionists-test.md"
 
+echo "==> Outlook-Add-in-Doku kopieren (Phase 8: HTTPS-Runbook + Reverse-Proxy)"
+cp deployment/README.addin.md                         "${DIST_DIR}/deployment/README.addin.md"
+cp deployment/Caddyfile.example                        "${DIST_DIR}/deployment/Caddyfile.example"
+
 echo "==> install-autostart.sh kopieren"
 cp scripts/install-autostart.sh "${DIST_DIR}/scripts/install-autostart.sh"
 chmod +x "${DIST_DIR}/scripts/install-autostart.sh"
