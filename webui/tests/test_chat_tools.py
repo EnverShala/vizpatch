@@ -155,10 +155,18 @@ def test_mails_suchen_respects_limit_and_folder(mocker, tmp_path, monkeypatch):
     assert result["ordner"] == "Archiv"
 
 
-def test_tool_handlers_registry_contains_all_readonly_tools():
+def test_tool_handlers_registry_contains_all_registered_tools():
+    """Erweitert um `entwurf_bearbeiten` (09-03, CTOOL-03) — nicht mehr rein
+    read-only, aber derselbe Registry-Kontrakt."""
     import src.chat_tools as chat_tools
 
-    expected = {"mails_suchen", "mail_lesen", "entwuerfe_auflisten", "entwurf_lesen"}
+    expected = {
+        "mails_suchen",
+        "mail_lesen",
+        "entwuerfe_auflisten",
+        "entwurf_lesen",
+        "entwurf_bearbeiten",
+    }
     assert set(chat_tools.TOOL_HANDLERS.keys()) == expected
     schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
     assert schema_names == expected
@@ -496,6 +504,119 @@ def test_move_to_trash_propagates_trash_folder_not_found():
 
     with pytest.raises(chat_tools.TrashFolderNotFound):
         chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+
+# --- 09-03 Task 2: entwurf_bearbeiten ---------------------------------------------
+
+
+def test_entwurf_bearbeiten_appends_new_version_preserving_threading_and_moves_original(
+    mocker, tmp_path, monkeypatch
+):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    headers = {
+        "in-reply-to": ("<orig-msgid@example.com>",),
+        "references": ("<thread-1@example.com> <orig-msgid@example.com>",),
+    }
+    original = _msg(
+        uid="7",
+        subject="Re: Frage",
+        from_="info@ionos.de",
+        to=("kunde@example.com",),
+        headers=headers,
+    )
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten("info", uid="7", neuer_text="Neuer Antworttext.")
+
+    assert "fehler" not in result
+    mock_mailbox.append.assert_called_once()
+    appended_bytes = mock_mailbox.append.call_args.args[0]
+    assert b"Neuer Antworttext." in appended_bytes
+    assert b"<orig-msgid@example.com>" in appended_bytes
+    assert b"In-Reply-To" in appended_bytes
+    assert b"References" in appended_bytes
+    mock_mailbox.move.assert_called_once_with(["7"], "Papierkorb")
+    mock_mailbox.expunge.assert_not_called()
+    mock_mailbox.delete.assert_not_called()
+
+
+def test_entwurf_bearbeiten_no_trash_folder_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten("info", uid="7", neuer_text="Neuer Text.")
+
+    assert "fehler" in result
+    # Reihenfolge APPEND->MOVE (T-09-13): die neue Fassung liegt bereits sicher,
+    # bevor der fehlende Papierkorb den Move-Schritt verhindert.
+    mock_mailbox.append.assert_called_once()
+    mock_mailbox.move.assert_not_called()
+
+
+def test_entwurf_bearbeiten_unknown_uid_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten("info", uid="999", neuer_text="Text.")
+
+    assert "fehler" in result
+    mock_mailbox.append.assert_not_called()
+
+
+def test_entwurf_bearbeiten_missing_text_returns_error_dict_no_crash(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten("info", uid="7", neuer_text="")
+
+    assert "fehler" in result
+
+
+def test_entwurf_bearbeiten_invalid_agent_id_raises_value_error(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    with pytest.raises(ValueError):
+        chat_tools.entwurf_bearbeiten("../evil", uid="7", neuer_text="Text")
+
+
+def test_entwurf_bearbeiten_no_smtp_or_send_call_in_source():
+    from pathlib import Path
+
+    source_path = Path(__file__).resolve().parent.parent / "src" / "chat_tools.py"
+    text = source_path.read_text(encoding="utf-8")
+
+    assert "smtplib" not in text
+    assert ".send(" not in text
+    assert "send_message" not in text
+
+
+def test_entwurf_bearbeiten_registered_in_tool_handlers_and_schemas():
+    import src.chat_tools as chat_tools
+
+    assert "entwurf_bearbeiten" in chat_tools.TOOL_HANDLERS
+    schema_names = {schema["name"] for schema in chat_tools.TOOL_SCHEMAS}
+    assert "entwurf_bearbeiten" in schema_names
 
 
 # --- Task 2: run_agentic_chat — Anthropic-Tool-Use-Schleife + Fallback -------------

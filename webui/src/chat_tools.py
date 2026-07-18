@@ -25,10 +25,13 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
+from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid
 from typing import Callable, Iterator
 
 from anthropic import Anthropic
-from imap_tools import AND, MailBox, MailBoxUnencrypted
+from imap_tools import AND, MailBox, MailBoxUnencrypted, MailMessageFlags
 
 from . import chat, crypto, pii
 from .agents_io import read_env_raw
@@ -426,6 +429,127 @@ def entwurf_lesen(agent_id: str, uid: str) -> dict:
     }
 
 
+def _build_edited_draft(original, neuer_text: str, betreff: str) -> bytes:
+    """RFC-5322-Rebuild analog `agent/src/draft.py::build_reply_draft` (D-75): From/To
+    aus dem Original-Entwurf übernommen, NEUES Message-ID, aber In-Reply-To/
+    References UNVERÄNDERT aus dem Original (Threading bleibt erhalten, T-09-11).
+    Reine Bytes für IMAP APPEND — kein Sende-Pfad, kein SMTP (D-77)."""
+    msg = EmailMessage()
+    msg["From"] = original.from_ or ""
+    msg["To"] = _mail_recipients(original)
+    msg["Subject"] = betreff
+    msg["Date"] = format_datetime(datetime.now(timezone.utc))
+    sender_domain = (original.from_ or "").split("@")[-1] if "@" in (original.from_ or "") else "localhost"
+    msg["Message-ID"] = make_msgid(domain=sender_domain)
+
+    threading_headers = _threading_headers(original)
+    if threading_headers["in_reply_to"]:
+        msg["In-Reply-To"] = threading_headers["in_reply_to"]
+    if threading_headers["references"]:
+        msg["References"] = threading_headers["references"]
+
+    msg.set_content(neuer_text, subtype="plain", charset="utf-8")
+    return bytes(msg)
+
+
+def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: str | None = None) -> dict:
+    """Handelndes Werkzeug (D-75, CTOOL-03): baut aus dem bestehenden Entwurf (`uid`)
+    eine neue Fassung mit `neuer_text` (optional `neuer_betreff`) — Threading-Header
+    (In-Reply-To/References) bleiben UNVERÄNDERT erhalten (`_build_edited_draft`,
+    T-09-11) —, APPENDet sie in den (erkannten) Drafts-Ordner mit `\\Draft`-Flag und
+    verschiebt ERST DANACH den ALTEN Entwurf per `_move_to_trash` in den Papierkorb
+    (D-76, Reihenfolge APPEND→MOVE, T-09-13: alter Entwurf verschwindet nie, bevor
+    die neue Fassung sicher liegt). Kein Senden (D-77) — reines IMAP APPEND/MOVE.
+
+    Original nicht gefunden / Drafts-/Trash-Ordner nicht verfügbar -> dict mit
+    `fehler`-Feld, kein Teil-Zustand ohne Meldung. `ValueError` bei invalidem
+    `agent_id` propagiert unverändert (konsistent mit den übrigen Werkzeugen)."""
+    uid_str = str(uid or "").strip()
+    if not uid_str:
+        return {"fehler": "Keine uid angegeben."}
+    neuer_text_str = (neuer_text or "").strip()
+    if not neuer_text_str:
+        return {"fehler": "Kein neuer Text angegeben."}
+
+    drafts_folder = None
+    try:
+        with open_agent_mailbox(agent_id) as mailbox:
+            env = read_env_raw(agent_id)
+            drafts_folder = _resolve_drafts_folder(mailbox, env)
+            try:
+                mailbox.folder.set(drafts_folder)
+            except Exception as e:
+                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar: {e}"}
+            try:
+                messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+            except Exception as e:
+                logger.warning(
+                    "entwurf_bearbeiten_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Lesen des Original-Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+            if not messages:
+                return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
+
+            original = messages[0]
+            neuer_betreff_str = (neuer_betreff or "").strip() or (original.subject or "")
+            new_bytes = _build_edited_draft(original, neuer_text_str, neuer_betreff_str)
+
+            try:
+                mailbox.append(new_bytes, folder=drafts_folder, flag_set=[MailMessageFlags.DRAFT])
+            except Exception as e:
+                logger.warning(
+                    "entwurf_bearbeiten_append_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Ablegen der neuen Fassung fehlgeschlagen: {e}"}
+
+            try:
+                trash_folder = _move_to_trash(mailbox, uid_str, drafts_folder)
+            except TrashFolderNotFound as e:
+                logger.warning(
+                    "entwurf_bearbeiten_trash_not_found", extra={"agent_id": agent_id, "error": str(e)}
+                )
+                return {
+                    "fehler": (
+                        f"Neue Fassung liegt bereits in '{drafts_folder}', aber kein "
+                        f"Papierkorb-Ordner erkannt — der alte Entwurf uid={uid_str} "
+                        f"wurde NICHT verschoben: {e}"
+                    )
+                }
+            except Exception as e:
+                logger.warning("entwurf_bearbeiten_move_failed", extra={"agent_id": agent_id, "error": str(e)})
+                return {
+                    "fehler": (
+                        f"Neue Fassung liegt bereits in '{drafts_folder}', aber das "
+                        f"Verschieben des alten Entwurfs uid={uid_str} in den Papierkorb "
+                        f"ist fehlgeschlagen: {e}"
+                    )
+                }
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("entwurf_bearbeiten_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+
+    logger.info(
+        "entwurf_bearbeitet",
+        extra={
+            "agent_id": agent_id,
+            "alte_uid": uid_str,
+            "drafts_folder": drafts_folder,
+            "trash_folder": trash_folder,
+        },
+    )
+    return {
+        "ok": True,
+        "alte_uid": uid_str,
+        "ordner": drafts_folder,
+        "papierkorb_ordner": trash_folder,
+        "betreff": neuer_betreff_str,
+    }
+
+
 # Erweiterbares Register (D-73-Kontrakt) — 09-02…09-04 hängen sich hier nur an.
 TOOL_SCHEMAS: list[dict] = [
     {
@@ -519,6 +643,35 @@ TOOL_SCHEMAS: list[dict] = [
             "required": ["uid"],
         },
     },
+    {
+        "name": "entwurf_bearbeiten",
+        "description": (
+            "Bearbeitet einen bestehenden Entwurf: legt eine neue Fassung mit dem "
+            "angegebenen Text (und optional neuem Betreff) im Entwürfe-Ordner ab — "
+            "das Threading (In-Reply-To/References) des Originals bleibt erhalten, "
+            "sodass die neue Fassung im selben Mail-Thread bleibt. Der alte Entwurf "
+            "wird in den Papierkorb verschoben (kein endgültiges Löschen). Sendet "
+            "NICHTS. Nur auf ausdrückliche Anweisung des Betreibers nutzen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "uid": {
+                    "type": "string",
+                    "description": "uid des zu bearbeitenden Entwurfs (aus entwuerfe_auflisten/entwurf_lesen).",
+                },
+                "neuer_text": {
+                    "type": "string",
+                    "description": "Der neue Antworttext (ersetzt den bisherigen Entwurfstext vollständig).",
+                },
+                "neuer_betreff": {
+                    "type": "string",
+                    "description": "Optional: neuer Betreff. Leer lassen, um den bisherigen Betreff zu behalten.",
+                },
+            },
+            "required": ["uid", "neuer_text"],
+        },
+    },
 ]
 
 TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
@@ -526,6 +679,7 @@ TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "mail_lesen": mail_lesen,
     "entwuerfe_auflisten": entwuerfe_auflisten,
     "entwurf_lesen": entwurf_lesen,
+    "entwurf_bearbeiten": entwurf_bearbeiten,
 }
 
 
