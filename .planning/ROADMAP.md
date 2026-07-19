@@ -18,7 +18,7 @@
 | 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
 | 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ⏸️ OPTIONAL / ON HOLD (2026-07-19) — Code-komplett, aber Add-in läuft nur auf M365/Exchange, nicht auf IMAP; Umsetzung offen bis Kunden-Postfachtyp geklärt |
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
-| 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Variante A, ~0,5–1 Tag |
+| 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | 📋 4 plans, 4 waves — geplant 2026-07-19 |
 | 11 | Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) | v1.2–v1.6 komplett bei Vizionists gegen Test-Postfach durchtesten + Update/Rollback lokal proben, damit der Kunden-Rollout ein Nicht-Ereignis wird | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
@@ -414,6 +414,26 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
    personenbezogen (ErwG 26) — die endgültige „AVV-nicht-nötig"-Aussage trifft der/die Datenschutzbeauftragte.
 
 **Requirements mapped:** ANON-01, ANON-02, ANON-03, ANON-04, ANON-05 (Variante A); ANON-06 = deferred (NER)
+
+**Plans:** 4 plans (Wave 1: 10-01 | Wave 2: 10-02 | Wave 3: 10-03 | Wave 4: 10-04 — sequentiell entlang der Abhängigkeitskette pii.py-Engine → chat.py-Helfer → chat_tools.py-Integration → DSGVO/AVV-Doku)
+
+Plans:
+
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — Reversible Anonymizer-Engine in pii.py (agent + byte-identische webui-Kopie) + Agent-Pfade classify/generate + Flag-Wiederverwendung ENABLE_PII_REDACTION (ANON-01, ANON-02, ANON-03, ANON-04, ANON-05)
+
+**Wave 2** *(blocked on 10-01)*
+
+- [ ] 10-02-PLAN.md — WebUI Stil-Extraktion (Anonymize-vor-Truncate-Fix) + chat.py deanonymize_stream-Puffer + anonymizer-fähiges build_chat_prompt (ANON-03, ANON-04)
+
+**Wave 3** *(blocked on 10-02)*
+
+- [ ] 10-03-PLAN.md — Agentische Tool-Schleife chat_tools.py: geteilte Anonymizer-Instanz, De-Anon von Text-Blöcken UND Tool-Argumenten (kein Platzhalter-Leck in echten Draft), Fallback-Chat-Streaming (ANON-03, ANON-04)
+
+**Wave 4** *(blocked on 10-03)*
+
+- [ ] 10-04-PLAN.md — DSGVO/AVV-Neubewertung dokumentiert (Datenschutzerklärung + AVV) + ehrlicher Restrisiko-Hinweis + Flag-Doku + menschlicher Abnahme-Checkpoint (ANON-05) — autonomous: false
 
 **Hauptrisiken (Variante A):**
 
