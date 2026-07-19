@@ -415,13 +415,13 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 
 **Requirements mapped:** ANON-01, ANON-02, ANON-03, ANON-04, ANON-05 (Variante A); ANON-06 = deferred (NER)
 
-**Plans:** 4 plans (Wave 1: 10-01 | Wave 2: 10-02 | Wave 3: 10-03 | Wave 4: 10-04 — sequentiell entlang der Abhängigkeitskette pii.py-Engine → chat.py-Helfer → chat_tools.py-Integration → DSGVO/AVV-Doku)
+**Plans:** 1/4 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Reversible Anonymizer-Engine in pii.py (agent + byte-identische webui-Kopie) + Agent-Pfade classify/generate + Flag-Wiederverwendung ENABLE_PII_REDACTION (ANON-01, ANON-02, ANON-03, ANON-04, ANON-05)
+- [x] 10-01-PLAN.md — Reversible Anonymizer-Engine in pii.py (agent + byte-identische webui-Kopie) + Agent-Pfade classify/generate + Flag-Wiederverwendung ENABLE_PII_REDACTION (ANON-01, ANON-02, ANON-03, ANON-04, ANON-05)
 
 **Wave 2** *(blocked on 10-01)*
 
