@@ -150,11 +150,24 @@
 
 ## v1.6 Requirements (Phase 10 — Reversible Pseudonymisierung vor LLM-Übermittlung)
 
-- [ ] **ANON-01**: Reversible Pseudonymisierungs-Engine (empfohlen: Presidio — Regex-Recognizer + spaCy-NER + Anonymize/Deanonymize) mit lokalem Mapping Platzhalter↔Original, das den Server nie verlässt; erweitert das bestehende `pii.py`
-- [ ] **ANON-02**: Erkennung strukturierter PII per Regex (E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum) UND unstrukturierter per deutschem NER (Person/Firma/Ort); stabile Platzhalter (`[PERSON_1]` …)
+**Scope-Entscheidung 2026-07-19 (Variante A):** Phase 10 = **regex-only, reversibel**, reine `pii.py`-Erweiterung — **kein Presidio, kein spaCy, kein RAM-Problem** (~0,5–1 Tag). Grund: Der Aufwand steckt fast komplett im Namen-Erkennen (NER); strukturierte PII ist per Regex trivial. NER für Namen/Firmen/Orte ist als **Folge-Inkrement (ANON-06)** ausgelagert.
+
+- [ ] **ANON-01**: Reversible Pseudonymisierung als Erweiterung von `pii.py` (stdlib-Regex + Dictionary-Mapping Platzhalter↔Original); Mapping lebt **nur im RAM** pro Request, verlässt den Server nie, wird nach De-Anonymisierung verworfen
+- [ ] **ANON-02**: Erkennung **strukturierter** PII per Regex (E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum); stabile getypte Platzhalter (`[IBAN_1]`, `[EMAIL_1]`, `[TELEFON_1]`, `[KARTE_1]`, `[URL_1]`, `[DATUM_1]`)
 - [ ] **ANON-03**: Integration in ALLE LLM-Pfade — anonymisieren VOR Übermittlung, de-anonymisieren NACH Antwort: Klassifikation, Draft, Stil-Extraktion, Chat, agentische Tool-Ergebnisse
 - [ ] **ANON-04**: De-Anonymisierung stellt Platzhalter in der LLM-Ausgabe korrekt wieder her; Drafts/Antworten enthalten echte Daten, kein Platzhalter-Leck; Mapping wird nie geloggt/übermittelt
-- [ ] **ANON-05**: Erkennungs-Coverage messbar (Precision/Recall an Fixtures), Feature per Flag schaltbar mit Fallback; DSGVO/AVV-Neubewertung dokumentiert (ehrlich: pseudonym ≠ anonym, DSB-Freigabe nötig); RAM-Dimensionierung des NER-Modells beachtet
+- [ ] **ANON-05**: Feature per Flag schaltbar (**Default AN**, „aus" = Agent läuft wie vorher); `context.md`/Firmenwissen wird NICHT maskiert; DSGVO-Hinweis dokumentiert (ehrlich: Namen gehen in Variante A noch ans LLM → pseudonym ≠ anonym, AVV bleibt, DSB-Freigabe)
+- [ ] **ANON-06** *(Folge-Inkrement, deferred)*: NER für **unstrukturierte** PII (Person/Firma/Ort) per kleinem deutschem spaCy-Modell (`de_core_news_sm`, RAM-freundlich); getypte Geschlechts-Tags (`[MANN_1]`/`[FRAU_1]`) mit neutralem Fallback; Erkennungs-Coverage messbar (Precision/Recall an Fixtures); **fail-closed** bei fehlendem Modell; RAM-Dimensionierung beachtet
+
+---
+
+## v1.6 Requirements (Phase 11 — Rollout & Live-Abnahme v1.6)
+
+- [ ] **RLL-01**: Update-Durchstich — v1.2–v1.6-Stand über den WebUI-Update-Mechanismus (Docker `pull`/`load`) beim Kunden aktivieren; Agent + WebUI laufen nach dem Update fehlerfrei; **Rollback-Weg dokumentiert und einmal geprobt**, kein Verlust von SQLite-State/`config`
+- [ ] **RLL-02**: Kern-Regression am echten Postfach — Klassifikation + Draft-Erzeugung funktionieren wie im v1.1-Betrieb (kein Rückschritt); Backfill-Schutz greift
+- [ ] **RLL-03**: Live-Verifikation der neuen Fähigkeiten — Multi-Agent/Multi-LLM (v1.2), Schreibstil (v1.3), Agenten-Chat (v1.3), agentische Postfach-Werkzeuge (v1.5, inkl. Bestätigungs-Gate)
+- [ ] **RLL-04**: Pseudonymisierung live geprüft (v1.6) — strukturierte PII vor dem LLM-Call maskiert, im Draft korrekt zurückübersetzt, kein Platzhalter-Leck, Mapping nie geloggt
+- [ ] **RLL-05**: Kein-Auto-Send über den gesamten neuen Funktionsumfang bestätigt — keine gesendete Mail, alle Ausgaben als Draft/Chat-Antwort zur menschlichen Freigabe
 
 ---
 

@@ -6,51 +6,48 @@
 <domain>
 ## Phase Boundary
 
-Bevor Mail-Inhalt an einen Cloud-LLM-Anbieter geht, wird personenbezogene Datei **lokal und reversibel pseudonymisiert** (Regex + deutsches NER → getypte, nummerierte Platzhalter). Das LLM sieht nur de-identifizierten Text; nach der Antwort werden die Platzhalter aus einem **nur im RAM lebenden Mapping** wieder in die Originalwerte zurückübersetzt. Ziel: der Anbieter erhält faktisch keine echten personenbezogenen Daten → deutliche DSGVO-Risikoreduktion.
+Bevor Mail-Inhalt an einen Cloud-LLM-Anbieter geht, wird **strukturierte** personenbezogene Datei **lokal und reversibel pseudonymisiert** (reine Regex → getypte, nummerierte Platzhalter). Nach der LLM-Antwort werden die Platzhalter aus einem **nur im RAM lebenden Mapping** wieder in die Originalwerte zurückübersetzt. Ziel: die sensibelsten Finanz-/Kontaktdaten (IBAN, Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 
-**Ausdrücklich KEIN Ziel dieser Phase (in der Diskussion geklärt):**
-- **Keine DSGVO-*Anonymisierung*.** Das ist ein rechtlicher Fachbegriff mit sehr hoher Latte (Irreversibilität + Besiegen von Singling-out/Linkability/Inference, WP29 05/2014). Er ist mit unserem Ziel „echte Daten in den Draft zurückschreiben" **strukturell unvereinbar** und durch den fortbestehenden Postfach-Besitz ausgeschlossen. Wir bauen **Pseudonymisierung**, nicht Anonymisierung — das ist die ehrliche Obergrenze und deckt sich mit ErwG 26.
-- **Kein lokales LLM.** Als Root-Lösung („nichts verlässt den Server") geprüft und **verworfen**: kollidiert mit der Ziel-Hardware (Kundenserver min. 512 MB RAM, kein GPU) und der Ökonomie eines Single-Tenant-Rollouts. Siehe Deferred Ideas.
-- **Keine AVV-Abschaffung als Bauannahme.** Ob der Anthropic-AVV wegfallen kann, entscheidet die DSB/ein Anwalt auf Basis dokumentierter Coverage — nicht diese Phase.
+**Scope-Entscheidung 2026-07-19 — VARIANTE A (regex-only, schnell):**
+- **In Scope:** strukturierte PII per Regex — **E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum**. Reine Erweiterung von `agent/src/pii.py`. **Kein Presidio, kein spaCy, keine schwere neue Abhängigkeit, kein RAM-Problem.** Ziel-Aufwand **~0,5–1 Tag**.
+- **NICHT in Scope (→ ANON-06, Folge-Inkrement):** Namen/Firmen/Orte per NER. Grund: Für „ist das ein Name?" gibt es kein Regex → braucht NER, und *dort* sitzt praktisch der gesamte Aufwand (Modell, RAM, Genauigkeit, Fixtures). Bewusst ausgelagert, damit der billige, hochwertige Teil (Finanz-/Kontaktdaten) sofort ausliefert.
+
+**Ehrliche Konsequenz von Variante A:** **Namen gehen weiter ans LLM.** Damit ist der DSGVO-Gewinn kleiner als beim vollen Plan; die „AVV fällt weg"-Story trägt in A **nicht**. A schützt aber sofort die sensibelsten Daten und ist die Basis, auf die ANON-06 (Namen-NER) sauber aufsetzt.
+
+**Weiterhin ausdrücklich KEIN Ziel (aus der Diskussion):**
+- **Keine DSGVO-*Anonymisierung*** — strukturell unvereinbar mit „echte Daten in den Draft zurück" (Reversibilität + Postfach-Besitz). Wir bauen **Pseudonymisierung** (ErwG 26).
+- **Kein lokales LLM** — geprüft, verworfen (Hardware 512 MB / kein GPU, unwirtschaftlich für Single-Tenant). Siehe Deferred.
+- **Keine AVV-Abschaffung als Bauannahme** — DSB/Anwalt entscheidet; in Variante A ohnehin nicht tragfähig (Namen exponiert).
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### Engine & Platzhalter-Stil
-- **D-01: Microsoft Presidio** (`AnonymizerEngine` + `DeanonymizeEngine`) statt Eigenbau-NER — reversibel „out of the box", schnellster/einfachster Weg. Deutsches spaCy-NER. Erweitert das bestehende einseitige `agent/src/pii.py` zum reversiblen Pipeline-Baustein.
-- **D-02: Getypte, nummerierte Tags** (Presidio-Default): `[PERSON_1]`, `[IBAN_1]`, `[ORT_1]`, `[TELEFON_1]` … Die **Nummer trägt die Zuordnung** und überlebt den LLM-Roundtrip → robuste De-Anonymisierung auch bei mehreren Entitäten desselben Typs, ohne Verwechslung.
-- **D-03: Geschlechts-Verfeinerung** für Personen: `[MANN_1]` / `[FRAU_1]` statt neutralem `[PERSON_1]`, damit das LLM grammatisch korrektes Deutsch schreibt (geehrte*r*, er/sie). Geschlecht wird **lokal** abgeleitet: Anrede „Herr/Frau" (primär) › lokaler Vornamen-Lookup (z.B. `gender-guesser`, offline) › sonst neutral. **Kein LLM-Call für die Geschlechtsbestimmung** (isolierter Vorname wäre zwar rechtlich harmlos, aber lokal besser/gratis/deterministisch und philosophiekonform).
-- **D-04: Neutraler Fallback Pflicht** — bei unklarem Geschlecht `[PERSON_1]` (geschlechtsneutral), nie raten. Fehlerkosten sind gering, weil der menschliche Review die Ausgabe-Seite abfängt.
+### Engine & Platzhalter-Stil (Variante A)
+- **D-01: Kein Presidio/spaCy.** `agent/src/pii.py` (heute einseitige Regex-Redaction für IBAN/Kreditkarte) wird zum **reversiblen** Baustein erweitert: stdlib-Regex + Dictionary-Mapping. Das ist der einfachste/schnellste Weg für strukturierte PII (~100–200 Zeilen).
+- **D-02: Getypte, nummerierte Tags** je Entity-Typ: `[EMAIL_1]`, `[TELEFON_1]`, `[IBAN_1]`, `[KARTE_1]`, `[URL_1]`, `[DATUM_1]`. Die **Nummer trägt die Zuordnung** und überlebt den LLM-Roundtrip → robuste De-Anonymisierung auch bei mehreren Werten desselben Typs.
+- **D-03: Tag-Format schlicht halten** (`[IBAN_1]`), damit das LLM die Tokens nicht umformt und die Rück-Ersetzung nicht bricht.
 
 ### Mapping & Reversibilität
-- **D-05: Mapping nur im RAM, pro Request**, sofort nach De-Anonymisierung verworfen. **Nie auf Platte, nie geloggt, nie ans LLM.** Entspricht Presidios nativem `entity_mapping`-Flow — minimale Lebensdauer, gut testbar.
-- **D-06:** Voll reversibel: anonymisieren VOR Übermittlung → LLM → de-anonymisieren NACH der Antwort. Draft/Chat-Antwort enthält die echten Daten, **kein Platzhalter-Leck**.
-- (Design-Notiz: Die „Mapping komplett verwerfen und aus der Mail rekonstruieren"-Variante wurde erwogen — elegant, aber mehr Custom-Arbeit. Für „einfachste Umsetzung" bewusst die RAM-then-delete-Variante gewählt.)
+- **D-04: Mapping nur im RAM, pro Request**, sofort nach De-Anonymisierung verworfen. **Nie auf Platte, nie geloggt, nie ans LLM.**
+- **D-05:** Voll reversibel: anonymisieren VOR Übermittlung → LLM → de-anonymisieren NACH der Antwort. Draft/Chat-Antwort enthält die echten Daten, **kein Platzhalter-Leck**.
 
 ### Integration
-- **D-07:** Einhängen in den **Phase-5-LLM-Adapter** (`agent/src/llm.py`) → greift zentral für **alle** Pfade: Klassifikation (`classify.py`), Draft (`generate.py`), Stil-Extraktion, agentischer Chat (Phase 7/9) und agentische Tool-Ergebnisse.
-
-### Fallback-Policy (NER)
-- **D-08: Fail-closed.** Lädt das NER-Modell nicht oder ist die Erkennung unsicher → **LLM-Pfad stoppt**, Fehler im Status/WebUI, im Zweifel **übermaskieren**. Begründung: Der menschliche Review deckt die **Input-Seite nicht** ab — was hier durchrutscht, ist beim Anbieter und nicht rückholbar. Sicherheit vor Verfügbarkeit.
+- **D-06:** Einhängen in den **Phase-5-LLM-Adapter** (`agent/src/llm.py`) → greift zentral für **alle** Pfade: Klassifikation (`classify.py`), Draft (`generate.py`), Stil-Extraktion, agentischer Chat (Phase 7/9) und agentische Tool-Ergebnisse.
 
 ### Feature-Flag
-- **D-09: Default AN** (`ENABLE_PSEUDONYM=true` o.ä.) — Schutz ab Rollout-Tag 1. Schaltet der Betreiber es **bewusst aus**, läuft der Agent **wie vor Phase 10** (Klartext an die Cloud) — saubere Rückfallebene, **kein** Blockieren. (Nicht die „aus = Agent pausiert"-Variante.)
+- **D-07: Default AN** (`ENABLE_PSEUDONYM=true` o.ä.). „Aus" = Agent läuft **wie vor Phase 10** (Klartext an die Cloud) — saubere Rückfallebene, kein Blockieren. (Hinweis: das für ANON-06 diskutierte **fail-closed** betrifft nur den NER-Fall „Modell lädt nicht" — in Variante A gibt es kein Modell, Regex läuft immer.)
 
 ### Scope der Maskierung
-- **D-10: Nur die eingehende Mail wird maskiert. `context.md` bleibt roh.** Firmenwissen (Firmenname, Öffnungszeiten, Adresse) soll das LLM bewusst kennen — Maskieren wäre ein Kategorienfehler (kontrollierte, gewollte Selbst-Offenlegung vs. unkontrollierter Fremd-Input) und würde die Draft-Qualität zerstören ohne Datenschutz-Gewinn (eigener öffentlicher Name). **Soft-Empfehlung** (Doku/WebUI-Hinweis): keine fremden Personendaten in `context.md` ablegen.
-
-### Entity-Umfang
-- **D-11: Roadmap-Grundstock.** Regex: E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum. NER: Person, Firma, Ort. Weitere Typen (Adresse/PLZ, KFZ-Kennzeichen) **nachrüsten, wenn Fixtures Lücken zeigen** — siehe Deferred.
+- **D-08: Nur die eingehende Mail wird maskiert. `context.md` bleibt roh.** Firmenwissen soll das LLM bewusst kennen; Maskieren wäre Kategorienfehler + Qualitätsverlust ohne Datenschutz-Gewinn. Soft-Empfehlung (Doku/WebUI): kein Fremd-PII in `context.md`.
 
 ### Design-Leitprinzip (aus der Diskussion)
-- **D-12: Rigorosität auf die Input-Seite, Pragmatismus auf die Output-Seite.** Recall der Maskierung **vor** dem Call ist alles (kein menschliches Netz). Ausgabe-Fehler (falsches Geschlecht, übriggebliebener Platzhalter) fängt der menschliche Draft-Review ab → dort **nicht** over-engineeren.
+- **D-09: Rigorosität auf die Input-Seite, Pragmatismus auf die Output-Seite.** Was VOR dem Call übersehen wird, ist beim Anbieter (kein menschliches Netz). Ausgabe-Fehler (übriggebliebener Platzhalter) fängt der menschliche Draft-Review ab → dort nicht over-engineeren.
 
 ### Claude's Discretion
-- NER-Modellgröße (spaCy `sm`/`md`/`lg` vs. Transformer) unter Berücksichtigung des 512-MB-RAM-Konflikts → Research/Planung entscheidet (Genauigkeit vs. Container-Dimensionierung).
-- Konkretes Tag-Format/Delimiter (schlicht halten, damit das LLM Tokens nicht umformt).
-- Fixture-Aufbau & Precision/Recall-Messmethode.
+- Konkrete Regex-Muster & Robustheit (IBAN mit/ohne Leerzeichen, dt. Telefonformate, Datumsformate) — Planung/Research.
+- Reihenfolge/Priorität bei überlappenden Matches (z.B. IBAN vs. Zahlenkette).
 
 </decisions>
 
@@ -60,18 +57,18 @@ Bevor Mail-Inhalt an einen Cloud-LLM-Anbieter geht, wird personenbezogene Datei 
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Phase-Definition & Requirements
-- `.planning/ROADMAP.md` §"Phase 10: Reversible Pseudonymisierung vor LLM-Übermittlung (v1.6)" — Goal, Success Criteria, Hauptrisiken, empfohlener Presidio-Ansatz.
-- `.planning/REQUIREMENTS.md` — ANON-01…ANON-05 (die fünf Requirements dieser Phase).
+- `.planning/ROADMAP.md` §"Phase 10" — Goal, Success Criteria, Variante-A-Scope.
+- `.planning/REQUIREMENTS.md` — ANON-01…ANON-05 (Variante A) + ANON-06 (deferred NER).
 
 ### Bestehender Code, der erweitert/angebunden wird
-- `agent/src/pii.py` — bestehende **einseitige** Regex-Redaction (IBAN/Kreditkarte). Wird zum **reversiblen** Pipeline-Baustein erweitert.
+- `agent/src/pii.py` — bestehende **einseitige** Regex-Redaction (IBAN/Kreditkarte). **Kernstück:** wird zum reversiblen Dictionary-Mapping-Baustein erweitert.
 - `agent/src/llm.py` — Phase-5-LLM-Adapter; zentraler Anknüpfungspunkt (anonymisieren VOR / de-anonymisieren NACH für alle Call-Pfade).
-- `agent/src/classify.py`, `agent/src/generate.py` — Klassifikations- und Draft-Pfad, müssen durch die Pipeline.
-- `agent/src/config.py` — Feature-Flag + Modell-/Ressourcen-Konfiguration.
-- `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/05-CONTEXT.md` — Kontext des LLM-Adapters, in den integriert wird.
+- `agent/src/classify.py`, `agent/src/generate.py` — Klassifikations- und Draft-Pfad.
+- `agent/src/config.py` — Feature-Flag.
+- `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/05-CONTEXT.md` — Kontext des LLM-Adapters.
 
 ### Extern
-- Microsoft Presidio Doku (Analyzer/Anonymizer/Deanonymizer, custom Recognizers, `entity_mapping`) — Framework-Details für den Researcher.
+- Keine schwere externe Abhängigkeit in Variante A (stdlib-Regex genügt). Presidio/spaCy erst relevant für ANON-06.
 
 </canonical_refs>
 
@@ -79,36 +76,36 @@ Bevor Mail-Inhalt an einen Cloud-LLM-Anbieter geht, wird personenbezogene Datei 
 ## Existing Code Insights
 
 ### Reusable Assets
-- `agent/src/pii.py`: vorhandene Regex-Redaction als Ausgangspunkt — Muster für strukturierte PII teils schon da, muss reversibel + typisiert werden.
-- `agent/src/llm.py` (Phase-5-Adapter): eine zentrale Stelle, um alle LLM-Pfade zu umschließen → keine Duplikation über Klassifikation/Draft/Chat.
+- `agent/src/pii.py`: die vorhandenen Regex für IBAN/Kreditkarte sind der direkte Ausgangspunkt — nur um Telefon/E-Mail/URL/Datum + reversibles Dict-Mapping + getypte Tags erweitern.
+- `agent/src/llm.py` (Phase-5-Adapter): eine zentrale Umschließ-Stelle für alle LLM-Pfade → keine Duplikation.
 
 ### Established Patterns
 - Feature-Flags über `.env`/`config.py` (Zero-Config, WebUI schreibt live) — `ENABLE_PSEUDONYM` reiht sich ein.
-- Prompts externalisiert (`prompts/classify.txt`, `prompts/generate.txt`) — Maskierung sitzt VOR der Prompt-Zusammenstellung.
+- Prompts externalisiert — Maskierung sitzt VOR der Prompt-Zusammenstellung.
 
 ### Integration Points
-- Anonymisieren direkt vor jedem LLM-Request im Adapter, de-anonymisieren direkt nach Empfang der Antwort — bevor der Text in Draft/Chat-UI/Tool-Ergebnis fließt.
-- Fail-closed-Verhalten muss sich sauber in den bestehenden Status-/Fehlerpfad (`status_writer.py`, WebUI-Statuskarte) einfügen.
+- Anonymisieren direkt vor jedem LLM-Request im Adapter, de-anonymisieren direkt nach Empfang — bevor der Text in Draft/Chat-UI/Tool-Ergebnis fließt.
 
 </code_context>
 
 <specifics>
 ## Specific Ideas
 
-- Getypte Tags mit Geschlecht (`[MANN_1]`/`[FRAU_1]`) waren **Envers eigener Vorschlag** und sind der bewusste Sweet Spot: nahezu Fake-Wert-Qualität für die deutsche Grammatik, aber ohne gespeichertes Mapping und ohne Personen-Verwechslung.
-- Worked Example, das die Eingangs-Seite definiert:
-  - Original: „ich bin Peter Müller aus Leonberg … IBAN DE89 … Kollegin Frau Sarah Weber … 07152 123456"
-  - Ans LLM: „ich bin [MANN_1] aus [ORT_1] … [IBAN_1] … Kollegin [FRAU_1] … [TELEFON_1]"
+- Worked Example (Variante A):
+  - Original: „ich bin Peter Müller aus Leonberg … IBAN DE89 3704 0044 0532 0130 00 … 07152 123456 … kontakt@kunde.de"
+  - Ans LLM: „ich bin Peter Müller aus Leonberg … [IBAN_1] … [TELEFON_1] … [EMAIL_1]"
+  - (Name + Ort bleiben in A sichtbar — das erledigt erst ANON-06.)
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-- **Local-LLM-Backend / On-Prem-Inferenz** (eigene Phase / weiteres Adapter-Backend, z.B. Ollama/vLLM): löst den Datenschutz an der Wurzel (nichts verlässt den Server), aber unwirtschaftlich für die eine Tankstelle (GPU-Bedarf, Ops, Qualität). Sinnvoll als **Config-Flip für spätere High-Privacy-/Premium-Kunden** dank Phase-5-Adapter. Optionaler Zwischenschritt: **Klassifikation lokal** (kleines Modell, kein Datenabfluss für den Hochvolumen-Filter), nur Draft-Mails pseudonymisiert in die Cloud.
-- **Realistische Fake-Werte (Faker)** statt Tags: erwogen für bessere Prosa, **verworfen** — erzwingt ein gespeichertes Fake↔Original-Mapping und riskiert Verwechslungen/durchgerutschte echt-aussehende Fakes im Draft. Als Rückfalloption dokumentiert, falls getypte Tags die Draft-Qualität spürbar drücken.
-- **Entity-Erweiterungen**: Adresse/PLZ als zusammenhängende Anschrift; deutsche **KFZ-Kennzeichen** (tankstellen-relevant: Tankbetrug, Flottenkunden, Rechnungen). Nachrüsten, sobald Fixtures Erkennungslücken zeigen.
-- **DSGVO/AVV-Neubewertung** (ANON-05): Datenschutzerklärung + AVV-Checkliste aktualisieren; ehrlicher Hinweis „pseudonym ≠ anonym"; Anthropic-AVV **trotzdem unterschreiben** als Netz für Recall-Restrisiko. Endgültige „AVV-nicht-nötig"-Aussage = DSB-Entscheidung. (Teil der Phase, aber Doku-/Rechts-Arbeitspaket, nicht Code.)
+- **ANON-06 — NER für Namen/Firmen/Orte** (das eigentliche Folge-Inkrement): kleines dt. spaCy-Modell (`de_core_news_sm`, ~15 MB, RAM-freundlich) für Person/Firma/Ort; **getypte Geschlechts-Tags** `[MANN_1]`/`[FRAU_1]` aus Anrede/lokalem Vornamen-Lookup mit **neutralem Fallback** `[PERSON_1]` (kein LLM-Call fürs Geschlecht); **Coverage-Fixtures** (Precision/Recall); **fail-closed** bei fehlendem Modell (Modell lädt nicht → LLM-Pfad stoppt); RAM-Dimensionierung vs. 512 MB abwägen. Erst dieser Schritt macht die „Namen weg → AVV evtl. hinfällig"-Story tragfähig.
+- **Local-LLM-Backend / On-Prem-Inferenz** (eigene Phase / Adapter-Backend): löst Datenschutz an der Wurzel, aber unwirtschaftlich für die eine Tankstelle (GPU/Ops). Sinnvoll als Config-Flip für spätere High-Privacy-/Premium-Kunden dank Phase-5-Adapter.
+- **Realistische Fake-Werte (Faker)** statt Tags: erwogen, verworfen — erzwingt gespeichertes Mapping + Verwechslungsrisiko. Als Rückfalloption dokumentiert.
+- **Entity-Erweiterungen**: Adresse/PLZ, deutsche **KFZ-Kennzeichen** (tankstellen-relevant) — nachrüsten, wenn Fixtures Lücken zeigen.
+- **DSGVO/AVV-Neubewertung**: Datenschutzerklärung + AVV-Checkliste; Anthropic-AVV **unterschreiben** (Netz für Recall-Restrisiko). Endgültige „AVV-nicht-nötig"-Aussage = DSB. In Variante A bleibt AVV klar nötig (Namen exponiert).
 
 ### Reviewed Todos (not folded)
 None — keine offenen Todos für diese Phase gematcht.
@@ -118,4 +115,4 @@ None — keine offenen Todos für diese Phase gematcht.
 ---
 
 *Phase: 10-reversible-pseudonymisierung-vor-llm-bermittlung-v1-6*
-*Context gathered: 2026-07-19*
+*Context gathered: 2026-07-19 (Variante A — regex-only)*
