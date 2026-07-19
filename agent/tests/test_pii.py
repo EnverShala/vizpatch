@@ -1,7 +1,7 @@
 """Tests for PII redaction."""
 from __future__ import annotations
 
-from src.pii import redact, Anonymizer
+from src.pii import redact, Anonymizer, warn_residual_placeholders
 
 
 def test_redact_de_iban():
@@ -113,3 +113,19 @@ def test_empty_and_none_safe():
     a = Anonymizer()
     assert a.anonymize("") == ""
     assert a.deanonymize("") == ""
+
+
+def test_warn_residual_placeholders(mocker):
+    logger = mocker.MagicMock()
+    warn_residual_placeholders("Ihre IBAN ist [IBAN_1] leider unaufgeloest.", logger)
+    logger.warning.assert_called_once()
+    call_args = logger.warning.call_args
+    assert call_args.args[0] == "possible_placeholder_leak"
+    # Keine Originalwerte oder Mapping in der Warnung — nur Typ/Anzahl
+    extra = call_args.kwargs.get("extra", {})
+    assert "IBAN" not in str(extra) or extra.get("placeholder_counts", {}).get("IBAN") == 1
+    assert "1]" not in str(extra.get("placeholder_counts"))
+
+    logger2 = mocker.MagicMock()
+    warn_residual_placeholders("Ein sauberer Text ohne Reste.", logger2)
+    logger2.warning.assert_not_called()
