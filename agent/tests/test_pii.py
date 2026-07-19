@@ -1,7 +1,7 @@
 """Tests for PII redaction."""
 from __future__ import annotations
 
-from src.pii import redact
+from src.pii import redact, Anonymizer
 
 
 def test_redact_de_iban():
@@ -30,3 +30,86 @@ def test_empty_string():
 def test_no_pii():
     text = "Hallo, ich habe eine Frage zu Ihren Öffnungszeiten."
     assert redact(text) == text
+
+
+# --- Anonymizer-Engine (reversible Pseudonymisierung, D-01..D-09) ---
+
+
+def test_anonymize_iban_with_spaces_reversible():
+    a = Anonymizer()
+    text = "IBAN: DE89 3704 0044 0532 0130 00"
+    anon = a.anonymize(text)
+    assert "DE89 3704 0044 0532 0130 00" not in anon
+    assert "[IBAN_1]" in anon
+    assert a.deanonymize(anon) == text
+
+
+def test_anonymize_iban_without_spaces_reversible():
+    a = Anonymizer()
+    text = "DE89370400440532013000"
+    anon = a.anonymize(text)
+    assert "DE89370400440532013000" not in anon
+    assert "[IBAN_1]" in anon
+    assert a.deanonymize(anon) == text
+
+
+def test_same_value_gets_same_tag():
+    a = Anonymizer()
+    text = "Kontakt: max@kunde.de, nochmal: max@kunde.de"
+    anon = a.anonymize(text)
+    assert anon.count("[EMAIL_1]") == 2
+    assert "[EMAIL_2]" not in anon
+
+
+def test_different_values_get_incrementing_tags():
+    a = Anonymizer()
+    anon = a.anonymize("max@kunde.de und peter@kunde.de")
+    assert "[EMAIL_1]" in anon
+    assert "[EMAIL_2]" in anon
+
+
+def test_iban_not_split_into_phone_or_date():
+    a = Anonymizer()
+    anon = a.anonymize("IBAN DE89370400440532013000 am 07.12.2024")
+    assert "[IBAN_1]" in anon
+    assert "[DATUM_1]" in anon
+    assert "[TELEFON_1]" not in anon
+
+
+def test_deanonymize_handles_two_digit_tag_numbers():
+    a = Anonymizer()
+    text = " ".join(f"user{i}@kunde.de" for i in range(1, 12))  # erzeugt EMAIL_1..EMAIL_11
+    anon = a.anonymize(text)
+    assert "[EMAIL_11]" in anon
+    assert a.deanonymize(anon) == text
+
+
+def test_phone_email_url_date_each_get_typed_tag():
+    a = Anonymizer()
+    text = (
+        "Ruf an: 07152 123456, mail an max@kunde.de, "
+        "besuch https://kunde-tankstelle.de/info, Termin am 19.07.2026"
+    )
+    anon = a.anonymize(text)
+    assert "[TELEFON_1]" in anon
+    assert "[EMAIL_1]" in anon
+    assert "[URL_1]" in anon
+    assert "[DATUM_1]" in anon
+
+
+def test_credit_card_only_luhn_valid():
+    a = Anonymizer()
+    anon = a.anonymize("Meine Karte: 4111 1111 1111 1111")
+    assert "[KARTE_1]" in anon
+    assert "4111 1111 1111 1111" not in anon
+
+    b = Anonymizer()
+    non_luhn = "Kundennummer: 1234 5678 9012 3456"
+    anon2 = b.anonymize(non_luhn)
+    assert anon2 == non_luhn
+
+
+def test_empty_and_none_safe():
+    a = Anonymizer()
+    assert a.anonymize("") == ""
+    assert a.deanonymize("") == ""
