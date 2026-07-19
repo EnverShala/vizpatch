@@ -1312,6 +1312,22 @@ def mail_in_papierkorb(
             if not session_already_authorized:
                 _authorize_session(agent_id, session_id)
 
+            # Review IN-06: uid auch im autorisierten Fast-Path VOR dem Move
+            # verifizieren — move() einer nicht existierenden uid ist auf
+            # vielen Servern ein No-Op und würde sonst als Erfolg gemeldet
+            # (das LLM meldet dem Betreiber dann einen falschen Erfolg).
+            try:
+                mailbox.folder.set(target_folder)
+                messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+            except Exception as e:
+                logger.warning(
+                    "mail_in_papierkorb_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
+                )
+                return {"fehler": f"Lesen der Mail uid={uid_str} fehlgeschlagen: {e}"}
+            if not messages:
+                return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
+
             try:
                 trash_folder = _move_to_trash(mailbox, uid_str, target_folder)
             except TrashFolderNotFound as e:
@@ -1418,6 +1434,20 @@ def entwurf_in_papierkorb(
             # Verschiebungen registriert.
             if not session_already_authorized:
                 _authorize_session(agent_id, session_id)
+
+            # Review IN-06: uid auch im autorisierten Fast-Path VOR dem Move
+            # verifizieren (siehe mail_in_papierkorb).
+            try:
+                mailbox.folder.set(drafts_folder)
+                messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+            except Exception as e:
+                logger.warning(
+                    "entwurf_in_papierkorb_fetch_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+            if not messages:
+                return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
 
             try:
                 trash_folder = _move_to_trash(mailbox, uid_str, drafts_folder)

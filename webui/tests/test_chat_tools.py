@@ -1422,7 +1422,7 @@ def test_mail_in_papierkorb_confirmed_first_move_authorizes_session_and_second_m
 
     msg42 = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
     msg43 = _msg(uid="43", subject="Angebot", from_="kunde2@example.com")
-    mock_mailbox = _fake_mailbox([msg42, msg43])
+    mock_mailbox = _fake_mailbox_by_uid(mocker, [msg42, msg43])
     mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
     mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
 
@@ -1531,7 +1531,7 @@ def test_session_authorization_shared_across_mail_and_entwurf_papierkorb_tools(
 
     mail_msg = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
     draft_msg = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
-    mock_mailbox = _fake_mailbox([mail_msg, draft_msg])
+    mock_mailbox = _fake_mailbox_by_uid(mocker, [mail_msg, draft_msg])
     mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
     mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
 
@@ -1545,6 +1545,34 @@ def test_session_authorization_shared_across_mail_and_entwurf_papierkorb_tools(
     result = chat_tools.entwurf_in_papierkorb("info", uid="7", session_id="sess-shared")
 
     assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
+
+
+def test_mail_in_papierkorb_authorized_session_unknown_uid_reports_error_not_success(
+    mocker, tmp_path, monkeypatch
+):
+    """Review IN-06: im Session-Fast-Path wird die uid VOR dem Move per Fetch
+    verifiziert — eine nicht existierende uid liefert ein fehler-dict statt
+    {'verschoben': True} (move() einer unbekannten uid ist auf vielen Servern
+    ein No-Op, das LLM haette dem Betreiber sonst falschen Erfolg gemeldet)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox_by_uid(mocker, [_msg(uid="42")])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    chat_tools._authorize_session("info", "sess-in06")
+
+    result = chat_tools.mail_in_papierkorb("info", uid="999", session_id="sess-in06")
+    assert "fehler" in result
+    assert result.get("verschoben") is not True
+    mock_mailbox.move.assert_not_called()
+
+    draft_result = chat_tools.entwurf_in_papierkorb("info", uid="888", session_id="sess-in06")
+    assert "fehler" in draft_result
+    mock_mailbox.move.assert_not_called()
 
 
 def test_session_authorization_expires_after_ttl(mocker, tmp_path, monkeypatch):
@@ -1599,7 +1627,7 @@ def test_run_agentic_chat_second_move_same_session_skips_confirmation_end_to_end
 
     msg42 = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
     msg43 = _msg(uid="43", subject="Angebot", from_="kunde2@example.com")
-    mock_mailbox = _fake_mailbox([msg42, msg43])
+    mock_mailbox = _fake_mailbox_by_uid(mocker, [msg42, msg43])
     mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
     mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
 
