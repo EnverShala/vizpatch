@@ -97,6 +97,39 @@ def test_phone_email_url_date_each_get_typed_tag():
     assert "[DATUM_1]" in anon
 
 
+def test_phone_international_plus49_formats_are_tagged():
+    """Review CR-01: das häufigste deutsche Geschäfts-Format (+49 …) MUSS
+    matchen — ein führendes \\b vor '+' machte die Alternative faktisch tot."""
+    for text in (
+        "Ruf mich an: +49 170 1234567",
+        "Tel: +49 30 1234 5678",
+        "Handy +4917012345678",
+    ):
+        a = Anonymizer()
+        anon = a.anonymize(text)
+        assert "[TELEFON_1]" in anon, f"nicht getaggt: {text!r}"
+        assert a.deanonymize(anon) == text
+
+
+def test_phone_legacy_formats_still_tagged_after_cr01_fix():
+    """Regression zu CR-01: die bisher abgedeckten Formate (0049/0-Präfix)
+    matchen weiterhin."""
+    for text in ("0049 170 1234567", "07152 123456", "030/1234567"):
+        a = Anonymizer()
+        anon = a.anonymize(text)
+        assert "[TELEFON_1]" in anon, f"nicht getaggt: {text!r}"
+
+
+def test_phone_no_false_positive_on_iban_remainder():
+    """CR-01-Gegenprobe: IBAN läuft VOR TELEFON — weder die IBAN noch ihr
+    Platzhalter-Rest darf zusätzlich als Telefonnummer getaggt werden."""
+    a = Anonymizer()
+    anon = a.anonymize("IBAN DE89370400440532013000, Tel +49 170 1234567")
+    assert "[IBAN_1]" in anon
+    assert "[TELEFON_1]" in anon
+    assert "[TELEFON_2]" not in anon
+
+
 def test_credit_card_only_luhn_valid():
     a = Anonymizer()
     anon = a.anonymize("Meine Karte: 4111 1111 1111 1111")

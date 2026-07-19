@@ -65,10 +65,16 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("URL", re.compile(r"\b(?:https?://|www\.)[^\s<>\"']+")),
     ("DATUM", re.compile(r"\b(0?[1-9]|[12]\d|3[01])[.\/](0?[1-9]|1[0-2])[.\/](\d{4}|\d{2})\b")),
+    # Review CR-01: KEIN führendes \b vor der +49-Alternative — zwischen einem
+    # Nicht-Wortzeichen (Leerzeichen/Zeilenanfang/":") und "+" existiert keine
+    # Word-Boundary, die \+49-Alternative wäre damit faktisch tot und
+    # internationale Nummern (+49 …, das häufigste Format deutscher
+    # Geschäfts-Signaturen) gingen roh an den LLM. \b bleibt gezielt vor den
+    # 0049-/0-Alternativen (dort beginnt die Nummer mit einem Wortzeichen).
     (
         "TELEFON",
         re.compile(
-            r"\b(?:\+49[ /-]?|0049[ /-]?|0)"
+            r"(?:\+49[ /-]?|\b0049[ /-]?|\b0)"
             r"(?:\(?\d{2,5}\)?[ /-]?)"
             r"\d{3,4}(?:[ /-]?\d{2,4}){0,3}\b"
         ),
