@@ -1077,7 +1077,7 @@ def entwurf_erstellen(
 # innerhalb desselben Zeitfensters (Review WR-01: die HMAC-Payload enthält
 # `int(time.time()) // 600`; beim Verify gelten aktuelles + vorheriges Fenster,
 # Gültigkeit ~10-20 Minuten) denselben Token, solange der persistente Fernet-Key
-# (`crypto._load_or_create_key`, SEC-01/02, `/config/.secret_key`) unverändert ist —
+# (`crypto.load_or_create_key`, SEC-01/02, `/config/.secret_key`) unverändert ist —
 # der Token überlebt daher auch einen WebUI-Prozess-Neustart zwischen den beiden
 # Chat-Runden ("Ziel nennen" -> Nutzer-„ja" -> "erneut mit Token aufrufen"), läuft
 # aber ab: ein Wochen später (z.B. aus dem Browser-Verlauf) erneut eingespielter
@@ -1116,10 +1116,13 @@ _SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb"
 
 
 def _confirmation_secret() -> bytes:
-    """Persistentes Secret für die Token-HMAC — derselbe Key wie `crypto.py`
-    (SEC-01/02). Kein zusätzlicher State nötig; der Token bleibt über Prozess-
-    Neustarts hinweg stabil, solange der Key-File unverändert ist."""
-    return crypto._load_or_create_key()
+    """Persistentes Secret für die Token-HMAC — abgeleitet aus dem Key von
+    `crypto.py` (SEC-01/02). Kein zusätzlicher State nötig; der Token bleibt
+    über Prozess-Neustarts hinweg stabil, solange der Key-File unverändert ist.
+    Review IN-05: öffentlicher Accessor (`crypto.load_or_create_key`) statt
+    privater API, und Domain-Separation — der Fernet-VERSCHLÜSSELUNGS-Key wird
+    nie direkt als HMAC-Key verwendet, sondern zweckgebunden abgeleitet."""
+    return hashlib.sha256(b"vizpatch-confirm:" + crypto.load_or_create_key()).digest()
 
 
 # Review WR-01: Zeitfenster-Breite für die Token-Gültigkeit. Der Token trägt

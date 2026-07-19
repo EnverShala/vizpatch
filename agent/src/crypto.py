@@ -42,6 +42,14 @@ def _load_or_create_key() -> bytes:
     return key
 
 
+def load_or_create_key() -> bytes:
+    """Öffentlicher Accessor auf den persistenten Fernet-Key (Review IN-05):
+    Aufrufer AUSSERHALB dieses Moduls (z.B. webui/src/chat_tools.py, das daraus
+    einen zweckgebundenen HMAC-Key ableitet) nutzen DIESE Funktion — eine
+    interne Umbenennung von `_load_or_create_key` bricht so keinen Fremdcode."""
+    return _load_or_create_key()
+
+
 def encrypt_value(plaintext: str) -> str:
     if not plaintext or plaintext.startswith(ENC_PREFIX):
         return plaintext
