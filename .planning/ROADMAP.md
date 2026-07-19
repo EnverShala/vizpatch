@@ -342,7 +342,7 @@ Plans:
 
 1. Der Chat kann eingehende Mails und Entwürfe **suchen und lesen** (read-only), Ergebnisse im Chat zusammenfassen; PII-Redaction läuft vor der LLM-Übergabe.
 2. Der Chat kann bestehende **Entwürfe bearbeiten** (umformulieren/anpassen) und die neue Fassung im Entwürfe-Ordner ablegen; die Original-Threading-Header bleiben erhalten.
-3. **Destruktiv (Löschen):** Mails/Entwürfe werden in den Papierkorb verschoben (nicht expunged) und **nur nach expliziter Bestätigung** im Chat; jede Löschung wird protokolliert.
+3. **Destruktiv (Löschen):** Mails/Entwürfe werden in den Papierkorb verschoben (nicht expunged); Bestätigung im Chat ist **einmalig pro Chat-Sitzung** — die erste Verschiebung einer Sitzung verlangt weiterhin die explizite Zwei-Schritt-Bestätigung, danach laufen weitere Verschiebungen derselben Sitzung ohne erneute Rückfrage; jede Verschiebung bleibt reversibel und wird protokolliert.
 4. **Kein-Auto-Send strukturell:** es existiert kein Werkzeug, das Mail versendet (IMAP-APPEND in Drafts/Trash + Move, aber niemals SMTP/Send).
 5. Tool-Use-Adapter für Anthropic funktioniert end-to-end; bei OpenAI/Google entweder ebenfalls Tools oder sauberer Fallback auf den beratenden Chat (kein Absturz).
 6. Datenschutzerklärung (Ziffer 6) und AVV-Verarbeitungszwecke sind auf die tatsächlichen Fähigkeiten angeglichen.
@@ -374,7 +374,7 @@ Plans:
 
 **Hauptrisiken:**
 
-- Destruktive Aktion auf echte Kundenmails durch KI → Papierkorb statt Expunge, harte Bestätigungs-Gate im Backend (Tool löscht nur mit `confirmed=true` nach expliziter Nutzer-Zusage), Protokollierung.
+- Destruktive Aktion auf echte Kundenmails durch KI → Papierkorb statt Expunge, harte Bestätigungs-Gate im Backend (Tool verschiebt nur mit `confirmed=true` nach expliziter Nutzer-Zusage — einmalig pro Chat-Sitzung, danach ungated in derselben Sitzung), Protokollierung.
 - Tool-Use unterscheidet sich je Provider (Anthropic/OpenAI/Google) → Anthropic zuerst, andere mit Fallback; nicht am Streaming-Pfad hängenbleiben.
 - Prompt-Injection über Mail-Inhalte, die das LLM zu Tool-Aufrufen verleiten → Werkzeug-Ergebnisse als Daten kennzeichnen (Anker), destruktive Tools nie ohne explizite Nutzer-Bestätigung.
 - Postfach-Mutation aus dem WebUI-Container → gleiche IMAP-Zugriffsmechanik wie Stil-Extraktion, per-Agent entschlüsselte Creds, Timeouts.

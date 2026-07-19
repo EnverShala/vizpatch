@@ -38,7 +38,8 @@ Vizpatch verarbeitet E-Mails des vom Betreiber konfigurierten Postfachs, um Kund
 klassifizieren, Antwort-**Entwürfe** zu erstellen (Ablage im Entwürfe-Ordner, **kein automatisches
 Versenden**), ein Schreibstil-Profil abzuleiten und einen Assistenz-Chat mit Postfach-Werkzeugen
 bereitzustellen (Suchen/Lesen, Entwurf umformulieren, Verschieben in den Papierkorb — Letzteres nur
-nach ausdrücklicher Bestätigung des Betreibers, reversibel, kein endgültiges Löschen).
+nach einmaliger Bestätigung des Betreibers pro Chat-Sitzung, reversibel, kein endgültiges Löschen,
+jede Verschiebung protokolliert).
 
 Vor Übermittlung an den KI-Anbieter pseudonymisiert Vizpatch bestimmte strukturierte
 personenbezogene Daten (E-Mail-Adresse, Telefonnummer, IBAN, Kreditkartennummer, URL, Datum)
@@ -94,7 +95,8 @@ für die o. g. Leistungen erforderlich (Einrichtung, Fehleranalyse, Update, Supp
 - **Reversible Pseudonymisierung strukturierter PII** (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum)
   vor jeder KI-Übermittlung, RAM-only-Mapping (Namen/Orte bleiben unmaskiert, siehe §3/§4).
 - **Kein-Auto-Send:** strukturell kein Mail-Versand; destruktive Aktionen (Papierkorb) nur nach
-  bestätigungs-gebundenem Token, reversibel (kein Expunge), protokolliert.
+  bestätigungs-gebundenem Token — einmalig pro Chat-Sitzung, danach in derselben Sitzung ohne
+  erneute Rückfrage —, reversibel (kein Expunge), protokolliert.
 - **Zugriffsschutz:** WebUI optional login-/bcrypt-geschützt; non-root-Container; Docker-Isolierung.
 - **Verantwortung Betreiber:** Serverabsicherung, Backups, ggf. HTTPS-Reverse-Proxy.
 
