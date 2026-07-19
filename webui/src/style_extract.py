@@ -34,6 +34,15 @@ MODEL_DRAFT_DEFAULTS: dict[str, str] = {
     "google": "gemini-2.5-pro",
 }
 
+# Review WR-03: zitiert der LLM im Stil-Profil einen wörtlichen Platzhalter
+# (z.B. "… sende ich an [EMAIL_2]"), wird er durch diesen neutralen Text
+# ersetzt — NIE de-anonymisiert: style.md läuft per Design (D-08) nie durch
+# den Anonymizer und ginge sonst mit echter Kunden-PII bei jedem Draft und
+# jedem Chat-Turn dauerhaft roh an den LLM. Für ein Ton-/Form-Profil werden
+# echte Werte nie gebraucht.
+_RESIDUAL_TAG_PATTERN = re.compile(r"\[(?:EMAIL|TELEFON|IBAN|KARTE|URL|DATUM)_\d+\]")
+_RESIDUAL_TAG_REPLACEMENT = "[Beispiel entfernt]"
+
 MAX_BODY_CHARS = 800
 MAX_STYLE_MD_CHARS = 4000
 MIN_USABLE_MAILS = 3
@@ -219,7 +228,14 @@ def extract_style(agent_id: str) -> str:
         "style_extracted",
         extra={"input_mail_count": len(bodies), "output_length": len(text), "model": model},
     )
-    # D-05-Konsistenz: kein wörtlich zitierter Platzhalter im style.md-Output.
+    # Review WR-03: kein wörtlich zitierter Platzhalter im style.md-Output —
+    # aber statt De-Anonymisierung (die echte Kunden-PII dauerhaft in das nie
+    # anonymisierte style.md persistieren würde) werden Residual-Tags durch
+    # einen neutralen Text ersetzt (siehe _RESIDUAL_TAG_PATTERN-Kommentar).
     if enable_pseudonym and anonymizer is not None:
-        text = anonymizer.deanonymize(text)
+        text, n_replaced = _RESIDUAL_TAG_PATTERN.subn(_RESIDUAL_TAG_REPLACEMENT, text)
+        if n_replaced:
+            logger.warning(
+                "style_residual_placeholders_neutralized", extra={"count": n_replaced}
+            )
     return text.strip()[:MAX_STYLE_MD_CHARS]

@@ -200,10 +200,14 @@ def test_sent_bodies_no_raw_pii(mocker, tmp_path, monkeypatch):
     assert "kontakt@kunde.de" not in prompt
 
 
-def test_extract_style_deanonymizes_output(mocker, tmp_path, monkeypatch):
-    """Flag an: ein LLM-Mock, der einen wörtlichen Platzhalter im style.md
-    zurückgibt, darf im Ergebnis von extract_style() keinen Platzhalter mehr
-    enthalten (D-05-Konsistenz)."""
+def test_extract_style_neutralizes_residual_placeholders_never_deanonymizes(
+    mocker, tmp_path, monkeypatch
+):
+    """Review WR-03: ein LLM-Mock, der einen wörtlichen Platzhalter im style.md
+    zurückgibt, darf im Ergebnis WEDER den Platzhalter NOCH die echte
+    Kunden-PII enthalten — style.md läuft per Design (D-08) nie durch den
+    Anonymizer und würde die echte E-Mail sonst dauerhaft bei jedem Draft/
+    Chat-Turn roh an den LLM leaken. Stattdessen: neutraler Ersatztext."""
     _setup_env(tmp_path, monkeypatch)
     monkeypatch.setenv("WEBUI_STYLE_EXTRACT_PROMPT", str(_make_prompt_file(tmp_path)))
     _write_agent_env("info")
@@ -225,7 +229,8 @@ def test_extract_style_deanonymizes_output(mocker, tmp_path, monkeypatch):
     result = style_extract.extract_style("info")
 
     assert "[EMAIL_1]" not in result
-    assert "kontakt@kunde.de" in result
+    assert "kontakt@kunde.de" not in result
+    assert "[Beispiel entfernt]" in result
 
 
 def test_style_flag_off_raw(mocker, tmp_path, monkeypatch):
