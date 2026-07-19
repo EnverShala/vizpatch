@@ -148,6 +148,16 @@
 
 ---
 
+## v1.6 Requirements (Phase 10 — Reversible Pseudonymisierung vor LLM-Übermittlung)
+
+- [ ] **ANON-01**: Reversible Pseudonymisierungs-Engine (empfohlen: Presidio — Regex-Recognizer + spaCy-NER + Anonymize/Deanonymize) mit lokalem Mapping Platzhalter↔Original, das den Server nie verlässt; erweitert das bestehende `pii.py`
+- [ ] **ANON-02**: Erkennung strukturierter PII per Regex (E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum) UND unstrukturierter per deutschem NER (Person/Firma/Ort); stabile Platzhalter (`[PERSON_1]` …)
+- [ ] **ANON-03**: Integration in ALLE LLM-Pfade — anonymisieren VOR Übermittlung, de-anonymisieren NACH Antwort: Klassifikation, Draft, Stil-Extraktion, Chat, agentische Tool-Ergebnisse
+- [ ] **ANON-04**: De-Anonymisierung stellt Platzhalter in der LLM-Ausgabe korrekt wieder her; Drafts/Antworten enthalten echte Daten, kein Platzhalter-Leck; Mapping wird nie geloggt/übermittelt
+- [ ] **ANON-05**: Erkennungs-Coverage messbar (Precision/Recall an Fixtures), Feature per Flag schaltbar mit Fallback; DSGVO/AVV-Neubewertung dokumentiert (ehrlich: pseudonym ≠ anonym, DSB-Freigabe nötig); RAM-Dimensionierung des NER-Modells beachtet
+
+---
+
 ## v2 Requirements (nach v1)
 
 - IMAP-IDLE statt Polling (niedrigere Latenz, weniger Rate-Limit-Risiko)

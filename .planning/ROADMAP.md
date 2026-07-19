@@ -16,7 +16,9 @@
 | 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 | 6 | Schreibstil-Adaption pro Agent (v1.3) | Automatische Stil-Extraktion aus dem Gesendet-Ordner beim Agent-Setup (style.md pro Agent), Re-Learn-Button, Prompt-Hierarchie context.md > style.md | STY-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
 | 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
-| 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase 7 |
+| 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ✅ Code-komplett (Live-Sideload-Checkpoint offen) |
+| 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
+| 10 | Reversible Pseudonymisierung vor LLM (v1.6) | PII lokal reversibel anonymisieren (Regex + NER/Presidio) → LLM sieht nur de-identifizierten Text → Rück-Übersetzung; DSGVO-Risikoreduktion | ANON-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
 
@@ -373,6 +375,53 @@ Plans:
 - Tool-Use unterscheidet sich je Provider (Anthropic/OpenAI/Google) → Anthropic zuerst, andere mit Fallback; nicht am Streaming-Pfad hängenbleiben.
 - Prompt-Injection über Mail-Inhalte, die das LLM zu Tool-Aufrufen verleiten → Werkzeug-Ergebnisse als Daten kennzeichnen (Anker), destruktive Tools nie ohne explizite Nutzer-Bestätigung.
 - Postfach-Mutation aus dem WebUI-Container → gleiche IMAP-Zugriffsmechanik wie Stil-Extraktion, per-Agent entschlüsselte Creds, Timeouts.
+
+---
+
+### Phase 10: Reversible Pseudonymisierung vor LLM-Übermittlung (v1.6)
+
+**Goal:** Bevor irgendein Mail-/Kontext-Inhalt an einen LLM-Anbieter geht, werden personenbezogene
+Daten **lokal und reversibel pseudonymisiert** (Regex + NER → Platzhalter wie `[PERSON_1]`, `[EMAIL_1]`);
+das LLM sieht nur de-identifizierten Text. Nach der LLM-Antwort werden die Platzhalter aus einem
+**lokalen, den Server nie verlassenden Mapping** wieder in die Originalwerte zurückübersetzt (De-
+Anonymisierung), sodass Drafts/Chat-Antworten die echten Daten enthalten. Ziel: der LLM-Anbieter erhält
+faktisch keine personenbezogenen Daten mehr → deutliche DSGVO-Risikoreduktion und wahrscheinlicher Wegfall
+des Anbieter-AVV für Mail-Inhalte.
+**Mode:** mvp
+**Ziel-Aufwand:** ~2–3 Werktage Vizionists
+**Depends on:** Phase 5 (LLM-Adapter, alle Call-Pfade), Phase 6/7/9 (style, chat, agentische Tools — alle Pfade müssen durch die Pipeline)
+
+**Ansatz (empfohlen):** Microsoft **Presidio** (Regex-Recognizer + spaCy-NER + reversible
+`AnonymizerEngine`/`DeanonymizeEngine`) statt Eigenbau-NER; deutsches NER-Modell (spaCy `de_core_news_lg`
+oder Transformer). Erweitert das bestehende einseitige `pii.py` zu einem reversiblen Pipeline-Baustein.
+
+**Success Criteria:**
+
+1. Reversible Pseudonymisierungs-Engine: erkennt strukturierte PII (E-Mail, Telefon, IBAN, Kreditkarte, URL,
+   Datum) per Regex UND unstrukturierte (Person/Firma/Ort) per deutschem NER; ersetzt durch stabile
+   Platzhalter; hält ein **lokales Mapping Platzhalter↔Original**, das den Server nie verlässt.
+2. Alle LLM-Pfade nutzen die Pipeline: **anonymisieren VOR Übermittlung**, **de-anonymisieren NACH der Antwort**
+   — Klassifikation, Draft-Generierung, Stil-Extraktion, Chat und agentische Tool-Ergebnisse.
+3. De-Anonymisierung stellt in der LLM-Ausgabe alle Platzhalter korrekt wieder her; erzeugte Drafts/Antworten
+   enthalten die echten Daten, kein Platzhalter-Leck.
+4. **Erkennungs-Coverage messbar** an Fixtures (Precision/Recall der PII-Erkennung dokumentiert); übersehene
+   Entitäten werden als Restrisiko behandelt; Feature per Flag schaltbar mit sauberem Fallback.
+5. **DSGVO/AVV-Neubewertung dokumentiert:** der Anbieter erhält nur pseudonymisierte Daten; Datenschutzerklärung
+   + AVV-Checkliste aktualisiert. **Ehrlicher Hinweis:** pseudonymisierte Daten bleiben rechtlich
+   personenbezogen (ErwG 26) — die endgültige „AVV-nicht-nötig"-Aussage trifft der/die Datenschutzbeauftragte.
+
+**Requirements mapped:** ANON-01, ANON-02, ANON-03, ANON-04, ANON-05
+
+**Hauptrisiken:**
+
+- **NER nie 100 %** → ein übersehener Name leckt echtes PII ans LLM; „kein AVV" hängt an nahezu perfekter
+  Erkennung → Coverage messen, konservativ maskieren, Restrisiko dokumentieren, DSB-Freigabe.
+- Identifizierende Angaben ohne Named Entity (Umschreibungen) sind grundsätzlich nicht vollständig fassbar.
+- Qualitäts-Trade-off: zu starke Anonymisierung verschlechtert Draft-Qualität → Balance testen (Fixtures).
+- Ressourcen: NER-Modell braucht RAM (spaCy md/lg ~50–600 MB) — kollidiert ggf. mit „min. 512 MB",
+  Container-Dimensionierung + Modellgröße abwägen (kleineres Modell vs. Genauigkeit).
+- Mapping-Sicherheit: das Platzhalter↔Original-Mapping ist selbst hochsensibel → nur im Speicher/lokal,
+  nie loggen, nie ans LLM.
 
 ---
 
