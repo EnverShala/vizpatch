@@ -40,6 +40,15 @@ Versenden**), ein Schreibstil-Profil abzuleiten und einen Assistenz-Chat mit Pos
 bereitzustellen (Suchen/Lesen, Entwurf umformulieren, Verschieben in den Papierkorb — Letzteres nur
 nach ausdrücklicher Bestätigung des Betreibers, reversibel, kein endgültiges Löschen).
 
+Vor Übermittlung an den KI-Anbieter pseudonymisiert Vizpatch bestimmte strukturierte
+personenbezogene Daten (E-Mail-Adresse, Telefonnummer, IBAN, Kreditkartennummer, URL, Datum)
+lokal und reversibel (getypte Platzhalter, Mapping ausschließlich im Arbeitsspeicher des
+Servers, siehe §4/§6). **Ehrlicher Hinweis:** Namen, Firmennamen und Ortsangaben werden dabei
+**NICHT** maskiert und daher weiterhin an den KI-Anbieter übermittelt — pseudonymisierte Daten
+bleiben personenbezogene Daten im Sinne der DSGVO (Erwägungsgrund 26), dieser AVV bleibt somit
+erforderlich. Die abschließende datenschutzrechtliche Bewertung trifft der/die
+Datenschutzbeauftragte des Betreibers.
+
 Vizionists verarbeitet personenbezogene Daten **ausschließlich weisungsgebunden** und nur, soweit
 für die o. g. Leistungen erforderlich (Einrichtung, Fehleranalyse, Update, Support).
 
@@ -49,8 +58,14 @@ für die o. g. Leistungen erforderlich (Einrichtung, Fehleranalyse, Update, Supp
   verarbeitet, nicht dauerhaft von Vizpatch gespeichert), abgeleitetes Stil-Profil, Betriebs-/
   Firmeninformationen (`context.md`), Zugangsdaten (IMAP-Passwort, API-Schlüssel — verschlüsselt).
 - **Kategorien Betroffener:** Kunden/Absender des Betreibers, Beschäftigte des Betreibers.
-- Es werden **keine besonderen Kategorien** (Art. 9 DSGVO) gezielt verarbeitet; PII-Muster
-  (IBAN/Kreditkarten) werden vor der KI-Übermittlung maskiert.
+- Es werden **keine besonderen Kategorien** (Art. 9 DSGVO) gezielt verarbeitet; strukturierte
+  PII-Muster (E-Mail, Telefon, IBAN, Kreditkarte, URL, Datum) werden vor der KI-Übermittlung
+  lokal und reversibel pseudonymisiert (getypte Platzhalter, Mapping verbleibt ausschließlich
+  im Arbeitsspeicher des Servers). **Namen, Firmennamen und Ortsangaben werden dabei NICHT
+  maskiert** und bleiben dem KI-Anbieter gegenüber sichtbar — pseudonymisierte Daten sind
+  damit weiterhin personenbezogene Daten im Sinne der DSGVO (Erwägungsgrund 26), ein AVV mit
+  dem genutzten KI-Anbieter bleibt erforderlich. Die abschließende datenschutzrechtliche
+  Bewertung trifft der/die Datenschutzbeauftragte des Betreibers.
 
 ## §5 Pflichten von Vizionists (Art. 28 Abs. 3)
 
@@ -76,7 +91,8 @@ für die o. g. Leistungen erforderlich (Einrichtung, Fehleranalyse, Update, Supp
   Schlüsseldatei mit eingeschränkten Rechten (chmod 600).
 - **Datenminimierung:** E-Mail-Inhalte werden nur transient verarbeitet, nicht dauerhaft gespeichert
   (nur Message-ID-Kennungen zur Doppelverarbeitungs-Vermeidung).
-- **PII-Maskierung** (IBAN/Kreditkarten) vor jeder KI-Übermittlung.
+- **Reversible Pseudonymisierung strukturierter PII** (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum)
+  vor jeder KI-Übermittlung, RAM-only-Mapping (Namen/Orte bleiben unmaskiert, siehe §3/§4).
 - **Kein-Auto-Send:** strukturell kein Mail-Versand; destruktive Aktionen (Papierkorb) nur nach
   bestätigungs-gebundenem Token, reversibel (kein Expunge), protokolliert.
 - **Zugriffsschutz:** WebUI optional login-/bcrypt-geschützt; non-root-Container; Docker-Isolierung.
@@ -117,4 +133,5 @@ Betreiber: ______________________  Ort/Datum: ____________
 Vizionists: _____________________  Ort/Datum: ____________
 
 ---
-*Muster erstellt 2026-07-18 für Vizpatch v1.5. Vor Verwendung rechtlich prüfen lassen.*
+*Muster erstellt 2026-07-18 für Vizpatch v1.5, aktualisiert 2026-07-19 für v1.6 (reversible
+Pseudonymisierung strukturierter PII, §3/§4/§6). Vor Verwendung rechtlich prüfen lassen.*
