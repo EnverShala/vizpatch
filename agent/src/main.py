@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import signal
 import sys
 import time
@@ -51,8 +52,14 @@ def _compute_since(config: Config) -> datetime:
     return min(first_run - timedelta(hours=1), datetime.now(timezone.utc) - timedelta(days=config.backfill_days))
 
 
-def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient") -> None:
-    """Process a single email: classify, generate draft if needed, append to Drafts."""
+def _process_one(
+    msg, config: Config, logger: logging.Logger, imap: "ImapClient"
+) -> tuple[bytes, str] | None:
+    """Process a single email: classify, generate draft if needed, append to Drafts.
+
+    Returns (raw_draft_bytes, message_id) wenn ein Draft gebaut wurde, sonst
+    None (Skip/Ignore) — Review IN-01: der Aufrufer (_poll_once) verlässt sich
+    auf genau diese Rückgabe."""
     # CR-01: Default MUSS ein String sein — ein Listen-Default wie [""] ist truthy,
     # rutscht am Skip-Guard vorbei und crasht später in sqlite
     # ("type 'list' is not supported"). imap-tools liefert Header-Werte je nach
@@ -68,8 +75,7 @@ def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient"
     if state.is_processed(config.state_db, message_id):
         return
 
-    import re as _re
-    body = msg.text or (_re.sub(r'<[^>]+>', ' ', msg.html).strip() if msg.html else "") or ""
+    body = msg.text or (re.sub(r'<[^>]+>', ' ', msg.html).strip() if msg.html else "") or ""
     classification = classify.classify_email(
         from_address=msg.from_ or "",
         subject=msg.subject or "",
