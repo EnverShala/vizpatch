@@ -527,3 +527,113 @@ def test_truncate_history_env_configurable_budget_changes_trimming(monkeypatch):
 
     assert len(trimmed_small) < len(trimmed_large)
     assert trimmed_large == history
+
+
+# --- build_chat_prompt + anonymizer (Plan 10-02, ANON-03, D-08) -------------------
+
+
+def test_build_chat_prompt_anonymizes_message(tmp_path, monkeypatch):
+    agent_id = _setup_chat_prompt(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    from src.pii import Anonymizer
+
+    agents_io.write_context_md_atomic(agent_id, "## About\nWir sind die Tankstelle Leonberg.")
+
+    import src.chat as chat
+
+    anonymizer = Anonymizer()
+    message = "Meine IBAN ist DE89370400440532013000, bitte prüfen."
+    prompt = chat.build_chat_prompt(agent_id, message, history=[], mail_context=None, anonymizer=anonymizer)
+
+    assert "Wir sind die Tankstelle Leonberg." in prompt
+    assert "DE89370400440532013000" not in prompt
+    assert "[IBAN_1]" in prompt
+
+
+def test_build_chat_prompt_system_stays_raw(tmp_path, monkeypatch):
+    """D-08/Pitfall 4: context.md mit einer Telefonnummer bleibt im
+    System-Prompt-Teil UNMASKIERT, auch wenn ein anonymizer übergeben wird."""
+    agent_id = _setup_chat_prompt(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    from src.pii import Anonymizer
+
+    agents_io.write_context_md_atomic(
+        agent_id, "## Kontakt\nRufen Sie uns an: 07152 123456"
+    )
+
+    import src.chat as chat
+
+    anonymizer = Anonymizer()
+    prompt = chat.build_chat_prompt(
+        agent_id, "Frage ohne PII", history=[], mail_context=None, anonymizer=anonymizer
+    )
+
+    assert "07152 123456" in prompt
+    # kein Platzhalter im System-Prompt-Teil (vor "# Aktuelle Nachricht")
+    system_part = prompt.split("# Aktuelle Nachricht")[0]
+    assert "TELEFON_" not in system_part
+
+
+def test_build_chat_prompt_history_and_mailcontext_anonymized(tmp_path, monkeypatch):
+    agent_id = _setup_chat_prompt(tmp_path, monkeypatch)
+    from src.pii import Anonymizer
+
+    import src.chat as chat
+
+    anonymizer = Anonymizer()
+    shared_email = "kunde@example.com"
+    history = [
+        {"role": "user", "content": f"Kontaktieren Sie mich unter {shared_email}"},
+        {"role": "assistant", "content": "Klar, mache ich."},
+    ]
+    mail_context = {"subject": "Frage", "sender": "info@x.de", "body": f"Meine Mail ist {shared_email}"}
+
+    prompt = chat.build_chat_prompt(
+        agent_id, "Weitere Frage", history=history, mail_context=mail_context, anonymizer=anonymizer
+    )
+
+    assert shared_email not in prompt
+    assert prompt.count("[EMAIL_1]") == 2
+
+
+def test_build_chat_prompt_no_anonymizer_raw(tmp_path, monkeypatch):
+    """Rückwärtskompatibilität: ohne anonymizer-Argument bleibt alles roh."""
+    agent_id = _setup_chat_prompt(tmp_path, monkeypatch)
+
+    import src.chat as chat
+
+    message = "Meine IBAN ist DE89370400440532013000."
+    prompt = chat.build_chat_prompt(agent_id, message, history=[], mail_context=None)
+
+    assert "DE89370400440532013000" in prompt
+    assert "[IBAN_1]" not in prompt
+
+
+# --- deanonymize_stream (Plan 10-02, ANON-04, Pitfall 2) --------------------------
+
+
+def test_deanonymize_stream_reassembles_split_tag():
+    from src.pii import Anonymizer
+    import src.chat as chat
+
+    anonymizer = Anonymizer()
+    anonymizer.anonymize("DE89370400440532013000")  # erzeugt [IBAN_1]
+
+    chunks = ["Ihre IBAN ist [IBA", "N_1]."]
+    result = "".join(chat.deanonymize_stream(iter(chunks), anonymizer))
+
+    assert result == "Ihre IBAN ist DE89370400440532013000."
+    assert "[IBAN_1]" not in result
+    assert "[IBA" not in result
+
+
+def test_deanonymize_stream_flushes_non_tag_bracket():
+    from src.pii import Anonymizer
+    import src.chat as chat
+
+    anonymizer = Anonymizer()
+    # "[" ohne folgendes "]" innerhalb der Sicherheitsnetz-Schwelle -> trotzdem ausliefern.
+    chunks = ["Ein Text mit [ einer offenen Klammer ohne Ende und noch mehr Fuelltext danach"]
+    result = "".join(chat.deanonymize_stream(iter(chunks), anonymizer))
+
+    assert result == chunks[0]

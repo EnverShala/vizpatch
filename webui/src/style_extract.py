@@ -112,14 +112,22 @@ def _resolve_imap_connection_settings(env: dict) -> dict:
     return cfg
 
 
-def _fetch_sent_mail_bodies(env: dict, imap_password: str, sample_count: int) -> list[str]:
+def _fetch_sent_mail_bodies(
+    env: dict, imap_password: str, sample_count: int, enable_pseudonym: bool = True
+) -> tuple[list[str], "pii.Anonymizer | None"]:
     """Holt bis zu `sample_count` echte Antwort-Mails aus dem Gesendet-Ordner,
-    redigiert PII, truncated je Body. Crasht nie (T-06-03): fehlender/leerer
-    Sent-Ordner oder gescheiterte IMAP-Verbindung -> leere Liste, analog
-    `fetch_sender_history` im Agent."""
+    pseudonymisiert (reversibel, ANON-03) VOR dem Truncate, truncated je Body.
+    Crasht nie (T-06-03): fehlender/leerer Sent-Ordner oder gescheiterte
+    IMAP-Verbindung -> leere Liste, analog `fetch_sender_history` im Agent.
+
+    Gibt zusätzlich die verwendete `Anonymizer`-Instanz zurück (oder `None`
+    bei deaktiviertem Flag), damit `extract_style` denselben Mapping-Kontext
+    für die De-Anonymisierung des LLM-Outputs wiederverwenden kann (D-05).
+    """
     imap_user = (env.get("IMAP_USER") or "").strip()
     imap_sent_folder_explicit = (env.get("IMAP_SENT_FOLDER") or "").strip()
     messages: list = []
+    anonymizer = pii.Anonymizer() if enable_pseudonym else None
 
     try:
         settings = _resolve_imap_connection_settings(env)
@@ -146,9 +154,13 @@ def _fetch_sent_mail_bodies(env: dict, imap_password: str, sample_count: int) ->
     bodies: list[str] = []
     for msg in usable:
         body = msg.text or (re.sub(r"<[^>]+>", " ", msg.html).strip() if msg.html else "") or ""
-        body = body.strip()[:MAX_BODY_CHARS]
-        bodies.append(pii.redact(body))
-    return bodies
+        body = body.strip()
+        # Pitfall 1 (10-RESEARCH.md): erst pseudonymisieren, DANN schneiden —
+        # sonst wird ein PII-Wert genau an der MAX_BODY_CHARS-Grenze zerrissen.
+        if enable_pseudonym and anonymizer is not None:
+            body = anonymizer.anonymize(body)
+        bodies.append(body[:MAX_BODY_CHARS])
+    return bodies, anonymizer
 
 
 def extract_style(agent_id: str) -> str:
@@ -175,7 +187,10 @@ def extract_style(agent_id: str) -> str:
 
     sample_count = int(os.getenv("STYLE_SAMPLE_COUNT") or str(DEFAULT_STYLE_SAMPLE_COUNT))
 
-    bodies = _fetch_sent_mail_bodies(env, imap_password, sample_count)
+    # ANON-03: Default AN, "aus" = Verhalten wie vor Phase 10 (Klartext-Rückfall).
+    enable_pseudonym = (env.get("ENABLE_PII_REDACTION") or "true").strip().lower() != "false"
+
+    bodies, anonymizer = _fetch_sent_mail_bodies(env, imap_password, sample_count, enable_pseudonym)
     style_note = read_style_note(agent_id)
 
     if len(bodies) < MIN_USABLE_MAILS and not style_note.strip():
@@ -204,4 +219,7 @@ def extract_style(agent_id: str) -> str:
         "style_extracted",
         extra={"input_mail_count": len(bodies), "output_length": len(text), "model": model},
     )
+    # D-05-Konsistenz: kein wörtlich zitierter Platzhalter im style.md-Output.
+    if enable_pseudonym and anonymizer is not None:
+        text = anonymizer.deanonymize(text)
     return text.strip()[:MAX_STYLE_MD_CHARS]
