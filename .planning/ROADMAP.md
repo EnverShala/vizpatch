@@ -415,7 +415,7 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 
 **Requirements mapped:** ANON-01, ANON-02, ANON-03, ANON-04, ANON-05 (Variante A); ANON-06 = deferred (NER)
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 
@@ -425,7 +425,7 @@ Plans:
 
 **Wave 2** *(blocked on 10-01)*
 
-- [ ] 10-02-PLAN.md — WebUI Stil-Extraktion (Anonymize-vor-Truncate-Fix) + chat.py deanonymize_stream-Puffer + anonymizer-fähiges build_chat_prompt (ANON-03, ANON-04)
+- [x] 10-02-PLAN.md — WebUI Stil-Extraktion (Anonymize-vor-Truncate-Fix) + chat.py deanonymize_stream-Puffer + anonymizer-fähiges build_chat_prompt (ANON-03, ANON-04)
 
 **Wave 3** *(blocked on 10-02)*
 
