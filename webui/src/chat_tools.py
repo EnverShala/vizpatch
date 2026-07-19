@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
@@ -1072,11 +1073,17 @@ def entwurf_erstellen(
 # True` UND das dazu exakt passende `confirmation_token` (aus dem vorherigen
 # `bestaetigung_erforderlich`-Ergebnis) mitkommt. Ein injizierter/halluzinierter
 # Bestätigungswert kann dieses Token nicht erraten. Zustandslos (kein Server-
-# Session-Store nötig): dasselbe (agent_id, tool, uid, ordner)-Quadrupel liefert bei
-# jedem Aufruf denselben Token, solange der persistente Fernet-Key
+# Session-Store nötig): dasselbe (agent_id, tool, uid, ordner)-Quadrupel liefert
+# innerhalb desselben Zeitfensters (Review WR-01: die HMAC-Payload enthält
+# `int(time.time()) // 600`; beim Verify gelten aktuelles + vorheriges Fenster,
+# Gültigkeit ~10-20 Minuten) denselben Token, solange der persistente Fernet-Key
 # (`crypto._load_or_create_key`, SEC-01/02, `/config/.secret_key`) unverändert ist —
 # der Token überlebt daher auch einen WebUI-Prozess-Neustart zwischen den beiden
-# Chat-Runden ("Ziel nennen" -> Nutzer-„ja" -> "erneut mit Token aufrufen").
+# Chat-Runden ("Ziel nennen" -> Nutzer-„ja" -> "erneut mit Token aufrufen"), läuft
+# aber ab: ein Wochen später (z.B. aus dem Browser-Verlauf) erneut eingespielter
+# Token reautorisiert KEINE Verschiebung mehr — wichtig, weil IMAP-uids bei
+# Ordner-Reorganisation neu vergeben werden und dasselbe (uid, folder)-Paar dann
+# eine ANDERE Mail bezeichnen kann.
 #
 # Session-Autorisierung (Betreiber-Entscheidung, Ablösung von "Bestätigung pro
 # Aktion"): die ERSTE Verschiebung in einer Chat-SITZUNG bleibt zweistufig — genau
@@ -1107,27 +1114,56 @@ def _confirmation_secret() -> bytes:
     return crypto._load_or_create_key()
 
 
-def _confirmation_token(agent_id: str, tool: str, uid: str, folder: str) -> str:
-    """HMAC-SHA256-Token, gebunden an (agent_id, tool, uid, folder) — T-09-15/
-    T-09-18: nur ein exakter Treffer auf DIESES Quadrupel reautorisiert den Move.
-    Gekürzt auf 32 Hex-Zeichen — kurz genug, dass das LLM ihn zuverlässig aus dem
-    vorherigen Tool-Result echoen kann, weiterhin praktisch unratbar."""
-    payload = "\x1f".join((agent_id, tool, uid, folder))
+# Review WR-01: Zeitfenster-Breite für die Token-Gültigkeit. Der Token trägt
+# das aktuelle Fenster in der HMAC-Payload; beim Verify werden aktuelles UND
+# vorheriges Fenster akzeptiert -> Gültigkeit ~10-20 Minuten, weiterhin
+# zustandslos. Ohne Ablauf würde derselbe Token (z.B. einmal vom Modell im
+# Antworttext zitiert und damit im Browser-Verlauf) Wochen später eine
+# Verschiebung reautorisieren — wobei die IMAP-uid dann sogar eine ANDERE
+# Mail bezeichnen kann (uids werden bei Ordner-Reorganisation neu vergeben).
+_CONFIRMATION_TOKEN_WINDOW_SECONDS = 600
+
+
+def _confirmation_window() -> int:
+    return int(time.time()) // _CONFIRMATION_TOKEN_WINDOW_SECONDS
+
+
+def _confirmation_token(agent_id: str, tool: str, uid: str, folder: str, window: int | None = None) -> str:
+    """HMAC-SHA256-Token, gebunden an (agent_id, tool, uid, folder) + Zeitfenster
+    (WR-01) — T-09-15/T-09-18: nur ein exakter Treffer auf DIESES Quintupel
+    reautorisiert den Move. Gekürzt auf 32 Hex-Zeichen — kurz genug, dass das
+    LLM ihn zuverlässig aus dem vorherigen Tool-Result echoen kann, weiterhin
+    praktisch unratbar."""
+    if window is None:
+        window = _confirmation_window()
+    payload = "\x1f".join((agent_id, tool, uid, folder, str(window)))
     digest = hmac.new(_confirmation_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return digest[:32]
 
 
-def _confirmation_ok(token_expected: str, confirmed, confirmation_token) -> bool:
+def _expected_confirmation_tokens(agent_id: str, tool: str, uid: str, folder: str) -> tuple[str, str]:
+    """(aktuelles, vorheriges) Fenster-Token — beide gelten beim Verify (WR-01),
+    damit ein direkt vor der Fenstergrenze ausgegebenes Token beim Nutzer-„ja"
+    im Folge-Request nicht schon abgelaufen ist. Ausgegeben wird immer das
+    AKTUELLE (Index 0)."""
+    window = _confirmation_window()
+    return (
+        _confirmation_token(agent_id, tool, uid, folder, window),
+        _confirmation_token(agent_id, tool, uid, folder, window - 1),
+    )
+
+
+def _confirmation_ok(tokens_expected: tuple[str, ...], confirmed, confirmation_token) -> bool:
     """Strikte Gate-Prüfung (T-09-18): `confirmed` muss Python-`True` sein (kein
     truthy String/Int wie `"true"`/`1` aus einer LLM-Halluzination zählt) UND
-    `confirmation_token` muss EXAKT (`hmac.compare_digest`, timing-safe) mit dem für
-    dieses Ziel erwarteten Token übereinstimmen. Fehlt eines von beiden, ist das Gate
-    NICHT erfüllt — kein Move."""
+    `confirmation_token` muss EXAKT (`hmac.compare_digest`, timing-safe) mit einem
+    der für dieses Ziel erwarteten Fenster-Token (aktuell/vorherig, WR-01)
+    übereinstimmen. Fehlt eines von beiden, ist das Gate NICHT erfüllt — kein Move."""
     if confirmed is not True:
         return False
     if not isinstance(confirmation_token, str) or not confirmation_token:
         return False
-    return hmac.compare_digest(confirmation_token, token_expected)
+    return any(hmac.compare_digest(confirmation_token, expected) for expected in tokens_expected)
 
 
 def _session_key(agent_id: str, session_id: str) -> str:
@@ -1202,8 +1238,8 @@ def mail_in_papierkorb(
         return _invalid_uid_error(uid_str)
     target_folder = (folder or "INBOX").strip() or "INBOX"
     session_already_authorized = _session_authorized(agent_id, session_id)
-    expected_token = _confirmation_token(agent_id, "mail_in_papierkorb", uid_str, target_folder)
-    token_gate_open = _confirmation_ok(expected_token, confirmed, confirmation_token)
+    expected_tokens = _expected_confirmation_tokens(agent_id, "mail_in_papierkorb", uid_str, target_folder)
+    token_gate_open = _confirmation_ok(expected_tokens, confirmed, confirmation_token)
     gate_open = session_already_authorized or token_gate_open
 
     try:
@@ -1235,7 +1271,7 @@ def mail_in_papierkorb(
                         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                         "ordner": target_folder,
                     },
-                    "confirmation_token": expected_token,
+                    "confirmation_token": expected_tokens[0],
                 }
 
             # Gate ist offen: entweder war die Sitzung bereits autorisiert, oder
@@ -1313,8 +1349,8 @@ def entwurf_in_papierkorb(
         with open_agent_mailbox(agent_id) as mailbox:
             env = read_env_raw(agent_id)
             drafts_folder = _resolve_drafts_folder(mailbox, env)
-            expected_token = _confirmation_token(agent_id, "entwurf_in_papierkorb", uid_str, drafts_folder)
-            token_gate_open = _confirmation_ok(expected_token, confirmed, confirmation_token)
+            expected_tokens = _expected_confirmation_tokens(agent_id, "entwurf_in_papierkorb", uid_str, drafts_folder)
+            token_gate_open = _confirmation_ok(expected_tokens, confirmed, confirmation_token)
             gate_open = session_already_authorized or token_gate_open
 
             if not gate_open:
@@ -1343,7 +1379,7 @@ def entwurf_in_papierkorb(
                         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                         "ordner": drafts_folder,
                     },
-                    "confirmation_token": expected_token,
+                    "confirmation_token": expected_tokens[0],
                 }
 
             # Gate ist offen: entweder war die Sitzung bereits autorisiert, oder

@@ -1121,6 +1121,54 @@ def test_mail_in_papierkorb_confirmed_true_no_trash_folder_returns_error_no_cras
     mock_mailbox.move.assert_not_called()
 
 
+def test_confirmation_token_from_previous_window_still_accepted(mocker, tmp_path, monkeypatch):
+    """Review WR-01: ein Token aus dem direkt VORHERIGEN Zeitfenster gilt noch
+    (kein Abriss beim Fenster-Wechsel zwischen 'Ziel nennen' und Nutzer-'ja')."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    previous_window_token = chat_tools._confirmation_token(
+        "info", "mail_in_papierkorb", "42", "INBOX", chat_tools._confirmation_window() - 1
+    )
+    result = chat_tools.mail_in_papierkorb(
+        "info", uid="42", confirmed=True, confirmation_token=previous_window_token
+    )
+
+    assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
+    mock_mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+
+
+def test_confirmation_token_expired_after_two_windows_never_moves(mocker, tmp_path, monkeypatch):
+    """Review WR-01: ein Token, das zwei oder mehr Fenster alt ist (~>20 Min,
+    z.B. aus dem Browser-Verlauf einer alten Sitzung), reautorisiert KEINE
+    Verschiebung mehr — stattdessen erneut bestaetigung_erforderlich."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    stale_token = chat_tools._confirmation_token(
+        "info", "mail_in_papierkorb", "42", "INBOX", chat_tools._confirmation_window() - 2
+    )
+    result = chat_tools.mail_in_papierkorb(
+        "info", uid="42", confirmed=True, confirmation_token=stale_token
+    )
+
+    mock_mailbox.move.assert_not_called()
+    assert result["bestaetigung_erforderlich"] is True
+
+
 def test_mail_in_papierkorb_missing_uid_returns_error():
     import src.chat_tools as chat_tools
 
