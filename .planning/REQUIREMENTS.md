@@ -161,13 +161,15 @@
 
 ---
 
-## v1.6 Requirements (Phase 11 — Rollout & Live-Abnahme v1.6)
+## v1.6 Requirements (Phase 11 — Lokale Voll-Abnahme & Update-Probe v1.6)
 
-- [ ] **RLL-01**: Update-Durchstich — v1.2–v1.6-Stand über den WebUI-Update-Mechanismus (Docker `pull`/`load`) beim Kunden aktivieren; Agent + WebUI laufen nach dem Update fehlerfrei; **Rollback-Weg dokumentiert und einmal geprobt**, kein Verlust von SQLite-State/`config`
-- [ ] **RLL-02**: Kern-Regression am echten Postfach — Klassifikation + Draft-Erzeugung funktionieren wie im v1.1-Betrieb (kein Rückschritt); Backfill-Schutz greift
-- [ ] **RLL-03**: Live-Verifikation der neuen Fähigkeiten — Multi-Agent/Multi-LLM (v1.2), Schreibstil (v1.3), Agenten-Chat (v1.3), agentische Postfach-Werkzeuge (v1.5, inkl. Bestätigungs-Gate)
-- [ ] **RLL-04**: Pseudonymisierung live geprüft (v1.6) — strukturierte PII vor dem LLM-Call maskiert, im Draft korrekt zurückübersetzt, kein Platzhalter-Leck, Mapping nie geloggt
-- [ ] **RLL-05**: Kein-Auto-Send über den gesamten neuen Funktionsumfang bestätigt — keine gesendete Mail, alle Ausgaben als Draft/Chat-Antwort zur menschlichen Freigabe
+**Prinzip:** Alles hier lokal (gegen Test-Postfach, wie bisher) abnehmen, damit der spätere Kunden-Rollout ein Nicht-Ereignis wird. Der eigentliche Kunden-Rollout ist ein eigener, kleiner Folgeschritt — Ergebnis von Phase 11 ist die dafür destillierte Runbook-Checkliste.
+
+- [ ] **RLL-01**: Update-/Rollback-Probe **lokal** — Vorgänger-Stand per WebUI-Update-Mechanismus (Docker `pull`/`load`) auf v1.6 aktualisieren; Agent + WebUI laufen fehlerfrei; **Rollback lokal einmal durchgespielt** ohne Verlust von SQLite-State/`config`; exakter Ablauf als Kunden-Runbook dokumentiert
+- [ ] **RLL-02**: Kern-Regression am Test-Postfach — Klassifikation + Draft-Erzeugung wie im v1.1-Betrieb (kein Rückschritt); Backfill-Schutz greift
+- [ ] **RLL-03**: End-to-End-Verifikation der neuen Fähigkeiten (lokal) — Multi-Agent/Multi-LLM (v1.2), Schreibstil (v1.3), Agenten-Chat (v1.3), agentische Postfach-Werkzeuge (v1.5, inkl. Bestätigungs-Gate)
+- [ ] **RLL-04**: Pseudonymisierung lokal geprüft (v1.6) — strukturierte PII vor dem LLM-Call maskiert, im Draft korrekt zurückübersetzt, kein Platzhalter-Leck, Mapping nie geloggt
+- [ ] **RLL-05**: Kein-Auto-Send über den gesamten Funktionsumfang bestätigt; **Kunden-Rollout-Checkliste** destilliert (minimale Rest-Prüfungen vor Ort, idealerweise nur „Update einspielen + 1–2 Smoke-Checks")
 
 ---
 

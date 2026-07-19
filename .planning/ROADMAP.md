@@ -19,7 +19,7 @@
 | 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ⏸️ OPTIONAL / ON HOLD (2026-07-19) — Code-komplett, aber Add-in läuft nur auf M365/Exchange, nicht auf IMAP; Umsetzung offen bis Kunden-Postfachtyp geklärt |
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
 | 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Variante A, ~0,5–1 Tag |
-| 11 | Rollout & Live-Abnahme v1.6 (Update) | v1.2–v1.6-Stand beim Kunden einspielen (WebUI-Update) + im Echtbetrieb testen: Draft-Qualität, Chat/Tools, Pseudonymisierung, Kein-Auto-Send | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
+| 11 | Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) | v1.2–v1.6 komplett bei Vizionists gegen Test-Postfach durchtesten + Update/Rollback lokal proben, damit der Kunden-Rollout ein Nicht-Ereignis wird | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
 
@@ -426,30 +426,31 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 
 ---
 
-### Phase 11: Rollout & Live-Abnahme v1.6 (Update) (v1.6)
+### Phase 11: Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) (v1.6)
 
-**Goal:** Der gesamte seit dem ersten Esso-Rollout gebaute Funktionsstand (**v1.2–v1.6** = Phasen 5, 6, 7, 9, 10 — Multi-LLM/Multi-Agent, Verschlüsselung, Schreibstil, Agenten-Chat, agentische Postfach-Werkzeuge, reversible Pseudonymisierung) wird als **Update beim Kunden eingespielt** (über den in Phase 4 gebauten WebUI-Update-Mechanismus: Docker `pull`/`load`) und **im Echtbetrieb abgenommen**. Bisher sind diese Phasen „code-komplett", aber **nie live beim Kunden getestet** — Phase 11 schließt diese Lücke: ein sauberes, reversibles Update plus strukturierte Live-Abnahme aller Fähigkeiten am echten Postfach.
+**Goal:** Der gesamte seit dem ersten Esso-Rollout gebaute Funktionsstand (**v1.2–v1.6** = Phasen 5, 6, 7, 9, 10 — Multi-LLM/Multi-Agent, Verschlüsselung, Schreibstil, Agenten-Chat, agentische Postfach-Werkzeuge, reversible Pseudonymisierung) wird **vollständig bei Vizionists lokal abgenommen** — gegen das eigene Test-Postfach, wie bisher — **inklusive einer lokalen Update-/Rollback-Probe** (genau der Weg, der später beim Kunden läuft). Ziel: alles Risiko hier abfangen, sodass der spätere Kunden-Rollout **ein Nicht-Ereignis** ist (so wenig wie möglich vor Ort zu testen oder zu befürchten). Bisher sind diese Phasen „code-komplett", aber nie als **Gesamtstand** end-to-end zusammen getestet.
 **Mode:** mvp
-**Ziel-Aufwand:** ~1–1,5 Werktage Vizionists (Update-Durchstich + Abnahme; ohne größere Bugfixes)
-**Depends on:** Phasen 5–10 code-komplett (5 in Ausführung); Phase 4 (WebUI-Update-Mechanismus); laufender Live-Betrieb beim Kunden (Phase 2/3)
-**Motivation:** „Code-komplett" ≠ „beim Kunden bewährt". Feature-Stau von fünf Versionen muss einmal kontrolliert ausgerollt und verifiziert werden, bevor weitergebaut wird.
+**Ziel-Aufwand:** ~1–1,5 Werktage Vizionists (lokale E2E-Abnahme + Update-Probe)
+**Depends on:** Phasen 5–10 code-komplett (5 in Ausführung); Phase 4 (WebUI-Update-Mechanismus); lokales Test-Postfach (wie Phase 1)
+**Motivation:** „Code-komplett" ≠ „als Gesamtstand bewährt". Fünf Versionen wurden einzeln gebaut/getestet — der zusammengesetzte Stand + der Update-Weg müssen einmal **komplett lokal** durchlaufen, bevor irgendetwas den Kunden erreicht. De-Risking passiert hier, nicht vor Ort.
 
 **Success Criteria:**
 
-1. **Update sauber eingespielt:** neuer Stand über den WebUI-Update-Mechanismus (Docker-Image pull/load) aktiviert; Agent + WebUI laufen nach dem Update fehlerfrei; **Rollback-Weg dokumentiert und einmal geprobt** (kein Datenverlust an SQLite-State/config).
-2. **Kern-Regression grün:** Klassifikation + Draft-Erzeugung funktionieren am echten Postfach wie zuvor (kein Rückschritt gegenüber v1.1-Betrieb); Backfill-Schutz greift.
-3. **Neue Fähigkeiten live verifiziert:** Multi-Agent/Multi-LLM (v1.2), Schreibstil-Adaption (v1.3), Agenten-Chat (v1.3) und agentische Postfach-Werkzeuge (v1.5, inkl. Bestätigungs-Gate + Kein-Auto-Send) tun im Echtbetrieb, was sie sollen.
-4. **Pseudonymisierung live geprüft (v1.6):** an echten Mails wird bestätigt, dass strukturierte PII (IBAN/Telefon/E-Mail/…) vor dem LLM-Call maskiert und im Draft korrekt zurückübersetzt wird — **kein Platzhalter-Leck**, Mapping nie geloggt.
-5. **Kein-Auto-Send bestätigt:** über den gesamten neuen Funktionsumfang entsteht **keine gesendete Mail**; alle Ausgaben landen als Draft/Chat-Antwort zur menschlichen Freigabe.
+1. **Update-/Rollback-Probe lokal grün:** Ein Vorgänger-Stand wird lokal per WebUI-Update-Mechanismus (Docker `pull`/`load`) auf v1.6 aktualisiert; Agent + WebUI laufen danach fehlerfrei; **Rollback lokal einmal durchgespielt** ohne Verlust von SQLite-State/`config` — der exakte Ablauf ist als Kunden-Runbook dokumentiert.
+2. **Kern-Regression grün (lokal):** Klassifikation + Draft-Erzeugung funktionieren am Test-Postfach wie in v1.1 (kein Rückschritt); Backfill-Schutz greift.
+3. **Alle neuen Fähigkeiten lokal end-to-end verifiziert:** Multi-Agent/Multi-LLM (v1.2), Schreibstil-Adaption (v1.3), Agenten-Chat (v1.3) und agentische Postfach-Werkzeuge (v1.5, inkl. Bestätigungs-Gate + Kein-Auto-Send) — am Test-Postfach durchgespielt.
+4. **Pseudonymisierung lokal geprüft (v1.6):** an Test-Mails bestätigt, dass strukturierte PII (IBAN/Telefon/E-Mail/…) vor dem LLM-Call maskiert und im Draft korrekt zurückübersetzt wird — **kein Platzhalter-Leck**, Mapping nie geloggt.
+5. **Kein-Auto-Send bestätigt** über den gesamten Funktionsumfang; **Kunden-Rollout-Checkliste** destilliert: die minimale Restmenge an Vor-Ort-Prüfungen (idealerweise nur „Update einspielen + 1–2 Smoke-Checks"), alles andere ist hier bereits abgenommen.
 
 **Requirements mapped:** RLL-01, RLL-02, RLL-03, RLL-04, RLL-05
 
 **Hauptrisiken:**
 
-- **Fünf Versionen auf einmal** → Fehlersuche bei Problemen schwer; ggf. gestaffelt aktivieren (Feature-Flags) statt „big bang".
-- **Update auf Produktiv-Postfach** → Rollback-Pfad + State-Backup vor dem Einspielen zwingend; außerhalb der Stoßzeiten.
-- **Live-Abnahme braucht echten Kundenkontext** (Postfach, Zeit des Betreibers) — analog den Checkpoints der Phasen 6/7/8; terminlich mit dem Kunden abstimmen.
-- **M365-abhängiges Add-in (Phase 8) NICHT Teil** dieses Rollouts (on hold) — Erwartung beim Kunden klar kommunizieren.
+- **Test-Setup ≠ Kundenumgebung** → das lokale Test-Postfach möglichst kundennah wählen (gleicher Provider/IMAP-Typ wie Esso), sonst verlagert sich Risiko doch vor Ort.
+- **Fünf Versionen als Gesamtstand** → Integrationsfehler zwischen Features zeigen sich erst im Zusammenspiel; gestaffelt aktivieren (Feature-Flags) erleichtert die Fehlersuche.
+- **Update-Weg selbst ist ungetestet** → genau deshalb hier proben (pull/load + Rollback + State-Persistenz), bevor er beim Kunden das erste Mal läuft.
+- **Späterer Kunden-Rollout bleibt ein eigener, kleiner Schritt** (nicht Teil dieser Phase) — Ergebnis von Phase 11 ist die Runbook-Checkliste dafür.
+- **M365-abhängiges Add-in (Phase 8) NICHT Teil** dieses Stands (on hold).
 
 ---
 
