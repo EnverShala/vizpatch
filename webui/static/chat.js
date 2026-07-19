@@ -5,6 +5,13 @@
  * DB, kein localStorage. Verlauf endet mit dem Seitenleben (Reload/Tab-Schluss).
  * Reset-Button (D-58) leert history + #chat-log.
  *
+ * sessionId (Session-Autorisierung Papierkorb-Werkzeuge, Betreiber-Entscheidung):
+ * einmal pro Chat-Sitzung erzeugt, bei jedem Send mitgeschickt. Das Backend
+ * verlangt die explizite Zwei-Schritt-Bestätigung nur für die ERSTE Verschiebung
+ * in den Papierkorb je sessionId — danach laufen weitere Verschiebungen
+ * DERSELBEN Sitzung ohne erneute Rückfrage. `resetHistory()` erzeugt eine NEUE
+ * sessionId (Reset = neue Sitzung = wieder eine Erst-Bestätigung nötig).
+ *
  * mail_context (D-65/D-69, Phase 8 — Outlook-Add-in): window.vizpatchGetMailContext
  * ist der Hook, den sendMessage() abfragt. Dieses Skript läuft IM Embed-iframe
  * (same-origin, D-66) und empfängt die gerade geöffnete Mail per postMessage von
@@ -48,10 +55,22 @@
     return lastMailContext;
   };
 
+  function generateSessionId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    // Fallback fuer Browser ohne crypto.randomUUID — kein Sicherheits-Token,
+    // nur eine Sitzungs-Kennung; das Backend bindet die eigentliche
+    // Autorisierung an einen serverseitigen HMAC ueber diese Kennung.
+    return 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
+
   let history = [];
+  let sessionId = generateSessionId();
 
   function resetHistory() {
     history = [];
+    sessionId = generateSessionId();
     log.innerHTML = '';
   }
 
@@ -91,6 +110,7 @@
     const fd = new FormData();
     fd.append('message', message);
     fd.append('history', JSON.stringify(history));
+    fd.append('session_id', sessionId);
     const mailContext = window.vizpatchGetMailContext();
     if (mailContext) {
       fd.append('mail_context', JSON.stringify(mailContext));

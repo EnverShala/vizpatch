@@ -189,6 +189,44 @@ def test_chat_send_run_agentic_chat_not_bypassed_by_direct_stream_chat_call(auth
     assert "chat_tools.run_agentic_chat" in source
 
 
+def test_chat_send_forwards_session_id_to_run_agentic_chat(authed_client, mocker, tmp_path, monkeypatch):
+    """Session-Autorisierung (Betreiber-Entscheidung): das `session_id`-Formfeld
+    (von `chat.js` je Chat-Sitzung erzeugt) muss unverändert bei
+    `chat_tools.run_agentic_chat()` ankommen, damit die Papierkorb-Werkzeuge
+    wissen, ob diese Sitzung bereits autorisiert ist."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    mock_run = mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter([{"type": "text", "text": "Ok."}]),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Hi", "session_id": "sess-forward-test"},
+    )
+    assert response.status_code == 200
+    assert mock_run.call_args.kwargs["session_id"] == "sess-forward-test"
+
+
+def test_chat_send_without_session_id_still_works_backward_compat(authed_client, mocker, tmp_path, monkeypatch):
+    """Fehlt das `session_id`-Feld (z.B. älteres Frontend), bleibt /send nutzbar —
+    `chat_send` defaultet auf einen leeren String (nie autorisierbar, kein 500)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    mock_run = mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter([{"type": "text", "text": "Ok."}]),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Hi"},
+    )
+    assert response.status_code == 200
+    assert mock_run.call_args.kwargs["session_id"] == ""
+
+
 def test_chat_send_injects_context_md_into_system_prompt(authed_client, mocker, tmp_path, monkeypatch):
     """CHAT-02/CHAT-03 (Plan 07-02): build_system_prompt wird NICHT gemockt —
     nur stream_chat. Prüft, dass das echte prompt-Argument an stream_chat

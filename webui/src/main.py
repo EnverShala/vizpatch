@@ -480,6 +480,7 @@ def chat_send(
     message: str = Form(...),
     history: str = Form(""),
     mail_context: str = Form(""),
+    session_id: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
     """Streamt eine agentische Chat-Antwort via SSE (D-62/D-72/D-80). Provider/
@@ -489,6 +490,12 @@ def chat_send(
     anderen Provider sauber auf den beratenden, werkzeuglosen Chat zurück
     (D-72/T-09-06, kein Absturz). Rate-Limit CHAT_RATE_LIMIT_PER_MIN (D-60, per
     Remote-Address) greift serverseitig weiter.
+
+    `session_id` (Session-Autorisierung Papierkorb-Werkzeuge): vom Browser
+    (`chat.js`) je Chat-Sitzung erzeugtes Formfeld, unverändert an
+    `chat_tools.run_agentic_chat()` durchgereicht — dort entscheidet es, ob eine
+    Verschiebung in den Papierkorb erneut bestätigt werden muss oder ob die
+    Sitzung bereits (durch eine frühere bestätigte Verschiebung) autorisiert ist.
 
     PLAN-CHECKER-W1: `run_agentic_chat` ist ein Generator — dessen Rumpf läuft
     erst beim ersten `next()`, also NACH dem 200-Commit der StreamingResponse.
@@ -509,7 +516,9 @@ def chat_send(
 
     def _stream():
         try:
-            for event in chat_tools.run_agentic_chat(agent_id, message, parsed_history, parsed_mail_context):
+            for event in chat_tools.run_agentic_chat(
+                agent_id, message, parsed_history, parsed_mail_context, session_id=session_id
+            ):
                 if event.get("type") == "tool":
                     yield f"event: tool\ndata: {event.get('label', '')}\n\n"
                 else:

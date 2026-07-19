@@ -35,3 +35,16 @@ def reset_rate_limiters():
     yield
     limiter.reset()
     auth._reset_login_tracking()
+
+
+@pytest.fixture(autouse=True)
+def reset_chat_tools_session_authorization():
+    """Session-Autorisierung für die Papierkorb-Werkzeuge (`chat_tools.
+    _authorized_move_sessions`) ist ein reiner In-Memory-Prozess-Zustand — ohne
+    Reset könnten sich Tests über den module-level `set` hinweg beeinflussen,
+    auch wenn unterschiedliche VIZPATCH_SECRET_KEY_FILE-Werte je Test das in der
+    Praxis bereits verhindern (andere HMAC-Digests). Explizit + robust."""
+    import src.chat_tools as chat_tools
+    chat_tools._authorized_move_sessions.clear()
+    yield
+    chat_tools._authorized_move_sessions.clear()
