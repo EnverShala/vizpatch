@@ -1681,6 +1681,18 @@ def _run_anthropic_tool_loop(
     max_tokens = chat._int_env("CHAT_MAX_TOKENS", chat.CHAT_MAX_TOKENS_DEFAULT)
     client = Anthropic(api_key=api_key)
 
+    # Review CR-03: Tokens, die in DIESEM Loop-Aufruf (= diesem /send-Request)
+    # als `bestaetigung_erforderlich` ausgegeben wurden. Loest das Modell ein
+    # solches Token in einer SPAETEREN Runde DESSELBEN Aufrufs ein, wird es
+    # verworfen (confirmed/confirmation_token gestrippt) — der Handler
+    # antwortet dann erneut mit `bestaetigung_erforderlich`. Damit ist die
+    # Erst-Bestaetigung strukturell an einen ECHTEN Nutzer-Turn (den NAECHSTEN
+    # /send-Request) gebunden; eine injizierte Mail kann Token-Ausgabe und
+    # -Einloesung nicht mehr im selben Betreiber-Turn verketten. Das
+    # Session-Modell (einmal bestaetigt -> Sitzung autorisiert) bleibt
+    # unveraendert bestehen.
+    issued_confirmation_tokens: set[str] = set()
+
     for _round in range(MAX_TOOL_ROUNDS):
         try:
             response = client.messages.create(
@@ -1728,6 +1740,20 @@ def _run_anthropic_tool_loop(
                     input_args = dict(raw_input)
                 if block.name in _SESSION_SCOPED_TOOLS:
                     input_args["session_id"] = session_id
+                    # Review CR-03: ein Token, das erst in DIESEM Aufruf
+                    # ausgegeben wurde, darf nicht im selben Aufruf wieder
+                    # eingeloest werden — strippen, damit der Handler erneut
+                    # mit `bestaetigung_erforderlich` antwortet und die
+                    # Einloesung erst im naechsten /send-Request (echter
+                    # Nutzer-Turn) moeglich ist.
+                    token_arg = input_args.get("confirmation_token")
+                    if isinstance(token_arg, str) and token_arg in issued_confirmation_tokens:
+                        logger.warning(
+                            "confirmation_token_same_turn_redemption_blocked",
+                            extra={"tool": block.name},
+                        )
+                        input_args.pop("confirmation_token", None)
+                        input_args.pop("confirmed", None)
                 try:
                     payload = handler(agent_id, **input_args)
                 except Exception as e:
@@ -1735,6 +1761,12 @@ def _run_anthropic_tool_loop(
                         "tool_handler_failed", extra={"tool": block.name, "error": str(e)}
                     )
                     payload = {"fehler": f"Werkzeug '{block.name}' fehlgeschlagen: {e}"}
+                if (
+                    isinstance(payload, dict)
+                    and payload.get("bestaetigung_erforderlich")
+                    and isinstance(payload.get("confirmation_token"), str)
+                ):
+                    issued_confirmation_tokens.add(payload["confirmation_token"])
             tool_result_content.append(
                 {
                     "type": "tool_result",

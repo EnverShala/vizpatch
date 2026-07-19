@@ -1590,6 +1590,55 @@ def test_run_agentic_chat_two_step_confirmation_flow_across_two_turns(mocker, tm
     mock_mailbox.move.assert_called_once_with(["42"], "Papierkorb")
 
 
+def test_run_agentic_chat_same_turn_token_redemption_never_moves(mocker, tmp_path, monkeypatch):
+    """Review CR-03 (Ein-Turn-Bypass): das Modell erhaelt in Runde 1 DESSELBEN
+    run_agentic_chat-Aufrufs das confirmation_token und echot es in Runde 2
+    sofort mit confirmed=true zurueck — der Move darf NICHT laufen (Token wird
+    gestrippt, Handler antwortet erneut mit bestaetigung_erforderlich) und die
+    Sitzung darf NICHT autorisiert werden. Die Einloesung ist strukturell erst
+    im NAECHSTEN /send-Request (echter Nutzer-Turn) moeglich — siehe
+    test_run_agentic_chat_two_step_confirmation_flow_across_two_turns."""
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(_chat_system_prompt(tmp_path)))
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info", provider="anthropic")
+
+    import src.chat_tools as chat_tools
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    # Token ist deterministisch — vorab berechnen, damit der Runde-2-Mock exakt
+    # das in Runde 1 ausgegebene Token echoen kann (wie ein injiziertes Modell).
+    token = chat_tools._confirmation_token("info", "mail_in_papierkorb", "42", "INBOX")
+
+    round1 = _fake_response("tool_use", [_tool_use_block("mail_in_papierkorb", {"uid": "42"})])
+    round2 = _fake_response(
+        "tool_use",
+        [_tool_use_block("mail_in_papierkorb", {"uid": "42", "confirmed": True, "confirmation_token": token})],
+    )
+    round3 = _fake_response("end_turn", [_text_block("Ok.")])
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [round1, round2, round3]
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client)
+
+    list(
+        chat_tools.run_agentic_chat(
+            "info", "Fass mir meine Inbox zusammen", session_id="sess-one-turn"
+        )
+    )
+
+    mock_mailbox.move.assert_not_called()
+    assert chat_tools._session_authorized("info", "sess-one-turn") is False
+
+    # Das Tool-Result der Runde 2 (Einloesungs-Versuch) verlangt WEITER die
+    # Bestaetigung — kein stiller Erfolg.
+    third_call_messages = mock_client.messages.create.call_args_list[2].kwargs["messages"]
+    tool_result_content = third_call_messages[-1]["content"][0]["content"]
+    assert "bestaetigung_erforderlich" in tool_result_content
+
+
 def test_run_agentic_chat_bare_confirmed_true_without_prior_token_step_never_moves(mocker, tmp_path, monkeypatch):
     """Dokumentiert eine Verbesserung gegenüber der in 09-04-PLAN.md selbst
     benannten Grenze (Task 2): dort wird beschrieben, dass ein Anthropic-Mock, der
