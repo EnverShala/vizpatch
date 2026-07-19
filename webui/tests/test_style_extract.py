@@ -138,7 +138,128 @@ def test_pii_runs_before_llm(mocker, tmp_path, monkeypatch):
 
     prompt = mock_llm.call_args.args[3]
     assert "DE89370400440532013000" not in prompt
-    assert "[IBAN_REDACTED]" in prompt
+    assert "[IBAN_1]" in prompt
+
+
+def test_sent_bodies_anonymized_before_truncate(mocker, tmp_path, monkeypatch):
+    """Pitfall 1 (10-RESEARCH.md): eine IBAN kurz vor der MAX_BODY_CHARS-Grenze
+    darf durch den Schnitt nicht zerstört werden — anonymize() muss VOR dem
+    `[:MAX_BODY_CHARS]`-Schnitt laufen."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_STYLE_EXTRACT_PROMPT", str(_make_prompt_file(tmp_path)))
+    _write_agent_env("info")
+
+    import src.style_extract as style_extract
+
+    iban = "DE89 3704 0044 0532 0130 00"
+    # Bewusst konstruiert: die rohe IBAN beginnt VOR und endet NACH
+    # MAX_BODY_CHARS (800) — ein Truncate-vor-Anonymize (Bug) würde die IBAN
+    # mittendrin zerschneiden, der Regex würde sie danach nicht mehr erkennen.
+    filler = "x" * 770
+    iban_body = f"Hallo, {filler} IBAN {iban} vielen Dank."
+    messages = [
+        _msg("Re: Rechnung", text=iban_body, in_reply_to="<a@x.de>"),
+        _msg("Re: Frage 2", text=_LONG_REPLY_2, in_reply_to="<b@x.de>"),
+        _msg("Re: Frage 3", text=_LONG_REPLY_3, in_reply_to="<c@x.de>"),
+    ]
+    mock_mailbox = _fake_mailbox(messages)
+    mocker.patch("src.style_extract.MailBox", return_value=mock_mailbox)
+    mock_llm = _mock_llm_call(mocker)
+
+    style_extract.extract_style("info")
+
+    prompt = mock_llm.call_args.args[3]
+    assert iban not in prompt
+    assert "[IBAN_1]" in prompt
+
+
+def test_sent_bodies_no_raw_pii(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_STYLE_EXTRACT_PROMPT", str(_make_prompt_file(tmp_path)))
+    _write_agent_env("info")
+
+    pii_body = (
+        "Hallo, unsere IBAN ist DE89370400440532013000, rufen Sie uns an unter "
+        "07152 123456 oder schreiben Sie an kontakt@kunde.de. Danke und Grüße."
+    )
+    messages = [
+        _msg("Re: Kontakt", text=pii_body, in_reply_to="<a@x.de>"),
+        _msg("Re: Frage 2", text=_LONG_REPLY_2, in_reply_to="<b@x.de>"),
+        _msg("Re: Frage 3", text=_LONG_REPLY_3, in_reply_to="<c@x.de>"),
+    ]
+    mock_mailbox = _fake_mailbox(messages)
+    mocker.patch("src.style_extract.MailBox", return_value=mock_mailbox)
+    mock_llm = _mock_llm_call(mocker)
+
+    import src.style_extract as style_extract
+    style_extract.extract_style("info")
+
+    prompt = mock_llm.call_args.args[3]
+    assert "DE89370400440532013000" not in prompt
+    assert "07152 123456" not in prompt
+    assert "kontakt@kunde.de" not in prompt
+
+
+def test_extract_style_deanonymizes_output(mocker, tmp_path, monkeypatch):
+    """Flag an: ein LLM-Mock, der einen wörtlichen Platzhalter im style.md
+    zurückgibt, darf im Ergebnis von extract_style() keinen Platzhalter mehr
+    enthalten (D-05-Konsistenz)."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_STYLE_EXTRACT_PROMPT", str(_make_prompt_file(tmp_path)))
+    _write_agent_env("info")
+
+    pii_body = "Hallo, schreiben Sie uns bei Fragen an kontakt@kunde.de. Danke und Grüße."
+    messages = [
+        _msg("Re: Kontakt", text=pii_body, in_reply_to="<a@x.de>"),
+        _msg("Re: Frage 2", text=_LONG_REPLY_2, in_reply_to="<b@x.de>"),
+        _msg("Re: Frage 3", text=_LONG_REPLY_3, in_reply_to="<c@x.de>"),
+    ]
+    mock_mailbox = _fake_mailbox(messages)
+    mocker.patch("src.style_extract.MailBox", return_value=mock_mailbox)
+    _mock_llm_call(
+        mocker,
+        return_text="## Anrede\nDu\n## typische Wendungen\nz.B. wie in [EMAIL_1]",
+    )
+
+    import src.style_extract as style_extract
+    result = style_extract.extract_style("info")
+
+    assert "[EMAIL_1]" not in result
+    assert "kontakt@kunde.de" in result
+
+
+def test_style_flag_off_raw(mocker, tmp_path, monkeypatch):
+    """ENABLE_PII_REDACTION=false -> Rückfall auf rohe Bodies (Verhalten vor Phase 10)."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_STYLE_EXTRACT_PROMPT", str(_make_prompt_file(tmp_path)))
+    import src.agents_io as agents_io
+    agents_io.write_env(
+        "info",
+        {
+            "IMAP_USER": "info@ionos.de",
+            "IMAP_PASSWORD": "imap-pw",
+            "LLM_API_KEY": "sk-test-key",
+            "LLM_PROVIDER": "anthropic",
+            "ENABLE_PII_REDACTION": "false",
+        },
+    )
+
+    pii_body = "Hallo, unsere IBAN ist DE89370400440532013000. Danke und Grüße."
+    messages = [
+        _msg("Re: Rechnung", text=pii_body, in_reply_to="<a@x.de>"),
+        _msg("Re: Frage 2", text=_LONG_REPLY_2, in_reply_to="<b@x.de>"),
+        _msg("Re: Frage 3", text=_LONG_REPLY_3, in_reply_to="<c@x.de>"),
+    ]
+    mock_mailbox = _fake_mailbox(messages)
+    mocker.patch("src.style_extract.MailBox", return_value=mock_mailbox)
+    mock_llm = _mock_llm_call(mocker)
+
+    import src.style_extract as style_extract
+    style_extract.extract_style("info")
+
+    prompt = mock_llm.call_args.args[3]
+    assert "DE89370400440532013000" in prompt
+    assert "[IBAN_1]" not in prompt
 
 
 def test_real_reply_filter_discards_forwards_and_one_word_bodies(mocker, tmp_path, monkeypatch):
