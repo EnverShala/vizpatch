@@ -1151,6 +1151,71 @@ def test_entwurf_in_papierkorb_invalid_agent_id_raises_value_error(tmp_path, mon
         chat_tools.entwurf_in_papierkorb("../evil", uid="1")
 
 
+# --- Review CR-02: UID-Range-Injection ("1:*", "1,2,3") strikt abgewiesen ---------
+#
+# imap-tools `clean_uids` laesst UID-Ranges/-Listen explizit durch — eine
+# LLM-kontrollierte uid koennte damit ganze Ordner verschieben/loeschen. Jeder
+# Handler mit uid-Parameter validiert auf GENAU EINE numerische uid;
+# `_move_to_trash` prueft zusaetzlich als Defense-in-Depth.
+
+
+@pytest.mark.parametrize("bad_uid", ["1:*", "1,2,3", "2,4:7,9,12:*", "*", "1:100", "abc", "42 1:*"])
+def test_uid_range_injection_rejected_in_all_uid_handlers(bad_uid, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([_msg(uid="42")])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    results = {
+        "mail_lesen": chat_tools.mail_lesen("info", uid=bad_uid),
+        "entwurf_lesen": chat_tools.entwurf_lesen("info", uid=bad_uid),
+        "entwurf_bearbeiten": chat_tools.entwurf_bearbeiten("info", uid=bad_uid, neuer_text="x"),
+        "entwurf_erstellen": chat_tools.entwurf_erstellen("info", text="x", in_reply_to_uid=bad_uid),
+        "mail_in_papierkorb": chat_tools.mail_in_papierkorb("info", uid=bad_uid),
+        "entwurf_in_papierkorb": chat_tools.entwurf_in_papierkorb("info", uid=bad_uid),
+    }
+    for name, result in results.items():
+        assert "fehler" in result, f"{name} hat uid={bad_uid!r} nicht abgewiesen: {result}"
+    mock_mailbox.move.assert_not_called()
+    mock_mailbox.delete.assert_not_called()
+    mock_mailbox.append.assert_not_called()
+
+
+def test_mail_in_papierkorb_uid_range_rejected_even_in_authorized_session(
+    mocker, tmp_path, monkeypatch
+):
+    """Auch mit bereits autorisierter Sitzung (Fast-Path ohne Rueckfrage) darf
+    eine Range-uid NIE zum Move durchschlagen."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([_msg(uid="42")])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    chat_tools._authorize_session("info", "sess-range")
+    result = chat_tools.mail_in_papierkorb("info", uid="1:*", session_id="sess-range")
+
+    assert "fehler" in result
+    mock_mailbox.move.assert_not_called()
+    mock_mailbox.delete.assert_not_called()
+
+
+def test_move_to_trash_rejects_uid_range_defense_in_depth():
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    with pytest.raises(chat_tools.MailboxMoveError):
+        chat_tools._move_to_trash(mailbox, "1:*", "INBOX")
+
+    mailbox.move.assert_not_called()
+    mailbox.delete.assert_not_called()
+
+
 # --- Session-Autorisierung (Betreiber-Entscheidung): Bestätigung nur EINMAL PRO ---
 # CHAT-SITZUNG statt pro Aktion. Die ERSTE Verschiebung einer Sitzung bleibt
 # zweistufig (Token-Gate unverändert, schützt gegen Prompt-Injection-

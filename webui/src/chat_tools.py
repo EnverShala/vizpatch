@@ -72,6 +72,23 @@ _UNTRUSTED_TOOL_RESULT_ANCHOR = (
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
+# Review CR-02: imap-tools `clean_uids` laesst UID-RANGES und -Listen ("1:*",
+# "1,2,3", "2,4:7,9") explizit durch — eine LLM-kontrollierte (und damit per
+# Prompt-Injection aus Mail-Inhalt steuerbare) uid koennte sonst ganze Ordner
+# auf einmal verschieben oder (via delete-Fallback) loeschen. Jeder Handler,
+# der eine uid entgegennimmt, validiert deshalb strikt auf GENAU EINE
+# numerische uid; `_move_to_trash` prueft zusaetzlich als Defense-in-Depth.
+_UID_RE = re.compile(r"^\d+$")
+
+
+def _invalid_uid_error(uid_str: str) -> dict:
+    return {
+        "fehler": (
+            f"Ungültige uid {uid_str!r} — nur eine einzelne numerische uid "
+            f"erlaubt (keine Ranges wie '1:*' oder Listen wie '1,2,3')."
+        )
+    }
+
 
 def _agent_imap_settings(env: dict) -> dict:
     """Analog `style_extract._resolve_imap_connection_settings` (D-79): IMAP_HOST-
@@ -246,6 +263,15 @@ def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
 
     Kein erkannter Papierkorb -> `TrashFolderNotFound` propagiert unverändert
     (kein stiller Datenverlust, unverändertes Verhalten)."""
+    # Review CR-02 (Defense-in-Depth zusaetzlich zur Handler-Validierung):
+    # niemals eine UID-Range/-Liste ("1:*", "1,2,3") an move()/den Fallback
+    # durchreichen — das wuerde ganze Ordner auf einmal treffen.
+    uid = str(uid or "").strip()
+    if not _UID_RE.match(uid):
+        raise MailboxMoveError(
+            f"Ungültige uid {uid!r} — nur eine einzelne numerische uid erlaubt "
+            f"(keine Ranges/Listen), nichts verschoben."
+        )
     mailbox.folder.set(source_folder)
     trash_folder = _detect_trash_folder(mailbox)
 
@@ -497,6 +523,8 @@ def mail_lesen(
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
+    if not _UID_RE.match(uid_str):
+        return _invalid_uid_error(uid_str)
     target_folder = (folder or "INBOX").strip() or "INBOX"
 
     try:
@@ -632,6 +660,8 @@ def entwurf_lesen(
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
+    if not _UID_RE.match(uid_str):
+        return _invalid_uid_error(uid_str)
 
     try:
         with open_agent_mailbox(agent_id) as mailbox:
@@ -715,6 +745,8 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
+    if not _UID_RE.match(uid_str):
+        return _invalid_uid_error(uid_str)
     neuer_text_str = (neuer_text or "").strip()
     if not neuer_text_str:
         return {"fehler": "Kein neuer Text angegeben."}
@@ -871,6 +903,8 @@ def entwurf_erstellen(
             reply_to = None
             uid_str = str(in_reply_to_uid or "").strip()
             if uid_str:
+                if not _UID_RE.match(uid_str):
+                    return _invalid_uid_error(uid_str)
                 is_reply = True
                 folder = (quell_ordner or "INBOX").strip() or "INBOX"
                 try:
@@ -1047,6 +1081,8 @@ def mail_in_papierkorb(
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
+    if not _UID_RE.match(uid_str):
+        return _invalid_uid_error(uid_str)
     target_folder = (folder or "INBOX").strip() or "INBOX"
     session_already_authorized = _session_authorized(agent_id, session_id)
     expected_token = _confirmation_token(agent_id, "mail_in_papierkorb", uid_str, target_folder)
@@ -1145,6 +1181,8 @@ def entwurf_in_papierkorb(
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
+    if not _UID_RE.match(uid_str):
+        return _invalid_uid_error(uid_str)
 
     session_already_authorized = _session_authorized(agent_id, session_id)
 
