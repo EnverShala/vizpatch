@@ -1560,3 +1560,159 @@ def test_entwurf_erstellen_invalid_agent_id_raises_value_error(tmp_path, monkeyp
 
     with pytest.raises(ValueError):
         chat_tools.entwurf_erstellen("../evil", text="Text")
+
+
+# --- Phase 10 Plan 03 Task 1: anonymizer-fähige Read-Handler (ANON-03) -------------
+
+
+def test_mail_lesen_uses_shared_anonymizer(mocker, tmp_path, monkeypatch):
+    """Mit übergebenem Anonymizer enthält der Body getypte Tags statt Rohwerten;
+    `deanonymize` derselben Instanz stellt das Original wieder her."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "Bitte überweisen Sie auf DE89 3704 0044 0532 0130 00, danke."
+    mock_mailbox = _fake_mailbox([_msg(uid="99", text=iban_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.mail_lesen("info", uid="99", anonymizer=anonymizer)
+
+    assert "fehler" not in result
+    body = result["body_redigiert"]
+    assert "DE89 3704 0044 0532 0130 00" not in body
+    assert "[IBAN_1]" in body
+    assert anonymizer.deanonymize(body) == iban_body
+
+
+def test_read_handler_no_anonymizer_falls_back_to_redact(mocker, tmp_path, monkeypatch):
+    """Ohne `anonymizer`-Argument bleibt das alte einseitige `pii.redact()`-
+    Verhalten erhalten — der Schutz sinkt nie unter den Ist-Zustand vor Phase 10."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "Bitte überweisen Sie auf DE89370400440532013000, danke."
+    mock_mailbox = _fake_mailbox([_msg(uid="99", text=iban_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_lesen("info", uid="99")
+
+    assert "DE89370400440532013000" not in result["body_redigiert"]
+    assert "[IBAN_REDACTED]" in result["body_redigiert"]
+
+
+def test_read_handler_anonymize_before_truncate(mocker, tmp_path, monkeypatch):
+    """Ein Wert nahe der MAX_TOOL_RESULT_BODY_CHARS-Grenze wird als vollständiger
+    Tag erkannt (Anonymisieren läuft VOR dem Truncate, Pitfall 1)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    import src.chat_tools as chat_tools
+
+    padding = "x" * (chat_tools.MAX_TOOL_RESULT_BODY_CHARS - 10)
+    iban_body = f"{padding} DE89 3704 0044 0532 0130 00"
+    mock_mailbox = _fake_mailbox([_msg(uid="99", text=iban_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.mail_lesen("info", uid="99", anonymizer=anonymizer)
+
+    assert "[IBAN_1]" in result["body_redigiert"]
+    assert "DE89" not in result["body_redigiert"]
+
+
+def test_mails_suchen_uses_shared_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "IBAN: DE89 3704 0044 0532 0130 00"
+    mock_mailbox = _fake_mailbox([_msg(text=iban_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.mails_suchen("info", query="Rechnung", anonymizer=anonymizer)
+
+    body = result["treffer"][0]["body_redigiert"]
+    assert "[IBAN_1]" in body
+    assert "DE89" not in body
+
+
+def test_mails_suchen_all_folders_uses_shared_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "IBAN: DE89 3704 0044 0532 0130 00"
+    mock_mailbox = _fake_mailbox(
+        per_folder_messages={"INBOX": [_msg(text=iban_body)]},
+    )
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("INBOX", flags=())]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.mails_suchen("info", folder="alle", anonymizer=anonymizer)
+
+    body = result["treffer"][0]["body_redigiert"]
+    assert "[IBAN_1]" in body
+    assert "DE89" not in body
+
+
+def test_entwurf_lesen_uses_shared_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    iban_body = "IBAN: DE89 3704 0044 0532 0130 00"
+    mock_mailbox = _fake_mailbox([_msg(uid="7", text=iban_body)])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.entwurf_lesen("info", uid="7", anonymizer=anonymizer)
+
+    body = result["body_redigiert"]
+    assert "[IBAN_1]" in body
+    assert "DE89" not in body
+
+
+def test_entwuerfe_auflisten_accepts_anonymizer_kwarg_without_error(mocker, tmp_path, monkeypatch):
+    """entwuerfe_auflisten liefert nur Metadaten (kein Mailtext) — der
+    anonymizer-Parameter muss trotzdem klaglos akzeptiert werden, damit die
+    Tool-Schleife alle vier `_ANON_AWARE_TOOLS` einheitlich aufrufen kann."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([_msg(uid="7")])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.entwuerfe_auflisten("info", anonymizer=Anonymizer())
+
+    assert "fehler" not in result
+    assert result["anzahl"] == 1
+
+
+def test_anon_aware_tools_module_set_contains_exactly_four_read_handlers():
+    import src.chat_tools as chat_tools
+
+    assert chat_tools._ANON_AWARE_TOOLS == {
+        "mails_suchen",
+        "mail_lesen",
+        "entwuerfe_auflisten",
+        "entwurf_lesen",
+    }

@@ -328,13 +328,25 @@ def _is_all_folders_marker(folder) -> bool:
     return str(folder).strip().lower() in ("", "alle", "*", "all")
 
 
-def _mails_suchen_all_folders(mailbox, agent_id: str, criteria, search_limit: int) -> dict:
+def _mails_suchen_all_folders(
+    mailbox,
+    agent_id: str,
+    criteria,
+    search_limit: int,
+    anonymizer: "pii.Anonymizer | None" = None,
+) -> dict:
     """Alle-Ordner-Zweig von `mails_suchen`: iteriert `mailbox.folder.list()`
     (begrenzt auf `MAX_FOLDERS_FOR_ALL_SEARCH` Ordner) und aggregiert Treffer
     bis insgesamt `search_limit`. Ein Ordner, der beim Selektieren oder Fetchen
     fehlschlägt, wird übersprungen statt die gesamte Suche abzubrechen (T-09-05-
     analoges Graceful-Verhalten) — die IMAP-Verbindung bleibt für die übrigen
-    Ordner nutzbar."""
+    Ordner nutzbar.
+
+    `anonymizer` (Phase 10, ANON-03): wenn gesetzt, wird der Body reversibel
+    pseudonymisiert (`anonymizer.anonymize`, VOR dem Truncate — Pitfall 1)
+    statt mit dem alten einseitigen `pii.redact()`. Ohne `anonymizer` (Flag
+    aus / None) bleibt das bisherige `pii.redact()`-Verhalten erhalten — der
+    Schutz sinkt so nie unter den Ist-Zustand vor Phase 10."""
     try:
         folder_infos = list(mailbox.folder.list())
     except Exception as e:
@@ -364,7 +376,10 @@ def _mails_suchen_all_folders(mailbox, agent_id: str, criteria, search_limit: in
             continue
         durchsuchte_ordner.append(name)
         for msg in messages:
-            body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+            if anonymizer is not None:
+                body = anonymizer.anonymize(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+            else:
+                body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
             treffer.append(
                 {
                     "uid": str(getattr(msg, "uid", "") or ""),
@@ -385,10 +400,16 @@ def _mails_suchen_all_folders(mailbox, agent_id: str, criteria, search_limit: in
     }
 
 
-def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
+def mails_suchen(
+    agent_id: str,
+    query: str = "",
+    folder: str = "INBOX",
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    *,
+    anonymizer: "pii.Anonymizer | None" = None,
+) -> dict:
     """Read-only-Werkzeug (D-74, Teil 1): durchsucht `folder` (Standard INBOX)
-    per Volltext-Suche über Betreff/Text, redigiert jeden Body via `pii.redact`
-    VOR der Rückgabe (D-78, T-09-02) und truncatet ihn auf
+    per Volltext-Suche über Betreff/Text und truncatet den Body auf
     `MAX_TOOL_RESULT_BODY_CHARS`. Ist `folder` leer/None/"alle"/"ALLE"/"*"
     (`_is_all_folders_marker`), wird stattdessen über ALLE Ordner gesucht
     (`_mails_suchen_all_folders`, begrenzt auf `MAX_FOLDERS_FOR_ALL_SEARCH`
@@ -396,7 +417,14 @@ def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: i
     zusätzlich das Feld "ordner" mit dem tatsächlichen Fundort. Crasht nie hart
     (T-09-05): IMAP-/Fetch-/Login-Fehler -> dict mit `fehler`-Feld statt
     Exception. `ValueError` bei invalidem `agent_id` propagiert unverändert
-    (konsistent mit den übrigen Agent-Funktionen)."""
+    (konsistent mit den übrigen Agent-Funktionen).
+
+    `anonymizer` (Phase 10, ANON-03, keyword-only): wenn gesetzt, wird der
+    Body reversibel pseudonymisiert (`anonymizer.anonymize`, VOR dem Truncate
+    — Pitfall 1) statt mit dem alten einseitigen `pii.redact()` redigiert.
+    Ohne `anonymizer` (Flag aus / None) bleibt das bisherige
+    `pii.redact()`-Verhalten erhalten — der Schutz sinkt so nie unter den
+    Ist-Zustand vor Phase 10 (D-78, ROADMAP SC5)."""
     try:
         search_limit = int(limit) if limit else DEFAULT_SEARCH_LIMIT
     except (TypeError, ValueError):
@@ -409,7 +437,7 @@ def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: i
     try:
         with open_agent_mailbox(agent_id) as mailbox:
             if search_all:
-                return _mails_suchen_all_folders(mailbox, agent_id, criteria, search_limit)
+                return _mails_suchen_all_folders(mailbox, agent_id, criteria, search_limit, anonymizer)
 
             target_folder = (folder or "INBOX").strip() or "INBOX"
             try:
@@ -434,7 +462,10 @@ def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: i
 
     treffer = []
     for msg in messages:
-        body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+        if anonymizer is not None:
+            body = anonymizer.anonymize(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+        else:
+            body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
         treffer.append(
             {
                 "uid": str(getattr(msg, "uid", "") or ""),
@@ -448,13 +479,21 @@ def mails_suchen(agent_id: str, query: str = "", folder: str = "INBOX", limit: i
     return {"ordner": target_folder, "anzahl": len(treffer), "treffer": treffer}
 
 
-def mail_lesen(agent_id: str, uid: str, folder: str = "INBOX") -> dict:
+def mail_lesen(
+    agent_id: str, uid: str, folder: str = "INBOX", *, anonymizer: "pii.Anonymizer | None" = None
+) -> dict:
     """Read-only-Werkzeug (D-74, Teil 2): liest genau EINE Mail per `uid` aus `folder`
-    (Standard INBOX) vollständig, redigiert den Body via `pii.redact` VOR der
-    Rückgabe (D-78, T-09-07) und truncatet ihn auf `MAX_TOOL_RESULT_BODY_CHARS`.
+    (Standard INBOX) vollständig und truncatet den Body auf
+    `MAX_TOOL_RESULT_BODY_CHARS`.
     Crasht nie hart (T-09-05/T-09-10): IMAP-/Fetch-/Login-Fehler oder unbekannte
     `uid` -> dict mit `fehler`-Feld statt Exception. `ValueError` bei invalidem
-    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`)."""
+    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`).
+
+    `anonymizer` (Phase 10, ANON-03, keyword-only): wenn gesetzt, wird der Body
+    reversibel pseudonymisiert (`anonymizer.anonymize`, VOR dem Truncate —
+    Pitfall 1) statt mit dem alten einseitigen `pii.redact()` redigiert. Ohne
+    `anonymizer` (Flag aus / None) bleibt das bisherige `pii.redact()`-Verhalten
+    erhalten (D-78, ROADMAP SC5 — kein Absinken unter Ist-Zustand)."""
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
@@ -484,7 +523,10 @@ def mail_lesen(agent_id: str, uid: str, folder: str = "INBOX") -> dict:
         return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
 
     msg = messages[0]
-    body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    if anonymizer is not None:
+        body = anonymizer.anonymize(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    else:
+        body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
     return {
         "uid": str(getattr(msg, "uid", "") or uid_str),
         "ordner": target_folder,
@@ -514,12 +556,20 @@ def _threading_headers(msg) -> dict:
     }
 
 
-def entwuerfe_auflisten(agent_id: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
+def entwuerfe_auflisten(
+    agent_id: str, limit: int = DEFAULT_SEARCH_LIMIT, *, anonymizer: "pii.Anonymizer | None" = None
+) -> dict:
     """Read-only-Werkzeug (D-74, Teil 3): listet die Entwürfe im (erkannten)
     Drafts-Ordner NUR mit Metadaten (uid/betreff/datum/an) auf — kein Mailtext
     (Datenminimierung, T-09-08). Fehlender/nicht verfügbarer Drafts-Ordner oder
     IMAP-Fehler -> leere Liste, kein Crash (T-09-10). `ValueError` bei invalidem
-    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`/`mail_lesen`)."""
+    `agent_id` propagiert unverändert (konsistent mit `mails_suchen`/`mail_lesen`).
+
+    `anonymizer` (Phase 10, ANON-03, keyword-only): akzeptiert, aber ungenutzt
+    — diese Metadaten-Liste enthält ohnehin keinen Mailtext, es gibt hier
+    nichts zu pseudonymisieren. Der Parameter existiert nur, damit die
+    Tool-Schleife (`_ANON_AWARE_TOOLS`) den Handler einheitlich mit
+    `anonymizer=...` aufrufen kann, ohne einen TypeError zu riskieren."""
     try:
         search_limit = int(limit) if limit else DEFAULT_SEARCH_LIMIT
     except (TypeError, ValueError):
@@ -564,13 +614,21 @@ def entwuerfe_auflisten(agent_id: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dic
     return {"ordner": drafts_folder, "anzahl": len(entwuerfe), "entwuerfe": entwuerfe}
 
 
-def entwurf_lesen(agent_id: str, uid: str) -> dict:
+def entwurf_lesen(
+    agent_id: str, uid: str, *, anonymizer: "pii.Anonymizer | None" = None
+) -> dict:
     """Read-only-Werkzeug (D-74, Teil 4): liest genau EINEN Entwurf per `uid` aus dem
     (erkannten) Drafts-Ordner vollständig, inklusive der Threading-Header
-    (In-Reply-To/References) für `entwurf_bearbeiten` (09-03). Body via `pii.redact`
-    VOR der Rückgabe (D-78, T-09-07), truncatet auf `MAX_TOOL_RESULT_BODY_CHARS`.
+    (In-Reply-To/References) für `entwurf_bearbeiten` (09-03). Body truncatet auf
+    `MAX_TOOL_RESULT_BODY_CHARS`.
     Fehlender Ordner/unbekannte `uid`/IMAP-Fehler -> dict mit `fehler`-Feld, kein
-    Crash (T-09-10). `ValueError` bei invalidem `agent_id` propagiert unverändert."""
+    Crash (T-09-10). `ValueError` bei invalidem `agent_id` propagiert unverändert.
+
+    `anonymizer` (Phase 10, ANON-03, keyword-only): wenn gesetzt, wird der Body
+    reversibel pseudonymisiert (`anonymizer.anonymize`, VOR dem Truncate —
+    Pitfall 1) statt mit dem alten einseitigen `pii.redact()` redigiert. Ohne
+    `anonymizer` (Flag aus / None) bleibt das bisherige `pii.redact()`-Verhalten
+    erhalten (D-78, ROADMAP SC5 — kein Absinken unter Ist-Zustand)."""
     uid_str = str(uid or "").strip()
     if not uid_str:
         return {"fehler": "Keine uid angegeben."}
@@ -601,7 +659,10 @@ def entwurf_lesen(agent_id: str, uid: str) -> dict:
         return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
 
     msg = messages[0]
-    body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    if anonymizer is not None:
+        body = anonymizer.anonymize(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
+    else:
+        body = pii.redact(_mail_body(msg))[:MAX_TOOL_RESULT_BODY_CHARS]
     threading_headers = _threading_headers(msg)
     return {
         "uid": str(getattr(msg, "uid", "") or uid_str),
@@ -1336,6 +1397,12 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
 ]
+
+# Phase 10 (ANON-03): Read-Handler, die einen keyword-only `anonymizer`-
+# Parameter akzeptieren (Task 1). Die Tool-Schleife (`_run_anthropic_tool_loop`,
+# Task 2) injiziert die geteilte Anonymizer-Instanz gezielt NUR für diese vier
+# Werkzeuge in `input_args`, bevor der Handler aufgerufen wird.
+_ANON_AWARE_TOOLS: set[str] = {"mails_suchen", "mail_lesen", "entwuerfe_auflisten", "entwurf_lesen"}
 
 TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "ordner_auflisten": ordner_auflisten,
