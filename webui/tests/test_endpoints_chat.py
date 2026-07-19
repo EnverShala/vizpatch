@@ -255,6 +255,49 @@ def test_chat_send_injects_context_md_into_system_prompt(authed_client, mocker, 
     assert "Was steht in meiner context.md?" in sent_prompt
 
 
+def test_chat_send_multiline_error_encoded_as_sse_data_lines(authed_client, mocker, tmp_path, monkeypatch):
+    """Review WR-05: enthaelt str(e) Newlines (bei IMAP-/SDK-Exceptions
+    ueblich), muss der error-Frame jede Zeile als eigene `data:`-Zeile
+    kodieren (SSE-Spec) — sonst verwirft der Client die Folgezeilen stumm bzw.
+    ein `\\n\\n` im Fehlertext erzeugt Geister-Events."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+
+    def _boom(*_args, **_kwargs):
+        yield {"type": "text", "text": "Teil 1"}
+        raise RuntimeError("Zeile 1\nZeile 2\n\nZeile 4")
+
+    mocker.patch("src.main.chat_tools.run_agentic_chat", side_effect=_boom)
+
+    response = authed_client.post("/chat/info/send", auth=("admin", "pw"), data={"message": "Hi"})
+
+    assert response.status_code == 200
+    assert (
+        "event: error\ndata: Zeile 1\ndata: Zeile 2\ndata: \ndata: Zeile 4\n\n"
+        in response.text
+    )
+
+
+def test_chat_send_broken_fernet_token_returns_400_not_500(authed_client, tmp_path, monkeypatch):
+    """Review WR-06: ein kaputter/mit rotiertem Key verschluesselter
+    LLM_API_KEY (SEC-03-Fall) laesst crypto.decrypt_value einen RuntimeError
+    werfen — /send uebersetzt das eager in einen verstaendlichen 400 statt
+    eines generischen 500."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+
+    # 'enc:'-Prefix mit ungueltigem Fernet-Token — write_env laesst bereits
+    # gepraefixte Werte unveraendert, decrypt_value wirft RuntimeError.
+    agents_io.write_env(
+        "info", {"LLM_API_KEY": "enc:kein-gueltiges-fernet-token", "LLM_PROVIDER": "openai"}
+    )
+
+    response = authed_client.post("/chat/info/send", auth=("admin", "pw"), data={"message": "Hi"})
+
+    assert response.status_code == 400
+    assert "Secret nicht entschlüsselbar" in response.json()["detail"]
+
+
 def test_chat_send_unknown_agent_returns_400_config_error(authed_client, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     # "ghost" ist ein gültiger Slug, aber kein angelegter Agent -> kein API-Key -> ChatConfigError.

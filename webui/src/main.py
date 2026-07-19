@@ -513,6 +513,12 @@ def chat_send(
         raise HTTPException(status_code=400, detail="invalid agent_id")
     except chat.ChatConfigError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        # Review WR-06: crypto.decrypt_value wirft bei falschem/rotiertem Key
+        # (SEC-03-Fall) einen RuntimeError — als verstaendlicher 400 statt
+        # generischem 500. ChatConfigError (Subklasse von RuntimeError) wird
+        # oben bereits spezifischer behandelt.
+        raise HTTPException(status_code=400, detail=f"Secret nicht entschlüsselbar: {e}")
 
     def _stream():
         try:
@@ -526,7 +532,10 @@ def chat_send(
             yield "event: done\ndata: \n\n"
         except Exception as e:
             logger.warning("chat_stream_error", extra={"agent_id": agent_id, "error": str(e)})
-            yield f"event: error\ndata: {e}\n\n"
+            # Review WR-05: str(e) kann Newlines enthalten (IMAP-/SDK-
+            # Exceptions) — ohne `data:`-Fortsetzungszeilen wuerde der Client
+            # die Folgezeilen stumm verwerfen bzw. Geister-Events sehen.
+            yield "event: error\n" + _sse_data_frame(str(e))
 
     return StreamingResponse(
         _stream(),
