@@ -1547,6 +1547,30 @@ def test_session_authorization_shared_across_mail_and_entwurf_papierkorb_tools(
     assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
 
 
+def test_session_authorization_expires_after_ttl(mocker, tmp_path, monkeypatch):
+    """Review IN-03: eine Sitzungs-Autorisierung verfällt nach der TTL — der
+    Eintrag wird beim Zugriff entfernt und die Sitzung muss erneut das
+    Zwei-Schritt-Token-Gate durchlaufen (kein unbegrenzt gültiger Freischein,
+    solange der Tab offen bleibt; kein unbegrenztes Set-Wachstum)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    import src.chat_tools as chat_tools
+
+    chat_tools._authorize_session("info", "sess-ttl")
+    assert chat_tools._session_authorized("info", "sess-ttl") is True
+
+    key = chat_tools._session_key("info", "sess-ttl")
+    chat_tools._authorized_move_sessions[key] = (
+        chat_tools._authorized_move_sessions[key]
+        - chat_tools._SESSION_AUTHORIZATION_TTL_SECONDS
+        - 1
+    )
+
+    assert chat_tools._session_authorized("info", "sess-ttl") is False
+    assert key not in chat_tools._authorized_move_sessions  # Eintrag evictet
+
+
 def test_session_id_not_exposed_in_tool_schemas():
     """`session_id` wird serverseitig injiziert und darf NIE Teil der an das LLM
     ausgelieferten TOOL_SCHEMAS sein — sonst könnte das Modell (oder ein

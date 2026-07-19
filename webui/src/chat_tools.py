@@ -1092,9 +1092,11 @@ def entwurf_erstellen(
 # Öffnet dieses Gate (confirmed=true + gültiges Token), gilt die Chat-Sitzung ab
 # sofort als autorisiert — ALLE WEITEREN Verschiebungen (mail_in_papierkorb/
 # entwurf_in_papierkorb) DERSELBEN Sitzung laufen danach OHNE erneute Rückfrage.
-# `_authorized_move_sessions` ist ein reiner In-Memory-Satz (prozess-lokal, NIE
+# `_authorized_move_sessions` ist ein reines In-Memory-Dict (prozess-lokal, NIE
 # persistiert oder geloggt) aus HMAC-Sitzungsschlüsseln (`_session_key`, gebunden an
-# agent_id + session_id, gleicher Secret-Key wie die Tokens oben). Bei WebUI-
+# agent_id + session_id, gleicher Secret-Key wie die Tokens oben) auf den
+# Autorisierungs-Zeitpunkt — Einträge älter als
+# `_SESSION_AUTHORIZATION_TTL_SECONDS` verfallen (Review IN-03). Bei WebUI-
 # Neustart ist die Menge leer -> in der laufenden Sitzung ist dann einmalig wieder
 # eine Bestätigung nötig (akzeptabel: single-process Phase-4-Service). Ein leerer
 # `session_id`-Wert ist NIE autorisierbar (`_session_authorized` gibt dafür immer
@@ -1102,7 +1104,13 @@ def entwurf_erstellen(
 # wie zuvor. Reversibilität (Papierkorb, kein Expunge) und Protokollierung jeder
 # Verschiebung bleiben in JEDEM Fall unverändert bestehen.
 
-_authorized_move_sessions: set[str] = set()
+# Review IN-03: dict statt Set — je Sitzungsschlüssel der Autorisierungs-
+# Zeitpunkt. Einträge älter als die TTL verfallen (Zugriff prüft, Schreiben
+# evictet) — kein unbegrenztes Wachstum über die Prozess-Lebenszeit und keine
+# zeitlich unbegrenzt gültige Autorisierung, nur weil ein Tab offen bleibt.
+_authorized_move_sessions: dict[str, float] = {}
+
+_SESSION_AUTHORIZATION_TTL_SECONDS = 12 * 3600
 
 _SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb"}
 
@@ -1184,17 +1192,36 @@ def _session_authorized(agent_id: str, session_id: str) -> bool:
     Wert) fallen immer auf das strikte Zwei-Schritt-Token-Gate zurück."""
     if not session_id:
         return False
-    return _session_key(agent_id, session_id) in _authorized_move_sessions
+    key = _session_key(agent_id, session_id)
+    authorized_at = _authorized_move_sessions.get(key)
+    if authorized_at is None:
+        return False
+    if time.time() - authorized_at > _SESSION_AUTHORIZATION_TTL_SECONDS:
+        # Review IN-03: abgelaufene Autorisierung verfällt — die Sitzung muss
+        # erneut das Zwei-Schritt-Token-Gate durchlaufen.
+        _authorized_move_sessions.pop(key, None)
+        return False
+    return True
 
 
 def _authorize_session(agent_id: str, session_id: str) -> None:
     """Registriert diese (agent_id, session_id)-Kombination als autorisiert —
     NUR aufgerufen, nachdem das Zwei-Schritt-Token-Gate für die ERSTE
     Verschiebung dieser Sitzung tatsächlich geöffnet hat. Kein Effekt bei leerem
-    `session_id` (konsistent mit `_session_authorized`)."""
+    `session_id` (konsistent mit `_session_authorized`). Review IN-03: evictet
+    beim Schreiben abgelaufene Einträge (begrenzt das Wachstum des In-Memory-
+    Stores) und speichert den Autorisierungs-Zeitpunkt für die TTL-Prüfung."""
     if not session_id:
         return
-    _authorized_move_sessions.add(_session_key(agent_id, session_id))
+    now = time.time()
+    expired = [
+        key
+        for key, authorized_at in _authorized_move_sessions.items()
+        if now - authorized_at > _SESSION_AUTHORIZATION_TTL_SECONDS
+    ]
+    for key in expired:
+        _authorized_move_sessions.pop(key, None)
+    _authorized_move_sessions[_session_key(agent_id, session_id)] = now
 
 
 def mail_in_papierkorb(
