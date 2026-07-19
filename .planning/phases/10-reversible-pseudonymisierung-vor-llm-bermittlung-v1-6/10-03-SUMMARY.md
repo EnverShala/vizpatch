@@ -122,3 +122,12 @@ None - keine externe Service-Konfiguration nötig (baut vollständig auf den in 
 ---
 *Phase: 10-reversible-pseudonymisierung-vor-llm-bermittlung-v1-6*
 *Completed: 2026-07-19*
+
+## Self-Check: PASSED
+
+- FOUND: webui/src/chat_tools.py
+- FOUND: webui/tests/test_chat_tools_pseudonym.py
+- FOUND: .planning/phases/10-reversible-pseudonymisierung-vor-llm-bermittlung-v1-6/10-03-SUMMARY.md
+- FOUND commit: 367af24 (Task 1)
+- FOUND commit: b1a74fb (Task 2)
+- FOUND commit: a91c013 (docs: summary)
