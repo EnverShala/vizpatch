@@ -122,6 +122,7 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 - Phase 8 hinzugefügt (2026-07-16): Outlook-Add-in für den Agenten-Chat (v1.4) — Office.js-Taskpane über CHAT-05-Partial, HTTPS-Runbook; OUT-01…04
 - Verworfen (2026-07-16): Standalone-.exe/PyInstaller-Distribution — Architektur-Umbau zu groß, Docker bleibt Deployment-Standard. Docker-lose Ubuntu-Variante (systemd + venv, Steuerungs-Abstraktion statt docker_ctrl) als mögliche Mini-Phase notiert, nur bei konkretem Kundenbedarf.
 - Detail-Planung (`/gsd:plan-phase 6/7/8`) bewusst NACH Phase-5-Execution — die Phasen bauen auf Phase-5-Artefakten auf (agents-Layout, LLM-Adapter), gegen die der Planner erst planen kann, wenn sie im Code existieren.
+- **CTOOL-04 gelockert (2026-07-19, Betreiber-Entscheidung):** Papierkorb-Verschiebungen im agentischen Chat verlangen die Bestätigung nur noch **einmal pro Chat-Sitzung** (statt pro Aktion). Erst-Verschiebung → weiterhin gehärtetes Zwei-Schritt-Token-Gate (schützt gegen Prompt-Injection-Erstmissbrauch); danach ist die Sitzung serverseitig autorisiert (In-Memory-HMAC-Set, `session_id`-Nonce vom chat.js, neu bei Reset). Reversibel/Papierkorb/Protokollierung unverändert. Code + Tests (411 webui grün) + Rechtstexte (CTOOL-04, ROADMAP SC3, Datenschutz Ziffer 6, AVV §3/§4/§6) angeglichen. Commits `98190c7`, `af53b6c`.
 
 ## History
 
