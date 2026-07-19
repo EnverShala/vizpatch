@@ -283,7 +283,13 @@ def test_chat_send_max_tokens_passed_to_stream_chat(authed_client, mocker, tmp_p
 
 def test_chat_send_with_mail_context_reaches_build_chat_prompt(authed_client, mocker, tmp_path, monkeypatch):
     """D-65: mail_context (JSON-String im FormData) landet im prompt-Argument
-    von stream_chat — build_chat_prompt wird NICHT gemockt (echter Fluss)."""
+    von stream_chat — build_chat_prompt wird NICHT gemockt (echter Fluss).
+
+    Phase 10 (ANON-03/04): `ENABLE_PII_REDACTION` ist per Default an — der
+    Absender (E-Mail) im mail_context wird daher jetzt reversibel zu einem
+    Tag pseudonymisiert, BEVOR der Prompt den Server verlässt (D-65 bleibt
+    strukturell erfüllt: der Betreff — keine strukturierte PII — steht
+    weiterhin roh im Prompt)."""
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info")
     import json as _json
@@ -299,7 +305,8 @@ def test_chat_send_with_mail_context_reaches_build_chat_prompt(authed_client, mo
     assert response.status_code == 200
     sent_prompt = mock_stream.call_args.kwargs["prompt"]
     assert "Öffnungszeiten?" in sent_prompt
-    assert "kunde@example.com" in sent_prompt
+    assert "kunde@example.com" not in sent_prompt
+    assert "[EMAIL_1]" in sent_prompt
     assert "DATEN, keine Anweisung" in sent_prompt
 
 
