@@ -9,7 +9,7 @@
    ========================================================================== #}
 <div class="datenschutz-text">
 
-  <p><strong>Stand:</strong> 2026-07-17 · <em>Muster/Entwurf — vor dem Produktivbetrieb rechtlich prüfen lassen und die Platzhalter in [eckigen Klammern] ausfüllen.</em></p>
+  <p><strong>Stand:</strong> 2026-07-19 · <em>Muster/Entwurf — vor dem Produktivbetrieb rechtlich prüfen lassen und die Platzhalter in [eckigen Klammern] ausfüllen.</em></p>
 
   <p>Diese Datenschutzbestimmungen beschreiben, wie die selbst gehostete Software
   <strong>Vizpatch</strong> (KI-gestützter E-Mail-Assistent) personenbezogene Daten
@@ -73,9 +73,25 @@
     <li>Die Erstellung von Entwürfen aus E-Mails erfolgt nur nach <strong>ausdrücklicher
       Zustimmung des Betreibers</strong> (diese Einwilligung) und nur für das ausdrücklich
       konfigurierte Postfach.</li>
-    <li><strong>PII-Redaction:</strong> Vor der Übermittlung an den KI-Dienst werden
-      bestimmte sensible Muster (z. B. IBAN, Kreditkartennummern) standardmäßig maskiert.</li>
+    <li><strong>Reversible Pseudonymisierung strukturierter PII:</strong> Vor der Übermittlung
+      an den KI-Dienst werden bestimmte strukturierte Muster — <strong>E-Mail-Adresse,
+      Telefonnummer, IBAN, Kreditkartennummer, URL und Datum</strong> — standardmäßig durch
+      getypte Platzhalter (z. B. <code>[IBAN_1]</code>) ersetzt. Diese Ersetzung geschieht
+      lokal auf dem Server des Betreibers und ist reversibel: der KI-Dienst erhält nur die
+      Platzhalter, die Zuordnung zu den echten Werten (Mapping) verbleibt ausschließlich im
+      Arbeitsspeicher des Servers und verlässt diesen nie. Nach der Antwort des KI-Diensts
+      werden die Platzhalter lokal wieder durch die echten Werte ersetzt, bevor der Entwurf
+      bzw. die Chat-Antwort angezeigt wird.</li>
   </ul>
+
+  <p><strong>Ehrlicher Hinweis zum Schutzumfang (wichtig):</strong> Namen, Firmennamen und
+  Ortsangaben werden in der aktuellen Ausbaustufe <strong>NICHT</strong> maskiert und daher
+  weiterhin unverändert an den KI-Anbieter übermittelt. Pseudonymisierte Daten bleiben
+  datenschutzrechtlich weiterhin <strong>personenbezogene Daten</strong> (Erwägungsgrund 26
+  DSGVO) — der Einsatz eines Auftragsverarbeitungsvertrags (AVV) mit dem genutzten
+  KI-Anbieter bleibt daher erforderlich (siehe Ziffer 9). Die abschließende
+  datenschutzrechtliche Bewertung, insbesondere ob und in welchem Umfang der AVV im
+  Einzelfall entbehrlich wäre, trifft der/die Datenschutzbeauftragte des Betreibers.</p>
 
   <h3>5. Einsatz von KI-Diensten (Auftragsverarbeiter)</h3>
   <p>Zur Klassifikation, Entwurfserstellung, Stil-Ableitung und für den Chat übermittelt
@@ -101,8 +117,9 @@
   ausdrückliche Anweisung des Betreibers</strong>, niemals ungefragt. Konkret kann der Chat:</p>
   <ul>
     <li><strong>Mails und Entwürfe durchsuchen und lesen</strong> (read-only) — der
-      Mailtext wird vor der Übermittlung an den KI-Dienst durch die PII-Redaction
-      (Ziffer 4) maskiert;</li>
+      Mailtext wird vor der Übermittlung an den KI-Dienst durch die reversible
+      Pseudonymisierung strukturierter PII (Ziffer 4) pseudonymisiert; Namen/Orte bleiben
+      dabei sichtbar (siehe ehrlicher Hinweis in Ziffer 4);</li>
     <li>einen bestehenden <strong>Entwurf umformulieren</strong> — die neue Fassung wird im
       Entwürfe-Ordner abgelegt, die alte Fassung in den Papierkorb verschoben (siehe
       nächster Punkt); dabei wird nichts versendet;</li>
@@ -156,7 +173,8 @@
   <h3>11. Datensicherheit</h3>
   <p>Betrieb ausschließlich auf dem Server des Betreibers; Secrets verschlüsselt at-rest
   (Fernet/AES) mit zugriffsbeschränkter Schlüsseldatei; kein automatischer Mailversand;
-  PII-Maskierung vor KI-Übermittlung. Der Betreiber ist für die Absicherung seines Servers
+  reversible Pseudonymisierung strukturierter PII vor KI-Übermittlung (Namen/Orte bleiben
+  unmaskiert, siehe Ziffer 4). Der Betreiber ist für die Absicherung seines Servers
   (Zugriffsschutz, Backups, ggf. HTTPS-Reverse-Proxy) verantwortlich.</p>
 
   <h3>12. Einwilligung und Widerruf</h3>
