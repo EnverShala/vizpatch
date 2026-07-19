@@ -64,7 +64,18 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
     ("KARTE", _CC_PATTERN),
     ("EMAIL", re.compile(r"\b[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("URL", re.compile(r"\b(?:https?://|www\.)[^\s<>\"']+")),
-    ("DATUM", re.compile(r"\b(0?[1-9]|[12]\d|3[01])[.\/](0?[1-9]|1[0-2])[.\/](\d{4}|\d{2})\b")),
+    # Review IN-07: neben TT.MM.JJJJ / TT/MM/JJ auch ISO-Format (JJJJ-MM-TT),
+    # wie es in zitierten Mail-Headern und Systemtexten üblich ist. Bewusste
+    # Metadaten-Entscheidung bleibt: die `datum`-Felder der Tool-Ergebnisse
+    # (msg.date.isoformat()) werden als reine Metadaten NICHT anonymisiert —
+    # dieses Muster greift nur für Datumsangaben IM Text.
+    (
+        "DATUM",
+        re.compile(
+            r"\b(?:(0?[1-9]|[12]\d|3[01])[.\/](0?[1-9]|1[0-2])[.\/](\d{4}|\d{2})"
+            r"|\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]))\b"
+        ),
+    ),
     # Review CR-01: KEIN führendes \b vor der +49-Alternative — zwischen einem
     # Nicht-Wortzeichen (Leerzeichen/Zeilenanfang/":") und "+" existiert keine
     # Word-Boundary, die \+49-Alternative wäre damit faktisch tot und

@@ -120,6 +120,23 @@ def test_phone_legacy_formats_still_tagged_after_cr01_fix():
         assert "[TELEFON_1]" in anon, f"nicht getaggt: {text!r}"
 
 
+def test_iso_date_is_tagged_as_datum():
+    """Review IN-07: ISO-Format (JJJJ-MM-TT) wird als DATUM erfasst; eine
+    Telefonnummer wie 0711-123456 bleibt davon unberührt (kein False-Positive
+    des ISO-Musters, TELEFON greift wie gehabt)."""
+    a = Anonymizer()
+    anon = a.anonymize("Ihr Termin am 2026-07-19, alternativ am 19.07.2026.")
+    assert "[DATUM_1]" in anon
+    assert "[DATUM_2]" in anon
+    assert "2026-07-19" not in anon
+    assert a.deanonymize(anon) == "Ihr Termin am 2026-07-19, alternativ am 19.07.2026."
+
+    b = Anonymizer()
+    anon2 = b.anonymize("Ruf an: 0711-123456")
+    assert "[TELEFON_1]" in anon2
+    assert "[DATUM_1]" not in anon2
+
+
 def test_phone_no_false_positive_on_iban_remainder():
     """CR-01-Gegenprobe: IBAN läuft VOR TELEFON — weder die IBAN noch ihr
     Platzhalter-Rest darf zusätzlich als Telefonnummer getaggt werden."""
