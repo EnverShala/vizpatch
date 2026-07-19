@@ -678,13 +678,7 @@ def _threading_headers(msg) -> dict:
     """Extrahiert In-Reply-To/References aus `msg.headers` (imap-tools lowercase-
     Tuple-Muster, analog `agent/src/draft.py::build_reply_draft`) — 09-03 braucht sie
     für `entwurf_bearbeiten`, um beim Neu-Anlegen des Entwurfs das Threading zu
-    erhalten."""
-
-    def _first(value):
-        if isinstance(value, (tuple, list)):
-            return value[0] if value else ""
-        return value or ""
-
+    erhalten. Nutzt den modulweiten `_first`-Helper (Review WR-04)."""
     headers = getattr(msg, "headers", None) or {}
     return {
         "in_reply_to": _first(headers.get("in-reply-to")),
@@ -960,11 +954,17 @@ def _build_new_draft(text: str, betreff: str, an: str = "", reply_to=None, von: 
         if not subject:
             orig_subj = (getattr(reply_to, "subject", "") or "").strip()
             subject = orig_subj if orig_subj.lower().startswith("re:") else (f"Re: {orig_subj}".strip() if orig_subj else "")
+        # Review WR-04: imap-tools liefert Header-Werte je nach Version als
+        # tuple/list ODER nackten String — ein direktes `[0]` würde bei einem
+        # String nur das erste Zeichen ("<") extrahieren und als In-Reply-To/
+        # References setzen -> Draft erschiene als eigener Thread (CLAUDE.md-
+        # Aufmerksamkeitspunkt 1). Deshalb der defensive `_first`-Helper.
         orig_mid = ""
         orig_refs = ""
         try:
-            orig_mid = (reply_to.headers.get("message-id", ("",)) or ("",))[0]
-            orig_refs = (reply_to.headers.get("references", ("",)) or ("",))[0]
+            headers = getattr(reply_to, "headers", None) or {}
+            orig_mid = str(_first(headers.get("message-id")) or "").strip()
+            orig_refs = str(_first(headers.get("references")) or "").strip()
         except Exception:
             pass
         if orig_mid:

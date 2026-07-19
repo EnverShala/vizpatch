@@ -2089,6 +2089,42 @@ def test_entwurf_erstellen_reply_sets_recipient_subject_and_threading(mocker, tm
     assert parsed["To"] == "kunde@example.com"
 
 
+def test_entwurf_erstellen_reply_threading_with_string_headers(mocker, tmp_path, monkeypatch):
+    """Review WR-04: liefert imap-tools die Header als nackte STRINGS (statt
+    tuple/list, versionsabhaengig), muss die VOLLE Message-ID als In-Reply-To/
+    References gesetzt werden — ein `[0]` auf dem String haette nur '<'
+    extrahiert und den Draft aus dem Thread gerissen (CLAUDE.md-
+    Aufmerksamkeitspunkt 1)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(
+        uid="5",
+        subject="Frage zu Preisen",
+        from_="kunde@example.com",
+        headers={
+            "message-id": "<orig-5@example.com>",
+            "references": "<thread-a@example.com>",
+        },
+    )
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Drafts", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_erstellen("info", text="Gerne, anbei die Preise.", in_reply_to_uid="5")
+
+    assert "fehler" not in result and result["ok"] is True
+    appended = mock_mailbox.append.call_args.args[0]
+
+    import email as _email
+
+    parsed = _email.message_from_bytes(appended)
+    assert parsed["In-Reply-To"] == "<orig-5@example.com>"
+    assert parsed["References"] == "<thread-a@example.com> <orig-5@example.com>"
+
+
 def test_entwurf_erstellen_missing_text_returns_error_no_append(tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     import src.chat_tools as chat_tools
