@@ -415,7 +415,7 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 
 **Requirements mapped:** ANON-01, ANON-02, ANON-03, ANON-04, ANON-05 (Variante A); ANON-06 = deferred (NER)
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
@@ -429,7 +429,7 @@ Plans:
 
 **Wave 3** *(blocked on 10-02)*
 
-- [ ] 10-03-PLAN.md — Agentische Tool-Schleife chat_tools.py: geteilte Anonymizer-Instanz, De-Anon von Text-Blöcken UND Tool-Argumenten (kein Platzhalter-Leck in echten Draft), Fallback-Chat-Streaming (ANON-03, ANON-04)
+- [x] 10-03-PLAN.md — Agentische Tool-Schleife chat_tools.py: geteilte Anonymizer-Instanz, De-Anon von Text-Blöcken UND Tool-Argumenten (kein Platzhalter-Leck in echten Draft), Fallback-Chat-Streaming (ANON-03, ANON-04)
 
 **Wave 4** *(blocked on 10-03)*
 
