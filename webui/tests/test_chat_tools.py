@@ -2133,7 +2133,11 @@ def test_entwuerfe_auflisten_accepts_anonymizer_kwarg_without_error(mocker, tmp_
     assert result["anzahl"] == 1
 
 
-def test_anon_aware_tools_module_set_contains_exactly_four_read_handlers():
+def test_anon_aware_tools_module_set_contains_exactly_seven_handlers():
+    """Review CR-04: neben den vier Read-Handlern sind auch entwurf_erstellen
+    (Ergebnis-Felder betreff/an) und die beiden Papierkorb-Werkzeuge
+    (Zielbeschreibung) anonymizer-aware — entwurf_bearbeiten bewusst NICHT
+    (dessen Ergebnis enthaelt nur vom LLM gelieferte Werte)."""
     import src.chat_tools as chat_tools
 
     assert chat_tools._ANON_AWARE_TOOLS == {
@@ -2141,4 +2145,179 @@ def test_anon_aware_tools_module_set_contains_exactly_four_read_handlers():
         "mail_lesen",
         "entwuerfe_auflisten",
         "entwurf_lesen",
+        "entwurf_erstellen",
+        "mail_in_papierkorb",
+        "entwurf_in_papierkorb",
     }
+
+
+# --- Review CR-04: von/an/betreff/absender gehen NIE roh ans LLM ------------------
+
+
+def test_mail_lesen_masks_von_an_betreff_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    msg = _msg(
+        uid="99",
+        subject="Ihre IBAN DE89370400440532013000",
+        from_="kunde@example.com",
+        to=("info@ionos.de",),
+    )
+    mock_mailbox = _fake_mailbox([msg])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    anonymizer = Anonymizer()
+    result = chat_tools.mail_lesen("info", uid="99", anonymizer=anonymizer)
+
+    assert "kunde@example.com" not in str(result)
+    assert "info@ionos.de" not in str(result)
+    assert "DE89370400440532013000" not in str(result)
+    # De-Anonymisierung derselben Instanz stellt die echten Werte wieder her.
+    assert anonymizer.deanonymize(result["von"]) == "kunde@example.com"
+    assert anonymizer.deanonymize(result["an"]) == "info@ionos.de"
+    assert "DE89370400440532013000" in anonymizer.deanonymize(result["betreff"])
+
+
+def test_mails_suchen_masks_von_betreff_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    msg = _msg(subject="Rueckruf unter +49 170 1234567", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([msg])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.mails_suchen("info", query="Rueckruf", anonymizer=Anonymizer())
+
+    treffer = result["treffer"][0]
+    assert "kunde@example.com" not in str(treffer)
+    assert "+49 170 1234567" not in str(treffer)
+    assert "[EMAIL_1]" in treffer["von"]
+    assert "[TELEFON_1]" in treffer["betreff"]
+
+
+def test_entwuerfe_auflisten_masks_an_betreff_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    msg = _msg(uid="7", subject="Re: kunde@example.com Anfrage", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([msg])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.entwuerfe_auflisten("info", anonymizer=Anonymizer())
+
+    entwurf = result["entwuerfe"][0]
+    assert "kunde@example.com" not in str(entwurf)
+    assert "[EMAIL_1]" in entwurf["an"]
+
+
+def test_entwurf_lesen_masks_von_an_betreff_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    msg = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([msg])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.entwurf_lesen("info", uid="7", anonymizer=Anonymizer())
+
+    assert "info@ionos.de" not in result["von"]
+    assert "kunde@example.com" not in result["an"]
+    assert "[EMAIL_" in result["von"]
+    assert "[EMAIL_" in result["an"]
+
+
+def test_entwurf_erstellen_masks_an_betreff_in_result_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.entwurf_erstellen(
+        "info",
+        text="Hallo, gerne.",
+        betreff="Angebot",
+        an="kunde@example.com",
+        anonymizer=Anonymizer(),
+    )
+
+    assert result["ok"] is True
+    # Der ENTWURF selbst enthaelt den echten Empfaenger (APPEND mit Realwerten) …
+    appended_bytes = mock_mailbox.append.call_args.args[0]
+    assert b"kunde@example.com" in appended_bytes
+    # … aber das ans LLM zurueckgehende Ergebnis ist maskiert.
+    assert "kunde@example.com" not in str(result)
+    assert "[EMAIL_1]" in result["an"]
+
+
+def test_mail_in_papierkorb_masks_ziel_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="IBAN DE89370400440532013000", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.mail_in_papierkorb("info", uid="42", anonymizer=Anonymizer())
+
+    assert result["bestaetigung_erforderlich"] is True
+    assert "kunde@example.com" not in str(result["ziel"])
+    assert "DE89370400440532013000" not in str(result["ziel"])
+    assert "[EMAIL_1]" in result["ziel"]["absender"]
+    assert "[IBAN_1]" in result["ziel"]["betreff"]
+    mock_mailbox.move.assert_not_called()
+
+
+def test_entwurf_in_papierkorb_masks_ziel_with_anonymizer(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Re: Angebot", from_="info@ionos.de", to=("kunde@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+    from src.pii import Anonymizer
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="7", anonymizer=Anonymizer())
+
+    assert result["bestaetigung_erforderlich"] is True
+    assert "info@ionos.de" not in str(result["ziel"])
+    assert "[EMAIL_1]" in result["ziel"]["absender"]
+    mock_mailbox.move.assert_not_called()
+
+
+def test_papierkorb_ziel_stays_raw_without_anonymizer(mocker, tmp_path, monkeypatch):
+    """Flag-aus-Verhalten (anonymizer=None): wie bisher — Zielbeschreibung roh."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.mail_in_papierkorb("info", uid="42")
+
+    assert result["ziel"]["absender"] == "kunde@example.com"
+    assert result["ziel"]["betreff"] == "Rechnung"

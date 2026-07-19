@@ -142,6 +142,20 @@ def _mail_recipients(msg) -> str:
     return ", ".join(to) if to else ""
 
 
+def _anon_field(anonymizer: "pii.Anonymizer | None", value: str) -> str:
+    """Review CR-04: Absender-/Empfänger-Adressen und Betreffzeilen sind
+    Mail-Inhalt (strukturierte PII vom Typ EMAIL bzw. potenziell IBAN/Telefon
+    im Betreff) und werden mit DERSELBEN Anonymizer-Instanz maskiert wie der
+    Body — konsistent zu `agent/src/generate.py` (from/subject) und
+    `_build_initial_messages` (sender/subject). Ohne Anonymizer (Flag aus /
+    None) bleibt der Wert roh (Alt-Verhalten, kein Absinken unter Ist-Zustand).
+    Die De-Anonymisierung der Text-Blöcke stellt die echten Werte für den
+    Betreiber automatisch wieder her."""
+    if anonymizer is None:
+        return value
+    return anonymizer.anonymize(value)
+
+
 def _detect_drafts_folder(mailbox, fallback: str) -> str:
     """SPECIAL-USE-Erkennung (RFC 6154) analog `style_extract._detect_sent_folder`
     (D-79) — \\Drafts statt \\Sent. Fallback bei fehlender Announcement oder Fehler."""
@@ -410,8 +424,8 @@ def _mails_suchen_all_folders(
                 {
                     "uid": str(getattr(msg, "uid", "") or ""),
                     "ordner": name,
-                    "von": msg.from_ or "",
-                    "betreff": msg.subject or "",
+                    "von": _anon_field(anonymizer, msg.from_ or ""),
+                    "betreff": _anon_field(anonymizer, msg.subject or ""),
                     "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                     "body_redigiert": body,
                 }
@@ -496,8 +510,8 @@ def mails_suchen(
             {
                 "uid": str(getattr(msg, "uid", "") or ""),
                 "ordner": target_folder,
-                "von": msg.from_ or "",
-                "betreff": msg.subject or "",
+                "von": _anon_field(anonymizer, msg.from_ or ""),
+                "betreff": _anon_field(anonymizer, msg.subject or ""),
                 "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                 "body_redigiert": body,
             }
@@ -558,9 +572,9 @@ def mail_lesen(
     return {
         "uid": str(getattr(msg, "uid", "") or uid_str),
         "ordner": target_folder,
-        "von": msg.from_ or "",
-        "an": _mail_recipients(msg),
-        "betreff": msg.subject or "",
+        "von": _anon_field(anonymizer, msg.from_ or ""),
+        "an": _anon_field(anonymizer, _mail_recipients(msg)),
+        "betreff": _anon_field(anonymizer, msg.subject or ""),
         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
         "body_redigiert": body,
     }
@@ -593,11 +607,11 @@ def entwuerfe_auflisten(
     IMAP-Fehler -> leere Liste, kein Crash (T-09-10). `ValueError` bei invalidem
     `agent_id` propagiert unverändert (konsistent mit `mails_suchen`/`mail_lesen`).
 
-    `anonymizer` (Phase 10, ANON-03, keyword-only): akzeptiert, aber ungenutzt
-    — diese Metadaten-Liste enthält ohnehin keinen Mailtext, es gibt hier
-    nichts zu pseudonymisieren. Der Parameter existiert nur, damit die
-    Tool-Schleife (`_ANON_AWARE_TOOLS`) den Handler einheitlich mit
-    `anonymizer=...` aufrufen kann, ohne einen TypeError zu riskieren."""
+    `anonymizer` (Phase 10, ANON-03, keyword-only; Review CR-04): wenn
+    gesetzt, werden die Metadaten-Felder `an`/`betreff` (Empfänger-Adressen =
+    strukturierte EMAIL-PII, Betreff kann IBAN/Telefonnummern enthalten) mit
+    derselben Instanz maskiert. Ohne `anonymizer` (Flag aus / None) bleiben
+    sie roh (Alt-Verhalten)."""
     try:
         search_limit = int(limit) if limit else DEFAULT_SEARCH_LIMIT
     except (TypeError, ValueError):
@@ -633,8 +647,8 @@ def entwuerfe_auflisten(
     entwuerfe = [
         {
             "uid": str(getattr(msg, "uid", "") or ""),
-            "an": _mail_recipients(msg),
-            "betreff": msg.subject or "",
+            "an": _anon_field(anonymizer, _mail_recipients(msg)),
+            "betreff": _anon_field(anonymizer, msg.subject or ""),
             "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
         }
         for msg in messages
@@ -697,9 +711,9 @@ def entwurf_lesen(
     return {
         "uid": str(getattr(msg, "uid", "") or uid_str),
         "ordner": drafts_folder,
-        "von": msg.from_ or "",
-        "an": _mail_recipients(msg),
-        "betreff": msg.subject or "",
+        "von": _anon_field(anonymizer, msg.from_ or ""),
+        "an": _anon_field(anonymizer, _mail_recipients(msg)),
+        "betreff": _anon_field(anonymizer, msg.subject or ""),
         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
         "body_redigiert": body,
         "in_reply_to": threading_headers["in_reply_to"],
@@ -879,6 +893,8 @@ def entwurf_erstellen(
     an: str | None = None,
     in_reply_to_uid: str | None = None,
     quell_ordner: str = "INBOX",
+    *,
+    anonymizer: "pii.Anonymizer | None" = None,
 ) -> dict:
     """Handelndes Werkzeug (CTOOL-03): legt einen NEUEN Entwurf im (erkannten)
     Entwürfe-Ordner an (IMAP APPEND mit `\\Draft`-Flag) — z.B. um einen im Chat
@@ -887,7 +903,13 @@ def entwurf_erstellen(
     Ist `in_reply_to_uid` gesetzt, wird die Bezugs-Mail aus `quell_ordner` (Standard
     INBOX) gelesen und Empfänger/Betreff/Threading automatisch abgeleitet (Antwort im
     selben Thread). Sonst müssen `an`/`betreff` angegeben werden. Fehler -> dict mit
-    `fehler`-Feld. `ValueError` bei invalidem `agent_id` propagiert unverändert."""
+    `fehler`-Feld. `ValueError` bei invalidem `agent_id` propagiert unverändert.
+
+    `anonymizer` (keyword-only, Review CR-04): der ENTWURF selbst wird immer mit
+    den ECHTEN Werten gebaut und per APPEND abgelegt (die Tool-Schleife hat die
+    Argumente bereits de-anonymisiert); nur die ans LLM zurückgehenden
+    Ergebnis-Felder `betreff`/`an` werden maskiert. Ohne `anonymizer` roh
+    (Alt-Verhalten)."""
     text_str = (text or "").strip()
     if not text_str:
         return {"fehler": "Kein Text angegeben."}
@@ -940,8 +962,8 @@ def entwurf_erstellen(
     return {
         "ok": True,
         "ordner": drafts_folder,
-        "betreff": eff_betreff,
-        "an": eff_an,
+        "betreff": _anon_field(anonymizer, eff_betreff),
+        "an": _anon_field(anonymizer, eff_an),
         "antwort_auf_uid": uid_str if is_reply else None,
     }
 
@@ -1053,6 +1075,8 @@ def mail_in_papierkorb(
     confirmed: bool = False,
     confirmation_token: str | None = None,
     session_id: str = "",
+    *,
+    anonymizer: "pii.Anonymizer | None" = None,
 ) -> dict:
     """Destruktives Werkzeug (D-76, CTOOL-04, HIGH RISK): verschiebt eine Mail per
     IMAP-MOVE (NIE Expunge, `_move_to_trash`) aus `folder` (Standard INBOX) in den
@@ -1107,11 +1131,14 @@ def mail_in_papierkorb(
                 if not messages:
                     return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
                 msg = messages[0]
+                # Review CR-04: die Zielbeschreibung geht als Tool-Result ans
+                # LLM — Betreff/Absender daher maskieren; die De-Anonymisierung
+                # der Text-Blöcke zeigt dem Betreiber die echten Werte.
                 return {
                     "bestaetigung_erforderlich": True,
                     "ziel": {
-                        "betreff": msg.subject or "",
-                        "absender": msg.from_ or "",
+                        "betreff": _anon_field(anonymizer, msg.subject or ""),
+                        "absender": _anon_field(anonymizer, msg.from_ or ""),
                         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                         "ordner": target_folder,
                     },
@@ -1160,6 +1187,8 @@ def entwurf_in_papierkorb(
     confirmed: bool = False,
     confirmation_token: str | None = None,
     session_id: str = "",
+    *,
+    anonymizer: "pii.Anonymizer | None" = None,
 ) -> dict:
     """Destruktives Werkzeug (D-76, CTOOL-04, HIGH RISK): verschiebt einen Entwurf
     per IMAP-MOVE (NIE Expunge, `_move_to_trash`) aus dem (erkannten) Drafts-Ordner
@@ -1211,11 +1240,13 @@ def entwurf_in_papierkorb(
                 if not messages:
                     return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
                 msg = messages[0]
+                # Review CR-04: Zielbeschreibung maskieren (siehe
+                # mail_in_papierkorb).
                 return {
                     "bestaetigung_erforderlich": True,
                     "ziel": {
-                        "betreff": msg.subject or "",
-                        "absender": msg.from_ or "",
+                        "betreff": _anon_field(anonymizer, msg.subject or ""),
+                        "absender": _anon_field(anonymizer, msg.from_ or ""),
                         "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
                         "ordner": drafts_folder,
                     },
@@ -1532,11 +1563,22 @@ TOOL_SCHEMAS: list[dict] = [
     },
 ]
 
-# Phase 10 (ANON-03): Read-Handler, die einen keyword-only `anonymizer`-
-# Parameter akzeptieren (Task 1). Die Tool-Schleife (`_run_anthropic_tool_loop`,
-# Task 2) injiziert die geteilte Anonymizer-Instanz gezielt NUR für diese vier
-# Werkzeuge in `input_args`, bevor der Handler aufgerufen wird.
-_ANON_AWARE_TOOLS: set[str] = {"mails_suchen", "mail_lesen", "entwuerfe_auflisten", "entwurf_lesen"}
+# Phase 10 (ANON-03): Handler, die einen keyword-only `anonymizer`-Parameter
+# akzeptieren. Die Tool-Schleife (`_run_anthropic_tool_loop`) injiziert die
+# geteilte Anonymizer-Instanz gezielt NUR für diese Werkzeuge in `input_args`,
+# bevor der Handler aufgerufen wird. Review CR-04: zusätzlich zu den vier
+# Read-Handlern auch `entwurf_erstellen` (Ergebnis-Felder betreff/an) und die
+# beiden Papierkorb-Werkzeuge (Zielbeschreibung betreff/absender), damit
+# Absender/Empfänger/Betreff nirgends roh ans LLM gehen.
+_ANON_AWARE_TOOLS: set[str] = {
+    "mails_suchen",
+    "mail_lesen",
+    "entwuerfe_auflisten",
+    "entwurf_lesen",
+    "entwurf_erstellen",
+    "mail_in_papierkorb",
+    "entwurf_in_papierkorb",
+}
 
 TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "ordner_auflisten": ordner_auflisten,
