@@ -16,7 +16,7 @@
 | 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 | 6 | Schreibstil-Adaption pro Agent (v1.3) | Automatische Stil-Extraktion aus dem Gesendet-Ordner beim Agent-Setup (style.md pro Agent), Re-Learn-Button, Prompt-Hierarchie context.md > style.md | STY-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
 | 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
-| 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ✅ Code-komplett (Live-Sideload-Checkpoint offen) |
+| 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ⏸️ OPTIONAL / ON HOLD (2026-07-19) — Code-komplett, aber Add-in läuft nur auf M365/Exchange, nicht auf IMAP; Umsetzung offen bis Kunden-Postfachtyp geklärt |
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
 | 10 | Reversible Pseudonymisierung vor LLM (v1.6) | PII lokal reversibel anonymisieren (Regex + NER/Presidio) → LLM sieht nur de-identifizierten Text → Rück-Übersetzung; DSGVO-Risikoreduktion | ANON-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
 
@@ -294,6 +294,8 @@ Plans:
 ---
 
 ### Phase 8: Outlook-Add-in für den Agenten-Chat (v1.4)
+
+> **⏸️ STATUS 2026-07-19 — OPTIONAL / ON HOLD.** Der baubare Teil ist code-komplett (08-01…08-03 + 08-04 Task 1), aber die Phase wird **vorerst nicht abgeschlossen**. Grund: Office-Add-ins laufen technisch **nur auf Microsoft-Postfächern** (M365/Exchange/outlook.com), **nicht auf reinen IMAP-Konten** (GMX/IONOS/Gmail) — die Zielgruppe der Vizpatch-Provider. Solange nicht geklärt ist, ob der/die Kunde(n) ein M365-Postfach nutzen, bleibt das Add-in **optional**. Live-Sideload-Abnahme (08-04 Task 2) ausgesetzt. Entscheidung „umsetzen ja/nein" fällt, sobald ein konkreter Kunde ein Microsoft-Postfach mitbringt.
 
 **Goal:** Der Agenten-Chat aus Phase 7 wird als Office-Add-in (Office.js, Taskpane) in Outlook nutzbar — Desktop (Windows/Mac), neues Outlook und Outlook im Web. Das Add-in ist eine dünne Hülle: Es lädt das einbettbare Chat-Partial per HTTPS vom Kundenserver und reicht die gerade geöffnete Mail (Betreff/Absender/Body via Office.js) als Kontext in den Chat. Liefergegenstand: Manifest, Taskpane-Seite, Sideloading-/Central-Deployment-Doku und eine dokumentierte HTTPS-Vorgabe für den Kundenserver (Reverse-Proxy, z. B. Caddy mit selbstverwaltetem Zertifikat).
 **Mode:** mvp
