@@ -33,7 +33,7 @@ from email.utils import format_datetime, make_msgid
 from typing import Callable, Iterator
 
 from anthropic import Anthropic
-from imap_tools import AND, MailBox, MailBoxUnencrypted, MailMessageFlags
+from imap_tools import AND, H, MailBox, MailBoxUnencrypted, MailMessageFlags
 
 from . import chat, crypto, pii
 from .agents_io import read_env_raw
@@ -190,12 +190,14 @@ class TrashFolderNotFound(RuntimeError):
 
 
 class MailboxMoveError(RuntimeError):
-    """`_move_to_trash` konnte auch nach dem Fallback-`delete()` NICHT bestätigen,
-    dass `uid` aus dem Quell-Ordner verschwunden ist (Live-Bug gegen IONOS: ein
-    reines `MailBox.move()` hinterließ dort eine Kopie statt zu verschieben, weil
-    der serverseitige Quell-Expunge offenbar nicht griff) — bewusst KEIN stiller
-    Erfolg (T-09-13): wird propagiert statt einen Teil-/Kopier-Zustand als Erfolg
-    zu melden."""
+    """`_move_to_trash` konnte das Verschieben NICHT sicher bestätigen — sei es,
+    weil `uid` auch nach dem gezielten UID-EXPUNGE-Fallback im Quell-Ordner
+    verbleibt, weil die Ankunft im Papierkorb nicht nachweisbar war oder weil
+    dem Server für den Fallback die UIDPLUS-Capability fehlt (Live-Bug gegen
+    IONOS: ein reines `MailBox.move()` hinterließ dort eine Kopie statt zu
+    verschieben, weil der serverseitige Quell-Expunge offenbar nicht griff) —
+    bewusst KEIN stiller Erfolg (T-09-13): wird propagiert statt einen
+    Teil-/Kopier-Zustand als Erfolg zu melden."""
 
 
 # `provider_config.resolve_imap_config` liefert keinen 'trash'-Schlüssel (nur
@@ -245,6 +247,45 @@ def _detect_trash_folder(mailbox, fallback: str | None = None) -> str:
     )
 
 
+def _first(value):
+    """imap-tools liefert Header-Werte je nach Version als tuple ODER list —
+    und in Randfaellen als nackten String. Normalisiert auf das erste Element
+    bzw. den String selbst (Review WR-04: ein `[0]` auf einem String wuerde nur
+    das erste Zeichen liefern)."""
+    if isinstance(value, (tuple, list)):
+        return value[0] if value else ""
+    return value or ""
+
+
+def _message_id_of(msg) -> str:
+    """Extrahiert den Message-ID-Header einer imap-tools MailMessage (fuer die
+    Papierkorb-Ankunfts-Verifikation in `_move_to_trash`, Review CR-05)."""
+    headers = getattr(msg, "headers", None) or {}
+    return str(_first(headers.get("message-id")) or "").strip()
+
+
+def _message_id_in_folder(mailbox, message_id: str, folder: str) -> bool:
+    """Review CR-05 (a): prueft per reinem Lese-Fetch (Message-ID-Header-Suche,
+    keine Nebenwirkung), ob die Nachricht mit `message_id` in `folder`
+    existiert — Ankunfts-Nachweis im Papierkorb, BEVOR der Fallback die Quelle
+    hart bereinigen darf. Fehler beim Suchen -> False (fail-closed: ohne
+    Nachweis kein hartes Loeschen)."""
+    if not message_id:
+        return False
+    try:
+        mailbox.folder.set(folder)
+        found = list(
+            mailbox.fetch(AND(header=H("Message-ID", message_id)), mark_seen=False, limit=1)
+        )
+    except Exception as e:
+        logger.warning(
+            "trash_arrival_verification_failed",
+            extra={"folder": folder, "error": str(e)},
+        )
+        return False
+    return bool(found)
+
+
 def _uid_still_in_folder(mailbox, uid: str, folder: str) -> bool:
     """Post-Move-/Post-Delete-Verifikationshelfer (Live-Bug-Fix, T-09-13): selektiert
     `folder` und prüft per reinem Lese-Fetch (`mark_seen=False`, `bulk=False` — keine
@@ -270,10 +311,21 @@ def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
     Deshalb robust + selbstverifizierend statt eines blinden Aufrufs: loggt vorab
     strukturiert (ohne Secrets) MOVE-Capability/Quelle/Ziel/uid, führt den Move aus
     und verifiziert danach auf dem QUELL-Ordner (`_uid_still_in_folder`), ob `uid`
-    dort verschwunden ist. Bleibt sie sichtbar, expliziter Fallback
-    `mailbox.delete([uid])` (STORE \\Deleted + Expunge NUR des Quell-Ordners,
-    niemals des Papierkorbs) + erneute Verifikation. Bleibt `uid` selbst danach
-    noch da, wirft `MailboxMoveError` — kein stiller Erfolg.
+    dort verschwunden ist. Bleibt sie sichtbar, greift der Fallback — Review
+    CR-05 gehärtet:
+      (a) ERST wird per Message-ID-Suche (`_message_id_in_folder`) nachgewiesen,
+          dass die Kopie tatsächlich im Papierkorb ANGEKOMMEN ist — ohne diesen
+          Nachweis wird NIE hart gelöscht (die Quell-Kopie könnte die einzige
+          sein: kein stiller Datenverlust).
+      (b) Statt eines folder-weiten `mailbox.delete()` (dessen EXPUNGE auch
+          FREMDE \\Deleted-geflaggte Nachrichten anderer Clients endgültig
+          entfernen würde) wird GEZIELT `STORE +FLAGS \\Deleted` auf genau
+          diese eine uid gesetzt und per `UID EXPUNGE <uid>` (UIDPLUS,
+          RFC 4315) nur sie expunged. Fehlt dem Server die UIDPLUS-Capability,
+          wird der Fallback mit `MailboxMoveError` VERWEIGERT statt folder-weit
+          zu expungen.
+    Bleibt `uid` selbst nach dem gezielten Expunge noch da, wirft
+    `MailboxMoveError` — kein stiller Erfolg.
 
     Kein erkannter Papierkorb -> `TrashFolderNotFound` propagiert unverändert
     (kein stiller Datenverlust, unverändertes Verhalten)."""
@@ -301,20 +353,61 @@ def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
         },
     )
 
+    # Review CR-05: Message-ID VOR dem Move sichern — nur damit lässt sich
+    # nachweisen, dass die Kopie im Papierkorb angekommen ist, bevor der
+    # Fallback die Quelle hart bereinigen darf.
+    message_id = ""
+    try:
+        pre_move = list(mailbox.fetch(AND(uid=uid), mark_seen=False, limit=1))
+        if pre_move:
+            message_id = _message_id_of(pre_move[0])
+    except Exception as e:
+        logger.warning(
+            "move_to_trash_pre_move_fetch_failed",
+            extra={"uid": uid, "source_folder": source_folder, "error": str(e)},
+        )
+
     mailbox.move([uid], trash_folder)
 
     if _uid_still_in_folder(mailbox, uid, source_folder):
         logger.warning(
-            "move_to_trash_source_still_present_after_move_fallback_delete",
+            "move_to_trash_source_still_present_after_move",
             extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
         )
-        mailbox.delete([uid])
+        # CR-05 (a): kein hartes Löschen ohne Papierkorb-Ankunfts-Nachweis.
+        if not _message_id_in_folder(mailbox, message_id, trash_folder):
+            raise MailboxMoveError(
+                f"uid={uid} ist nach move() weiterhin im Quell-Ordner "
+                f"'{source_folder}' UND die Ankunft der Nachricht im Papierkorb "
+                f"'{trash_folder}' konnte nicht per Message-ID nachgewiesen werden "
+                f"— der Lösch-Fallback wird verweigert, damit nicht die einzige "
+                f"Kopie endgültig verloren geht (kein stiller Datenverlust, bitte "
+                f"IMAP-Server-Log prüfen)."
+            )
+        # CR-05 (b): gezieltes UID EXPUNGE (UIDPLUS) statt folder-weitem EXPUNGE.
+        if "UIDPLUS" not in capabilities:
+            raise MailboxMoveError(
+                f"uid={uid} liegt nach move() weiterhin in '{source_folder}' "
+                f"(die Kopie ist im Papierkorb '{trash_folder}' angekommen), aber "
+                f"der Server bietet kein UIDPLUS — ein gezieltes UID EXPUNGE ist "
+                f"nicht möglich und ein folder-weites EXPUNGE wird verweigert "
+                f"(würde fremde \\Deleted-markierte Nachrichten mitlöschen). Die "
+                f"Quell-Kopie bitte manuell entfernen."
+            )
+        logger.warning(
+            "move_to_trash_fallback_targeted_uid_expunge",
+            extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
+        )
+        mailbox.folder.set(source_folder)
+        mailbox.flag([uid], MailMessageFlags.DELETED, True)
+        mailbox.client.uid("EXPUNGE", uid)
         if _uid_still_in_folder(mailbox, uid, source_folder):
             raise MailboxMoveError(
-                f"uid={uid} ist nach move() UND anschließendem delete()-Fallback "
-                f"weiterhin im Quell-Ordner '{source_folder}' vorhanden — das "
-                f"Verschieben nach '{trash_folder}' konnte nicht sicher bestätigt "
-                f"werden (kein stiller Erfolg, bitte IMAP-Server-Log prüfen)."
+                f"uid={uid} ist nach move() UND anschließendem gezielten "
+                f"UID-EXPUNGE-Fallback weiterhin im Quell-Ordner '{source_folder}' "
+                f"vorhanden — das Verschieben nach '{trash_folder}' konnte nicht "
+                f"sicher bestätigt werden (kein stiller Erfolg, bitte "
+                f"IMAP-Server-Log prüfen)."
             )
 
     logger.info(

@@ -590,21 +590,30 @@ def test_move_to_trash_without_move_capability_uses_copy_delete_path_and_verifie
     assert start_records[0].trash_folder == "Papierkorb"
 
 
-def test_move_to_trash_source_left_behind_triggers_fallback_delete_then_succeeds():
+def _msg_with_mid(uid="42", mid="<orig-42@example.com>"):
+    return _msg(uid=uid, headers={"message-id": (mid,)})
+
+
+def test_move_to_trash_source_left_behind_triggers_targeted_uid_expunge_then_succeeds():
     """Nachbildung des Live-IONOS-Symptoms: `move()` hinterlässt die uid trotzdem
-    im Quell-Ordner (Mock: erster Verifikations-Fetch nach dem Move liefert die
-    Nachricht noch). `_move_to_trash` MUSS dann explizit `mailbox.delete([uid])`
-    (Fallback) auf dem Quell-Ordner aufrufen — nach dessen Erfolg (zweiter Fetch
-    leer) kein stiller Datenverlust, kein Papierkorb-Expunge."""
+    im Quell-Ordner. Review CR-05: der Fallback läuft NUR nach Papierkorb-
+    Ankunfts-Nachweis (Message-ID-Suche) und ist GEZIELT — `STORE +FLAGS
+    \\Deleted` auf genau diese uid + `UID EXPUNGE <uid>` (UIDPLUS), NIE das
+    folder-weite `mailbox.delete()`/`expunge()`."""
     import src.chat_tools as chat_tools
 
     mailbox = MagicMock()
+    mailbox.client.capabilities = ("MOVE", "UIDPLUS")
     mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
     call_count = {"n": 0}
 
     def _fetch_side_effect(*_args, **_kwargs):
         call_count["n"] += 1
-        return [_msg(uid="42")] if call_count["n"] == 1 else []
+        # 1: Pre-Move-Fetch (Message-ID sichern) -> Nachricht da.
+        # 2: Quell-Verifikation nach move() -> Nachricht NOCH da (IONOS-Bug).
+        # 3: Papierkorb-Ankunfts-Nachweis (Message-ID-Suche) -> gefunden.
+        # 4: Quell-Verifikation nach gezieltem UID EXPUNGE -> leer.
+        return [_msg_with_mid()] if call_count["n"] <= 3 else []
 
     mailbox.fetch.side_effect = _fetch_side_effect
 
@@ -612,28 +621,103 @@ def test_move_to_trash_source_left_behind_triggers_fallback_delete_then_succeeds
 
     assert trash_folder == "Papierkorb"
     mailbox.move.assert_called_once_with(["42"], "Papierkorb")
-    mailbox.delete.assert_called_once_with(["42"])
+    from imap_tools import MailMessageFlags
+
+    mailbox.flag.assert_called_once_with(["42"], MailMessageFlags.DELETED, True)
+    mailbox.client.uid.assert_called_once_with("EXPUNGE", "42")
+    mailbox.delete.assert_not_called()
     mailbox.expunge.assert_not_called()
 
 
-def test_move_to_trash_source_still_present_after_fallback_delete_raises():
-    """Härtester Fall: selbst der Fallback-`delete()` bereinigt die Quelle nicht
-    (Mock: fetch liefert IMMER die Nachricht zurück) -> `_move_to_trash` darf
-    NIEMALS stillschweigend Erfolg melden, sondern muss `MailboxMoveError`
-    werfen (T-09-13) — und dabei weiterhin nur den Quell-Ordner anfassen, nie den
-    Papierkorb expungen."""
+def test_move_to_trash_source_still_present_after_targeted_expunge_raises():
+    """Härtester Fall: selbst der gezielte UID-EXPUNGE-Fallback bereinigt die
+    Quelle nicht (Mock: fetch liefert IMMER die Nachricht zurück) ->
+    `_move_to_trash` darf NIEMALS stillschweigend Erfolg melden, sondern muss
+    `MailboxMoveError` werfen (T-09-13) — und dabei nie folder-weit expungen."""
     import src.chat_tools as chat_tools
 
     mailbox = MagicMock()
+    mailbox.client.capabilities = ("MOVE", "UIDPLUS")
     mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
-    mailbox.fetch.return_value = [_msg(uid="42")]
+    mailbox.fetch.return_value = [_msg_with_mid()]
 
     with pytest.raises(chat_tools.MailboxMoveError):
         chat_tools._move_to_trash(mailbox, "42", "Drafts")
 
     mailbox.move.assert_called_once_with(["42"], "Papierkorb")
-    mailbox.delete.assert_called_once_with(["42"])
+    mailbox.client.uid.assert_called_once_with("EXPUNGE", "42")
+    mailbox.delete.assert_not_called()
     mailbox.expunge.assert_not_called()
+
+
+def test_move_to_trash_fallback_refused_without_trash_arrival_proof():
+    """Review CR-05 (a): bleibt die uid nach move() in der Quelle UND ist die
+    Nachricht NICHT nachweislich im Papierkorb angekommen (Message-ID-Suche
+    leer), wird der Fallback verweigert (`MailboxMoveError`) — die womöglich
+    EINZIGE Kopie wird nie hart gelöscht."""
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.client.capabilities = ("MOVE", "UIDPLUS")
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    current_folder = {"name": None}
+    mailbox.folder.set.side_effect = lambda name, *a, **kw: current_folder.__setitem__("name", name)
+
+    def _fetch_side_effect(*_args, **_kwargs):
+        # Papierkorb-Suche liefert NICHTS (Move hat weder kopiert noch entfernt),
+        # Quell-Ordner enthält die Nachricht weiterhin.
+        if current_folder["name"] == "Papierkorb":
+            return []
+        return [_msg_with_mid()]
+
+    mailbox.fetch.side_effect = _fetch_side_effect
+
+    with pytest.raises(chat_tools.MailboxMoveError):
+        chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    mailbox.flag.assert_not_called()
+    mailbox.client.uid.assert_not_called()
+    mailbox.delete.assert_not_called()
+    mailbox.expunge.assert_not_called()
+
+
+def test_move_to_trash_fallback_refused_without_uidplus_capability():
+    """Review CR-05 (b): ohne UIDPLUS-Capability ist kein gezieltes UID EXPUNGE
+    möglich — der Fallback wird verweigert statt folder-weit zu expungen
+    (das würde fremde \\Deleted-markierte Nachrichten mitlöschen)."""
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.client.capabilities = ("MOVE",)  # kein UIDPLUS
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mailbox.fetch.return_value = [_msg_with_mid()]
+
+    with pytest.raises(chat_tools.MailboxMoveError):
+        chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    mailbox.flag.assert_not_called()
+    mailbox.client.uid.assert_not_called()
+    mailbox.delete.assert_not_called()
+    mailbox.expunge.assert_not_called()
+
+
+def test_move_to_trash_fallback_refused_when_message_id_unknown():
+    """Review CR-05 (a), Randfall: hat die Nachricht keinen Message-ID-Header
+    (bzw. schlug der Pre-Move-Fetch fehl), gibt es keinen möglichen
+    Ankunfts-Nachweis — der Fallback wird fail-closed verweigert."""
+    import src.chat_tools as chat_tools
+
+    mailbox = MagicMock()
+    mailbox.client.capabilities = ("MOVE", "UIDPLUS")
+    mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mailbox.fetch.return_value = [_msg(uid="42")]  # headers ohne message-id
+
+    with pytest.raises(chat_tools.MailboxMoveError):
+        chat_tools._move_to_trash(mailbox, "42", "Drafts")
+
+    mailbox.flag.assert_not_called()
+    mailbox.client.uid.assert_not_called()
+    mailbox.delete.assert_not_called()
 
 
 # --- 09-03 Task 2: entwurf_bearbeiten ---------------------------------------------
