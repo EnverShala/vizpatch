@@ -12,7 +12,7 @@ from typing import Optional
 
 from dataclasses import replace
 
-from . import classify, generate, pii, state, status_writer
+from . import classify, generate, state, status_writer
 from .config import Config, DecryptionError, discover_agents, load_agent_config
 from .draft import build_reply_draft
 from .imap_client import ImapClient
@@ -91,7 +91,8 @@ def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient"
         return
 
     # REPLY_NEEDED path
-    body_for_llm = pii.redact(body) if config.enable_pii_redaction else body
+    # ANON-03/05: Pseudonymisierung passiert jetzt intern und einheitlich in
+    # generate.py (Anonymizer-Engine), nicht mehr einseitig hier im main-Modul.
 
     # D-26: Konversations-History aus IMAP frisch fetchen
     references_raw = msg.headers.get("references", [""])
@@ -114,7 +115,7 @@ def _process_one(msg, config: Config, logger: logging.Logger, imap: "ImapClient"
     draft_text = generate.generate_draft_text(
         from_address=msg.from_ or "",
         subject=msg.subject or "",
-        body=body_for_llm,
+        body=body,
         config=config,
         logger=logger,
         conversation_history=conversation_history,

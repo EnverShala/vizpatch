@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Literal, Optional
 
-from . import llm
+from . import llm, pii
 from .config import Config
 
 
@@ -42,6 +42,15 @@ def classify_email(
 ) -> Classification:
     """Classify an email as REPLY_NEEDED or IGNORE using den konfigurierten LLM-Provider."""
     logger = logger or logging.getLogger("vizpatch.classify")
+
+    # ANON-03: strukturierte PII wird VOR der Truncate/Prompt-Bildung durch
+    # getypte Tags ersetzt (Redact-vor-Truncate, Pitfall 1/5). Die LLM-Ausgabe
+    # (nur das Label REPLY_NEEDED/IGNORE) braucht keine De-Anonymisierung.
+    if config.enable_pii_redaction:
+        anonymizer = pii.Anonymizer()
+        from_address = anonymizer.anonymize(from_address)
+        subject = anonymizer.anonymize(subject)
+        body = anonymizer.anonymize(body)
 
     body_snippet = _extract_body_snippet(body)
     prompt = config.prompt_classify.format(

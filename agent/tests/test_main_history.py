@@ -33,7 +33,6 @@ def test_process_one_thread_mode_when_references_present(mock_config):
         patch("src.main.classify.classify_email", return_value="REPLY_NEEDED"),
         patch("src.main.generate.generate_draft_text", return_value="Draft text"),
         patch("src.main.build_reply_draft", return_value=b"raw"),
-        patch("src.main.pii.redact", return_value="Testbody"),
     ):
         _process_one(msg, mock_config, MagicMock(), mock_imap)
 
@@ -54,7 +53,6 @@ def test_process_one_sender_fallback_when_no_references(mock_config):
         patch("src.main.classify.classify_email", return_value="REPLY_NEEDED"),
         patch("src.main.generate.generate_draft_text", return_value="Draft text"),
         patch("src.main.build_reply_draft", return_value=b"raw"),
-        patch("src.main.pii.redact", return_value="Testbody"),
     ):
         _process_one(msg, mock_config, MagicMock(), mock_imap)
 
