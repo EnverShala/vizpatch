@@ -473,7 +473,11 @@ def _parse_mail_context(raw: str) -> dict | None:
 
 
 @app.post("/chat/{agent_id}/send")
-@limiter.limit(lambda: f"{os.getenv('CHAT_RATE_LIMIT_PER_MIN', '20')}/minute")
+@limiter.limit(
+    # Review IN-02: Default aus chat.CHAT_RATE_LIMIT_PER_MIN_DEFAULT statt
+    # hier erneut hartkodiert — kein Konstanten-Drift zwischen den Modulen.
+    lambda: f"{os.getenv('CHAT_RATE_LIMIT_PER_MIN', str(chat.CHAT_RATE_LIMIT_PER_MIN_DEFAULT))}/minute"
+)
 def chat_send(
     request: Request,
     agent_id: str,
