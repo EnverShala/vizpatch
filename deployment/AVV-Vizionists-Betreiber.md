@@ -19,7 +19,7 @@
 - [Firmenname], [Anschrift], vertreten durch [Name]
 
 **Auftragsverarbeiter** (Auftragnehmer, im Folgenden „Vizionists"):
-- Vizionists, [Anschrift], vertreten durch [Name]
+- Vizionists GmbH, Mollenbachstr. 25, 71229 Leonberg, vertreten durch [Name]; Datenschutzkontakt: info@vizionists.com
 
 Dieser AVV gilt, **sobald Vizionists im Rahmen von Einrichtung, Wartung, Update oder Support
 Zugriff auf personenbezogene Daten** des Betreibers (Server, Konfiguration, Logs, Postfach)
