@@ -153,7 +153,7 @@ Plans:
 
 **Wave 5** *(blocked on 04.04)*
 
-- [ ] 04.05-update-autostart-deployment-PLAN.md - GHCR-Pull + Tarball-Upload + install-autostart.sh + build-deployment-package.sh v1.1.0 (UI-05)
+- [ ] 04.05-update-autostart-deployment-PLAN.md - GHCR-Pull + Tarball-Upload + install-autostart.sh + build-deployment-package.sh v1.1.0 (UI-05) — Hinweis: WebUI-Update-Buttons am 2026-07-20 wieder entfernt; Updates laufen per SSH (`deployment/UPDATE-RUNBOOK-SSH.md`)
 
 
 **Hauptrisiken:**

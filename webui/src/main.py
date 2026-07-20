@@ -2,12 +2,11 @@ import json
 import logging
 import os
 import re
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -785,33 +784,3 @@ def reset_all_endpoint(
     # Root-.env (WebUI-globale Settings) leeren.
     config_io.reset_all()
     return RedirectResponse("/?reset=1", status_code=303)
-
-
-@app.post("/update/pull", response_class=HTMLResponse)
-def update_pull(request: Request, user: str = Depends(auth.require_auth)):
-    image_ref = os.getenv("WEBUI_UPDATE_IMAGE_REF", "ghcr.io/EnverShala/vizpatch:latest")
-    log = docker_ctrl.pull_and_restart(image_ref)
-    return templates.TemplateResponse(
-        request, "_update_log.html", {"log": log, "source": "pull", "image_ref": image_ref}
-    )
-
-
-@app.post("/update/upload", response_class=HTMLResponse)
-def update_upload(
-    request: Request,
-    tarball: UploadFile = File(...),
-    user: str = Depends(auth.require_auth),
-):
-    if not tarball.filename or not tarball.filename.endswith(".tar"):
-        raise HTTPException(status_code=400, detail="Nur .tar-Files erlaubt")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".tar", dir=tempfile.gettempdir()) as tmp:
-        while chunk := tarball.file.read(1024 * 1024):
-            tmp.write(chunk)
-        tmp_path = Path(tmp.name)
-    try:
-        log = docker_ctrl.load_and_restart(tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
-    return templates.TemplateResponse(
-        request, "_update_log.html", {"log": log, "source": "upload", "filename": tarball.filename}
-    )

@@ -1,5 +1,0 @@
-<div id="update-log">
-  <h3>Update-Log ({% if source == "pull" %}GHCR-Pull: {{ image_ref }}{% else %}Tarball: {{ filename }}{% endif %})</h3>
-  <pre>{% for line in log %}{{ line }}
-{% endfor %}</pre>
-</div>
