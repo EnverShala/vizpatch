@@ -18,7 +18,7 @@
 | 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
 | 8 | Outlook-Add-in für den Agenten-Chat (v1.4) | Office.js-Taskpane als dünne Hülle über den WebUI-Chat, Mail-Kontext-Übergabe, HTTPS-Runbook | OUT-01…04 | 5 | ⏸️ OPTIONAL / ON HOLD (2026-07-19) — Code-komplett, aber Add-in läuft nur auf M365/Exchange, nicht auf IMAP; Umsetzung offen bis Kunden-Postfachtyp geklärt |
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
-| 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | 📋 4 plans, 4 waves — geplant 2026-07-19 |
+| 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | ✅ Complete (2026-07-20) — 4 plans, DSGVO/AVV vom DSB freigegeben |
 | 11 | Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) | v1.2–v1.6 komplett bei Vizionists gegen Test-Postfach durchtesten + Update/Rollback lokal proben, damit der Kunden-Rollout ein Nicht-Ereignis wird | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
@@ -433,7 +433,7 @@ Plans:
 
 **Wave 4** *(blocked on 10-03)*
 
-- [ ] 10-04-PLAN.md — DSGVO/AVV-Neubewertung dokumentiert (Datenschutzerklärung + AVV) + ehrlicher Restrisiko-Hinweis + Flag-Doku + menschlicher Abnahme-Checkpoint (ANON-05) — autonomous: false
+- [x] 10-04-PLAN.md — DSGVO/AVV-Neubewertung dokumentiert (Datenschutzerklärung + AVV) + ehrlicher Restrisiko-Hinweis + Flag-Doku + menschlicher Abnahme-Checkpoint (ANON-05) — autonomous: false; **DSB-Freigabe erteilt 2026-07-20 (info@vizionists.com)**
 
 **Hauptrisiken (Variante A):**
 
