@@ -127,6 +127,7 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 
 ## History
 
+- **2026-07-20** — **Phase 8 neu geplant (Pivot).** Kunde nutzt Outlook classic → Add-in von Office.js (M365-only, on hold, archiviert unter `08-.../archive-officejs/`) auf **COM/VSTO** (Thin-Client gegen bestehende `/chat`-API, SSE, Werkzeuge+Drafts serverseitig) umgestellt. CONTEXT (D-82…D-89), ROADMAP, REQUIREMENTS (OUT-01…04 superseded, OUT-05…09 neu) aktualisiert. Research + Planner (4 Plans, 4 Waves) + Plan-Checker (PASS, keine Blocker) durchlaufen. Kritischer Fund: nativer `HttpClient` braucht expliziten `Origin`-Header (in `ADDIN_FRAME_ANCESTORS`), sonst 403 durch `enforce_same_origin` — Fix ohne Backend-Änderung. Build/Live-Tasks = `autonomous: false` (kein VS/Office auf Dev-Maschine). Nächster Schritt: `/gsd:execute-phase 08` auf Windows+VS+Office+LAN-Backend.
 - **2026-07-09** — Projekt initialisiert. Initialer Multi-Tenant-Plan.
 - **2026-07-09** — Phase 1 Context (Runde 1) mit InboxZero-Basis, Vizionists-managed Hosting.
 - **2026-07-09 (Pivot 1)** — "Kunde hat Server". Software-Delivery-Modell mit Deployment-Repo, Runbooks, bootstrap.sh.
