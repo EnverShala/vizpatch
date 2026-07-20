@@ -258,3 +258,38 @@ Handle-Erstellung laufen bzw. konsequent ueber `BeginInvoke` marshallen.
 _Reviewed: 2026-07-20_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+
+## Fixes applied (2026-07-20)
+
+Behoben und verifiziert (MSBuild-Build fehlerfrei, `dotnet test` 23/23 gruen,
+Wächter real gruen mit Gegenproben):
+
+- **CR-01** erledigt — `StreamChatAsync` terminiert die SSE-Schleife ueber
+  `ReadLineAsync() == null` statt `EndOfStream`; kein synchrones Blocken des
+  UI-Threads mehr. UI-Thread-Continuation-Semantik unveraendert
+  (kein `ConfigureAwait(false)`), daher bleibt IN-04 benigne.
+  (`803aeaa`)
+- **WR-01** erledigt — MailContextReader gibt Inspector/Explorer/Selection im
+  `finally` via `Marshal.ReleaseComObject` frei; rein-lesende Semantik erhalten.
+  (`eca67fb`)
+- **WR-05** erledigt — `CancellationTokenSource` als Feld, Cancel bei Reset und
+  in `ChatView.Dispose(bool)`; `OperationCanceledException` leise. (`eca67fb`)
+- **WR-06** erledigt — `_sendButton`-Reaktivierung in `finally` um den gesamten
+  Sende-Ablauf (aktiv-Turn-guarded). (`eca67fb`)
+- **WR-02/WR-03/WR-04** erledigt — Wächter gehaertet: lexer-basiertes
+  String-/Kommentar-Stripping, keine zeilenweise Allowlist-Unterdrueckung mehr,
+  Whitespace/Zeilenumbruch vor `(` und alias-unabhaengige Application-Erkennung.
+  Gegenproben (jetzt ROT): `mail.Send ()`, Send mit Zeilenumbruch vor `(`,
+  verstecktes zweites Statement, per String-`//` verstecktes Send,
+  `new OL.Application()`. (`76a7b2f`)
+- **IN-01** erledigt (mitgenommen) — AgentId via `Uri.EscapeDataString`.
+  (`803aeaa`)
+- Triviale Info-Korrektur: veraltete Hinweiszeile ChatView "Settings-Dialog
+  folgt…" auf den vorhandenen "Einstellungen"-Button aktualisiert. (`eca67fb`)
+
+Bewusst NICHT geaendert (Design-Entscheidung/spaeter): IN-03 (stiller
+Settings-Reset bei DPAPI-Fehler), IN-02 (Fehler-Body bei Non-2xx), IN-04
+(MarshalToUi bei nicht erstelltem Handle — bleibt durch beibehaltene
+UI-Thread-Continuations benigne).
