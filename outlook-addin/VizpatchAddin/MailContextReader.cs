@@ -42,19 +42,25 @@ namespace VizpatchAddin
             }
 
             object currentItem = null;
+            // Zwischen-COM-Objekte separat halten, um sie im finally sicher wieder
+            // freizugeben. Selection ist bei jedem Aufruf ein frisch erzeugtes
+            // COM-Objekt und wuerde sonst pro "Mail einbeziehen"-Send leaken.
+            Outlook.Inspector inspector = null;
+            Outlook.Explorer explorer = null;
+            Outlook.Selection selection = null;
             try
             {
-                Outlook.Inspector inspector = app.ActiveInspector();
+                inspector = app.ActiveInspector();
                 if (inspector != null)
                 {
                     currentItem = inspector.CurrentItem;
                 }
                 else
                 {
-                    Outlook.Explorer explorer = app.ActiveExplorer();
+                    explorer = app.ActiveExplorer();
                     if (explorer != null)
                     {
-                        Outlook.Selection selection = explorer.Selection;
+                        selection = explorer.Selection;
                         if (selection != null && selection.Count > 0)
                         {
                             // Outlook-Selektionen sind 1-basiert.
@@ -66,7 +72,16 @@ namespace VizpatchAddin
             catch (COMException)
             {
                 // z. B. kein aktives Fenster/keine Auswahl -> kein Kontext, kein Crash.
+                // Das finally gibt trotzdem etwaige Zwischenobjekte frei.
                 return null;
+            }
+            finally
+            {
+                // Rein lesend: nur die Zwischen-COM-Referenzen freigeben, nichts
+                // schreiben/versenden. Reihenfolge Selection -> Explorer -> Inspector.
+                if (selection != null) Marshal.ReleaseComObject(selection);
+                if (explorer != null) Marshal.ReleaseComObject(explorer);
+                if (inspector != null) Marshal.ReleaseComObject(inspector);
             }
 
             Outlook.MailItem mail = currentItem as Outlook.MailItem;

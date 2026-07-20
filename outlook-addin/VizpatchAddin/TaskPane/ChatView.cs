@@ -45,6 +45,10 @@ namespace VizpatchAddin.TaskPane
         private string _sessionId;
         private AddinSettings _settings;
 
+        // Abbruch des laufenden SSE-Streams. Wird bei "Zuruecksetzen" und beim
+        // Dispose der Pane gecancelt, damit kein Request haengt (WR-05).
+        private CancellationTokenSource _activeCts;
+
         public ChatView()
         {
             BuildUi();
@@ -145,8 +149,7 @@ namespace VizpatchAddin.TaskPane
             {
                 AppendSystemLine(
                     "Hinweis: Backend-URL/Agent-ID noch nicht konfiguriert. "
-                    + "Bitte in %AppData%\\Vizpatch\\OutlookAddin\\settings.json hinterlegen "
-                    + "(Settings-Dialog folgt in einer spaeteren Version).");
+                    + "Bitte oben ueber \"Einstellungen\" hinterlegen.");
             }
         }
 
@@ -167,6 +170,11 @@ namespace VizpatchAddin.TaskPane
 
         private void ResetButton_Click(object sender, EventArgs e)
         {
+            // Laufenden Stream abbrechen, damit kein Request weiterlaeuft und der
+            // gecancelte Turn den frisch geleerten Verlauf nicht wieder befuellt.
+            try { _activeCts?.Cancel(); }
+            catch (ObjectDisposedException) { /* bereits abgeschlossen/disposed */ }
+
             _history.Clear();
             _sessionId = SessionIdGenerator.NewSessionId();
             _log.Clear();
@@ -203,32 +211,38 @@ namespace VizpatchAddin.TaskPane
 
         private async void SendAsync(string message)
         {
+            // Etwaigen noch laufenden Turn abbrechen und die CTS als Feld halten,
+            // damit Reset/Dispose ihn gezielt canceln koennen (WR-05).
+            CancelActiveRequest();
+            var cts = new CancellationTokenSource();
+            _activeCts = cts;
+
             _sendButton.Enabled = false;
-
-            // Mail-Kontext (D-86) NUR bauen, wenn der Betreiber es ausdruecklich
-            // will. Der COM-Zugriff geschieht bewusst hier — noch auf dem UI-Thread
-            // vor dem await, wo das Outlook-Objektmodell erreichbar ist.
-            MailContext mailContext = null;
-            if (_includeMailCheck.Checked)
-            {
-                mailContext = TryBuildMailContextSafe();
-                if (mailContext == null)
-                {
-                    AppendSystemLine(
-                        "Hinweis: Keine Mail als Kontext gefunden "
-                        + "(keine Mail geoeffnet/markiert oder Nicht-Mail-Element).");
-                }
-            }
-
-            AppendRoleLine("Sie", Color.FromArgb(0, 90, 158));
-            AppendUserText(message);
-            AppendRoleLine("Assistent", Color.FromArgb(34, 34, 34));
 
             var assistantText = new System.Text.StringBuilder();
             bool sawError = false;
 
-            using (var cts = new CancellationTokenSource())
+            try
             {
+                // Mail-Kontext (D-86) NUR bauen, wenn der Betreiber es ausdruecklich
+                // will. Der COM-Zugriff geschieht bewusst hier — noch auf dem UI-Thread
+                // vor dem await, wo das Outlook-Objektmodell erreichbar ist.
+                MailContext mailContext = null;
+                if (_includeMailCheck.Checked)
+                {
+                    mailContext = TryBuildMailContextSafe();
+                    if (mailContext == null)
+                    {
+                        AppendSystemLine(
+                            "Hinweis: Keine Mail als Kontext gefunden "
+                            + "(keine Mail geoeffnet/markiert oder Nicht-Mail-Element).");
+                    }
+                }
+
+                AppendRoleLine("Sie", Color.FromArgb(0, 90, 158));
+                AppendUserText(message);
+                AppendRoleLine("Assistent", Color.FromArgb(34, 34, 34));
+
                 try
                 {
                     // Neuer ChatClient je Turn — baut Basic-Auth + TLS-Scope + Origin
@@ -266,23 +280,68 @@ namespace VizpatchAddin.TaskPane
                             cts.Token);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Abbruch durch Reset/Pane-Close (WR-05) — leise; der Turn
+                    // wird nicht in den Verlauf uebernommen.
+                    sawError = true;
+                }
                 catch (Exception ex)
                 {
                     AppendErrorLine(ex.Message);
                     sawError = true;
                 }
-            }
 
-            // Verlauf erst nach vollstaendiger, fehlerfreier Antwort anhaengen
-            // (analog chat.js) — haelt den Verlauf konsistent.
-            if (!sawError)
+                // Verlauf erst nach vollstaendiger, fehlerfreier Antwort anhaengen
+                // (analog chat.js) — haelt den Verlauf konsistent.
+                if (!sawError)
+                {
+                    _history.Add(new ChatTurn("user", message));
+                    _history.Add(new ChatTurn("assistant", assistantText.ToString()));
+                }
+
+                AppendNewLine();
+            }
+            finally
             {
-                _history.Add(new ChatTurn("user", message));
-                _history.Add(new ChatTurn("assistant", assistantText.ToString()));
+                // Button IMMER wieder aktivieren (WR-06) — auch bei Fehler/Abbruch
+                // oder einer Exception ausserhalb des inneren try. Aber nur, wenn
+                // dieser Turn noch der aktive ist: ein zwischenzeitlich gestarteter
+                // Nachfolge-Turn haelt den Button bewusst deaktiviert.
+                if (_activeCts == cts)
+                {
+                    _sendButton.Enabled = true;
+                    _activeCts = null;
+                }
+                cts.Dispose();
             }
+        }
 
-            AppendNewLine();
-            _sendButton.Enabled = true;
+        /// <summary>Bricht einen ggf. laufenden SSE-Stream ab (idempotent, defensiv).</summary>
+        private void CancelActiveRequest()
+        {
+            var cts = _activeCts;
+            if (cts == null)
+            {
+                return;
+            }
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { /* bereits abgeschlossen */ }
+        }
+
+        /// <summary>
+        /// Laufenden Request beim Verwerfen der Pane/des Controls abbrechen, damit
+        /// keine spaeter eintreffende Fortsetzung auf disposte Controls zugreift
+        /// (WR-05, ObjectDisposedException in async void).
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                CancelActiveRequest();
+                _activeCts = null;
+            }
+            base.Dispose(disposing);
         }
 
         /// <summary>
