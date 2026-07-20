@@ -61,6 +61,8 @@ Die abgeklopften Verdachtspunkte SSRF und Command-Injection sind **nicht** vorha
 
 ### CR-01: Kein CSRF-Schutz auf zustandsändernden POST-Routen (bis zu irreversiblem Datenverlust)
 
+> ✅ behoben (Commit a16c5ee)
+
 **Datei:** `webui/src/main.py:212` (`/agents`), `:224` (`/agents/{id}/rename`), `:238` (`/agents/{id}/delete`), `:256` (`/agents/{id}/{action}`), `:280` (`/agent/{action}`), `:297` (`/context/generate`), `:342` (`/style/relearn`), `:474` (`/chat/{id}/send`), `:560` (`/save`), `:766` (`/reset`)
 
 **Angriffsszenario:**
@@ -122,6 +124,8 @@ def _agent_data_dir(agent_id: str) -> Path:
 
 ### WR-02: Destruktive/CRUD-Routen ohne Rate-Limit
 
+> ✅ behoben (Commit 6933dfa)
+
 **Datei:** `webui/src/main.py:212, 224, 238, 256, 280, 766`
 
 **Angriffsszenario:**
@@ -130,6 +134,8 @@ def _agent_data_dir(agent_id: str) -> Path:
 **Fix:** Ein moderates Limit (z.B. `@limiter.limit("30/minute")`) auf die CRUD-/Steuer-Routen legen; `/reset` zusätzlich stark begrenzen (z.B. `3/minute`).
 
 ### WR-03: `/chat/{id}/send` — `message`/`history`/`mail_context`-Betreff/-Absender nicht längenbegrenzt (Kosten-/Speicher-DoS)
+
+> ✅ behoben (Commit 078bc82)
 
 **Datei:** `webui/src/main.py:483-486`; Verarbeitung `webui/src/chat_tools.py:1822-1839`
 
@@ -140,6 +146,8 @@ def _agent_data_dir(agent_id: str) -> Path:
 
 ### WR-04: Header-/CRLF-Injection in den Draft-Buildern über LLM-/Mail-kontrollierte Felder
 
+> ✅ behoben (Commit 0f09080)
+
 **Datei:** `webui/src/chat_tools.py:817-823` (`_build_edited_draft`), `:946-978` (`_build_new_draft`); `agent/src/draft.py:41-45`
 
 **Angriffsszenario:**
@@ -148,6 +156,8 @@ def _agent_data_dir(agent_id: str) -> Path:
 **Fix:** Empfänger/Betreff vor dem Setzen normalisieren, z.B. `value = value.replace("\r", " ").replace("\n", " ").strip()` für `To`/`Subject`/`From`, und Empfänger-Adressen via `email.utils.parseaddr`/`formataddr` durchreichen. Damit ist Header-Splitting strukturell ausgeschlossen, unabhängig von der jeweiligen `email`-Policy-Version.
 
 ### WR-05: Rate-Limit und Login-Lockout an `request.client.host` gebunden — hinter Reverse-Proxy umgehbar/kollektiv sperrend; Basic-Auth im Klartext
+
+> ✅ behoben (Commit 157ab40)
 
 **Datei:** `webui/src/auth.py:26-29` (`_client_ip`), `webui/src/main.py:24` (`get_remote_address`)
 
@@ -158,6 +168,8 @@ Sowohl slowapi (`get_remote_address`) als auch der Login-Lockout nutzen die TCP-
 
 ### WR-06: Roh durchgereichte Exception-Texte in HTTP-/SSE-Fehlern (Info-Leak)
 
+> ✅ behoben (Commit c8e5c5d)
+
 **Datei:** `webui/src/main.py:328, 330, 366, 368, 524, 541`; Handler-`fehler`-Felder in `webui/src/chat_tools.py` (z.B. `:580, 595, 651`)
 
 **Angriffsszenario:**
@@ -166,6 +178,8 @@ Sowohl slowapi (`get_remote_address`) als auch der Login-Lockout nutzen die TCP-
 **Fix:** Nach außen generische Meldungen zurückgeben („IMAP-Verbindung fehlgeschlagen", „LLM-Dienst nicht erreichbar") und die Details ausschließlich serverseitig loggen (das Muster ist mit `logger.warning(..., extra={"error": str(e)})` teils schon vorhanden — konsequent auf ALLE nach außen gegebenen `detail`/`fehler` anwenden).
 
 ### WR-07: Offener Zustand ohne gesetztes Passwort in Kombination mit Docker-Socket (Host-Root)
+
+> ✅ behoben (Commit 25849ea) — Setup-Zwang; Docker-Socket-Proxy bleibt offene Empfehlung.
 
 **Datei:** `webui/src/auth.py:99-101` (`require_auth` → `"anonymous"` wenn `WEBUI_USER`/`WEBUI_PASSWORD` leer); `webui/src/docker_ctrl.py:16-19`
 
@@ -197,6 +211,8 @@ Wegen der Inline-`<script>`-Blöcke und `on*=`-Handler in `index.html`/`_status_
 `MailBoxUnencrypted` überträgt Login-Credentials im Klartext. Config-gesteuert; für die 993/SSL-Provider-Defaults kein Thema. **Fix:** Beim Aktivieren von `IMAP_USE_SSL=false` im WebUI eine deutliche Warnung anzeigen.
 
 ### IN-04: `context_md`/`style_md` über `/save` ohne Größenlimit
+
+> ✅ behoben (Commit 562ec68)
 
 **Datei:** `webui/src/main.py:570-572` (`context_md`/`style_md`/`style_note` als `Form(None)` ohne `max_length`), geschrieben in `agents_io.write_*_atomic`
 
