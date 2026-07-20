@@ -13,8 +13,8 @@ namespace VizpatchAddin.Core
     ///   <item>Abschluss: <c>event: done</c> + <c>data: </c></item>
     ///   <item>Fehler:   <c>event: error</c> + <c>data: {line}</c></item>
     /// </list>
-    /// Rein string-basiert — KEIN HttpClient-/Netzwerk-Bezug, damit ohne Backend
-    /// per xUnit testbar. .NET Framework 4.8 hat keinen eingebauten SSE-Parser
+    /// Rein string-basiert — kein Netzwerk-/Transport-Bezug (kein System.Net-Client),
+    /// damit ohne Backend per xUnit testbar. .NET Framework 4.8 hat keinen eingebauten SSE-Parser
     /// (erst ab .NET 9), daher dieser kleine, an der SSE-Spec orientierte Parser.
     /// </summary>
     public sealed class SseLineParser

@@ -18,6 +18,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- BCL-Assembly des .NET Framework 4.8 (HttpClient/HttpClientHandler);
+         in SDK-style-net48-Projekten explizit zu referenzieren. -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Approved laut RESEARCH.md Package Legitimacy Audit (nuget.org, ~8,5 Mrd. Downloads). -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <!-- DPAPI (System.Security.Cryptography.ProtectedData): Windows-native

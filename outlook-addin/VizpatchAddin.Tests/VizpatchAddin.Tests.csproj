@@ -22,6 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- BCL-Assembly des .NET Framework 4.8 (HttpMessageHandler-Test-Doubles). -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VizpatchAddin.Core\VizpatchAddin.Core.csproj" />
   </ItemGroup>
 
