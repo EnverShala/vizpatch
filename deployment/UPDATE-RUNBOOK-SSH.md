@@ -85,6 +85,21 @@ zurückspielen: `tar xzf ~/vizpatch-config-backup-<datum>.tar.gz -C ~/vizpatch`.
 
 ---
 
+## Sicherheits-Hinweis: Basic-Auth nur hinter TLS (WR-05)
+
+- Die WebUI spricht in v1 **kein HTTPS**. Basic-Auth-Zugangsdaten gehen sonst im
+  **Klartext** über die Leitung (im Kundennetz mitlesbar). Die WebUI daher **ausschließlich
+  hinter einem vorgelagerten Reverse-Proxy mit TLS** (z. B. Caddy, siehe `Caddyfile.example`)
+  exponieren — nie direkt ins nicht vertrauenswürdige Netz.
+- Läuft die WebUI hinter einem Reverse-Proxy, kollabieren sonst alle Clients auf die Proxy-IP
+  (Login-Lockout + Rate-Limit greifen dann kollektiv). Deshalb `TRUSTED_PROXY=<IP des Proxys>`
+  setzen — **nur dann** wird `X-Forwarded-For` ausgewertet und die echte Client-IP verwendet.
+  Ohne gesetzten `TRUSTED_PROXY` wird `X-Forwarded-For` bewusst **ignoriert** (kein blindes
+  Vertrauen — sonst könnte ein Client seine IP fälschen). `TRUSTED_PROXY` **nur** setzen, wenn
+  der Proxy tatsächlich XFF anhängt und direkt vor der WebUI steht.
+
+---
+
 ## Was NICHT tun (Datenverlust-Fallen)
 
 - ❌ `docker compose down -v` — das `-v` löscht das Volume `agent-data` (State weg → Backfill,

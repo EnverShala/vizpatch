@@ -23,10 +23,35 @@ _login_failures: dict[str, list[float]] = {}
 _login_lockouts: dict[str, float] = {}
 
 
-def _client_ip(request: Optional[Request]) -> str:
+def _trusted_proxy() -> str:
+    return (os.getenv("TRUSTED_PROXY") or "").strip()
+
+
+def client_ip(request: Optional[Request]) -> str:
+    """WR-05: ermittelt die effektive Client-IP fuer Login-Lockout UND Rate-Limit.
+    `X-Forwarded-For` wird NUR ausgewertet, wenn `TRUSTED_PROXY` (neue Env, Default
+    leer) gesetzt ist UND der direkte TCP-Peer GENAU dieser Proxy ist — dann gilt
+    der erste XFF-Eintrag (die urspruengliche Client-IP) als Client. Ohne
+    `TRUSTED_PROXY` oder bei abweichendem Peer bleibt es unveraendert bei
+    `request.client.host`. XFF wird NIE blind vertraut (sonst koennte ein Client
+    seine IP spoofen und den Lockout/das Limit umgehen)."""
     if request is None or request.client is None:
         return "unknown"
-    return request.client.host or "unknown"
+    peer = request.client.host or "unknown"
+    trusted = _trusted_proxy()
+    if trusted and peer == trusted:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            first = xff.split(",")[0].strip()
+            if first:
+                return first
+    return peer
+
+
+def _client_ip(request: Optional[Request]) -> str:
+    # Beibehaltener interner Name (Login-Lockout) — delegiert an die
+    # Trusted-Proxy-bewusste Logik (WR-05).
+    return client_ip(request)
 
 
 def _check_login_lockout(request: Optional[Request]) -> None:

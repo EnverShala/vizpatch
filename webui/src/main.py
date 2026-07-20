@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
 from .logging_setup import setup_logging
@@ -21,7 +20,16 @@ setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _rate_limit_key(request: Request) -> str:
+    """WR-05: slowapi-Schluessel ueber die Trusted-Proxy-bewusste Client-IP statt
+    `get_remote_address` (das blind `request.client.host` nimmt). Hinter einem
+    konfigurierten `TRUSTED_PROXY` wird so die echte Client-IP aus X-Forwarded-For
+    genutzt (sonst teilen sich alle Clients die Proxy-IP = Selbst-DoS)."""
+    return auth.client_ip(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key)
 
 app = FastAPI(title="Vizpatch WebUI", version="1.2.0")
 app.state.limiter = limiter
