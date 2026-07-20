@@ -118,6 +118,9 @@
     <Compile Include="TaskPane\ChatTaskPaneHost.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="TaskPane\ChatView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 

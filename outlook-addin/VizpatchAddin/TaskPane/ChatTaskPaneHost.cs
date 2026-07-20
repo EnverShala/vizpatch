@@ -10,6 +10,8 @@ namespace VizpatchAddin.TaskPane
     /// </summary>
     public class ChatTaskPaneHost : UserControl
     {
+        private ChatView _chatView;
+
         public ChatTaskPaneHost()
         {
             InitializeLayout();
@@ -19,7 +21,8 @@ namespace VizpatchAddin.TaskPane
         {
             this.Dock = DockStyle.Fill;
             this.BackColor = System.Drawing.SystemColors.Window;
-            // Der Chat-Bereich (ChatView) wird in Task 2 hier eingehaengt.
+            _chatView = new ChatView { Dock = DockStyle.Fill };
+            this.Controls.Add(_chatView);
         }
     }
 }
