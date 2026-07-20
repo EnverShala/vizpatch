@@ -423,11 +423,15 @@ def context_generate(
         api_key = crypto.decrypt_value(raw_key)
         seed_text = llm_seed.generate(firma_input, api_key=api_key)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Review WR-06: generische Meldung nach außen, Details nur serverseitig.
+        logger.warning("context_generate_value_error", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=400, detail="Anfrage ungültig oder Secret nicht entschlüsselbar.")
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=500, detail="LLM service error")
+        logger.warning("context_generate_runtime_error", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail="LLM-Dienst nicht erreichbar.")
+    except Exception as e:
+        logger.warning("context_generate_failed", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail="Interner Fehler.")
     return PlainTextResponse(seed_text)
 
 
@@ -461,11 +465,15 @@ def style_relearn(
     except style_extract.StyleExtractionEmpty:
         raise HTTPException(status_code=400, detail=STY05_HINT)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Review WR-06: generische Meldung nach außen, Details nur serverseitig.
+        logger.warning("style_relearn_value_error", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=400, detail="Anfrage ungültig.")
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Stil-Extraktion fehlgeschlagen")
+        logger.warning("style_relearn_runtime_error", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail="LLM-Dienst nicht erreichbar.")
+    except Exception as e:
+        logger.warning("style_relearn_failed", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail="Stil-Extraktion fehlgeschlagen.")
 
     agents_io.write_style_md_atomic(agent_id, style_md)
     return PlainTextResponse(style_md)
@@ -620,8 +628,10 @@ def chat_send(
         # Review WR-06: crypto.decrypt_value wirft bei falschem/rotiertem Key
         # (SEC-03-Fall) einen RuntimeError — als verstaendlicher 400 statt
         # generischem 500. ChatConfigError (Subklasse von RuntimeError) wird
-        # oben bereits spezifischer behandelt.
-        raise HTTPException(status_code=400, detail=f"Secret nicht entschlüsselbar: {e}")
+        # oben bereits spezifischer behandelt. Detail nur serverseitig loggen,
+        # nach außen generisch (kein roher Exception-Text).
+        logger.warning("chat_send_secret_error", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=400, detail="Secret nicht entschlüsselbar.")
 
     def _stream():
         try:
@@ -635,10 +645,11 @@ def chat_send(
             yield "event: done\ndata: \n\n"
         except Exception as e:
             logger.warning("chat_stream_error", extra={"agent_id": agent_id, "error": str(e)})
-            # Review WR-05: str(e) kann Newlines enthalten (IMAP-/SDK-
-            # Exceptions) — ohne `data:`-Fortsetzungszeilen wuerde der Client
-            # die Folgezeilen stumm verwerfen bzw. Geister-Events sehen.
-            yield "event: error\n" + _sse_data_frame(str(e))
+            # Review WR-06: keinen rohen Exception-Text (Hostnamen/Server-
+            # Antworten) an den Client streamen — generische Meldung, Details
+            # nur serverseitig via logger.warning oben. _sse_data_frame bleibt
+            # (robust auch bei mehrzeiligem Text).
+            yield "event: error\n" + _sse_data_frame("Interner Fehler bei der Verarbeitung.")
 
     return StreamingResponse(
         _stream(),

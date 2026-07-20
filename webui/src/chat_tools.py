@@ -442,12 +442,12 @@ def ordner_auflisten(agent_id: str) -> dict:
                 logger.warning(
                     "ordner_auflisten_list_failed", extra={"agent_id": agent_id, "error": str(e)}
                 )
-                return {"fehler": f"Ordnerliste konnte nicht gelesen werden: {e}", "ordner": []}
+                return {"fehler": "Ordnerliste konnte nicht gelesen werden.", "ordner": []}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("ordner_auflisten_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}", "ordner": []}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen.", "ordner": []}
 
     ordner = []
     for info in folder_infos:
@@ -493,7 +493,7 @@ def _mails_suchen_all_folders(
         logger.warning(
             "mails_suchen_alle_ordner_list_failed", extra={"agent_id": agent_id, "error": str(e)}
         )
-        return {"fehler": f"Ordnerliste konnte nicht gelesen werden: {e}", "treffer": []}
+        return {"fehler": "Ordnerliste konnte nicht gelesen werden.", "treffer": []}
 
     folder_names = [fi.name for fi in folder_infos][:MAX_FOLDERS_FOR_ALL_SEARCH]
     treffer: list[dict] = []
@@ -583,7 +583,11 @@ def mails_suchen(
             try:
                 mailbox.folder.set(target_folder)
             except Exception as e:
-                return {"fehler": f"Ordner '{target_folder}' nicht verfügbar: {e}", "treffer": []}
+                logger.warning(
+                    "mails_suchen_folder_set_failed",
+                    extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
+                )
+                return {"fehler": f"Ordner '{target_folder}' nicht verfügbar.", "treffer": []}
             try:
                 messages = list(
                     mailbox.fetch(criteria, reverse=True, mark_seen=False, limit=search_limit)
@@ -593,12 +597,12 @@ def mails_suchen(
                     "mails_suchen_fetch_failed",
                     extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
                 )
-                return {"fehler": f"Suche im Ordner '{target_folder}' fehlgeschlagen: {e}", "treffer": []}
+                return {"fehler": f"Suche im Ordner '{target_folder}' fehlgeschlagen.", "treffer": []}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("mails_suchen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}", "treffer": []}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen.", "treffer": []}
 
     treffer = []
     for msg in messages:
@@ -646,7 +650,11 @@ def mail_lesen(
             try:
                 mailbox.folder.set(target_folder)
             except Exception as e:
-                return {"fehler": f"Ordner '{target_folder}' nicht verfügbar: {e}"}
+                logger.warning(
+                    "mail_lesen_folder_set_failed",
+                    extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
+                )
+                return {"fehler": f"Ordner '{target_folder}' nicht verfügbar."}
             try:
                 messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
             except Exception as e:
@@ -654,12 +662,12 @@ def mail_lesen(
                     "mail_lesen_fetch_failed",
                     extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
                 )
-                return {"fehler": f"Lesen der Mail uid={uid_str} in '{target_folder}' fehlgeschlagen: {e}"}
+                return {"fehler": f"Lesen der Mail uid={uid_str} in '{target_folder}' fehlgeschlagen."}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("mail_lesen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     if not messages:
         return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
@@ -778,7 +786,11 @@ def entwurf_lesen(
             try:
                 mailbox.folder.set(drafts_folder)
             except Exception as e:
-                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar: {e}"}
+                logger.warning(
+                    "drafts_folder_set_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar."}
             try:
                 messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
             except Exception as e:
@@ -786,12 +798,12 @@ def entwurf_lesen(
                     "entwurf_lesen_fetch_failed",
                     extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                 )
-                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen."}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("entwurf_lesen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     if not messages:
         return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
@@ -888,7 +900,11 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
             try:
                 mailbox.folder.set(drafts_folder)
             except Exception as e:
-                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar: {e}"}
+                logger.warning(
+                    "drafts_folder_set_failed",
+                    extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                )
+                return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar."}
             try:
                 messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
             except Exception as e:
@@ -896,7 +912,7 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
                     "entwurf_bearbeiten_fetch_failed",
                     extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                 )
-                return {"fehler": f"Lesen des Original-Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+                return {"fehler": f"Lesen des Original-Entwurfs uid={uid_str} fehlgeschlagen."}
             if not messages:
                 return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
 
@@ -911,7 +927,7 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
                     "entwurf_bearbeiten_append_failed",
                     extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                 )
-                return {"fehler": f"Ablegen der neuen Fassung fehlgeschlagen: {e}"}
+                return {"fehler": "Ablegen der neuen Fassung fehlgeschlagen."}
 
             try:
                 trash_folder = _move_to_trash(mailbox, uid_str, drafts_folder)
@@ -923,7 +939,7 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
                     "fehler": (
                         f"Neue Fassung liegt bereits in '{drafts_folder}', aber kein "
                         f"Papierkorb-Ordner erkannt — der alte Entwurf uid={uid_str} "
-                        f"wurde NICHT verschoben: {e}"
+                        f"wurde NICHT verschoben."
                     )
                 }
             except Exception as e:
@@ -932,14 +948,14 @@ def entwurf_bearbeiten(agent_id: str, uid: str, neuer_text: str, neuer_betreff: 
                     "fehler": (
                         f"Neue Fassung liegt bereits in '{drafts_folder}', aber das "
                         f"Verschieben des alten Entwurfs uid={uid_str} in den Papierkorb "
-                        f"ist fehlgeschlagen: {e}"
+                        f"ist fehlgeschlagen."
                     )
                 }
     except ValueError:
         raise
     except Exception as e:
         logger.warning("entwurf_bearbeiten_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     logger.info(
         "entwurf_bearbeitet",
@@ -1062,7 +1078,7 @@ def entwurf_erstellen(
                     mailbox.folder.set(folder)
                     msgs = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
                 except Exception as e:
-                    return {"fehler": f"Lesen der Bezugs-Mail uid={uid_str} in '{folder}' fehlgeschlagen: {e}"}
+                    return {"fehler": f"Lesen der Bezugs-Mail uid={uid_str} in '{folder}' fehlgeschlagen."}
                 if not msgs:
                     return {"fehler": f"Bezugs-Mail uid={uid_str} in '{folder}' nicht gefunden."}
                 reply_to = msgs[0]
@@ -1077,12 +1093,12 @@ def entwurf_erstellen(
                     "entwurf_erstellen_append_failed",
                     extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                 )
-                return {"fehler": f"Ablegen des Entwurfs im Ordner '{drafts_folder}' fehlgeschlagen: {e}"}
+                return {"fehler": f"Ablegen des Entwurfs im Ordner '{drafts_folder}' fehlgeschlagen."}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("entwurf_erstellen_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     logger.info(
         "entwurf_erstellt",
@@ -1313,7 +1329,11 @@ def mail_in_papierkorb(
                 try:
                     mailbox.folder.set(target_folder)
                 except Exception as e:
-                    return {"fehler": f"Ordner '{target_folder}' nicht verfügbar: {e}"}
+                    logger.warning(
+                        "mail_in_papierkorb_folder_set_failed",
+                        extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
+                    )
+                    return {"fehler": f"Ordner '{target_folder}' nicht verfügbar."}
                 try:
                     messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
                 except Exception as e:
@@ -1321,7 +1341,7 @@ def mail_in_papierkorb(
                         "mail_in_papierkorb_fetch_failed",
                         extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
                     )
-                    return {"fehler": f"Lesen der Mail uid={uid_str} fehlgeschlagen: {e}"}
+                    return {"fehler": f"Lesen der Mail uid={uid_str} fehlgeschlagen."}
                 if not messages:
                     return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
                 msg = messages[0]
@@ -1359,7 +1379,7 @@ def mail_in_papierkorb(
                     "mail_in_papierkorb_fetch_failed",
                     extra={"agent_id": agent_id, "folder": target_folder, "error": str(e)},
                 )
-                return {"fehler": f"Lesen der Mail uid={uid_str} fehlgeschlagen: {e}"}
+                return {"fehler": f"Lesen der Mail uid={uid_str} fehlgeschlagen."}
             if not messages:
                 return {"fehler": f"Mail mit uid={uid_str} in '{target_folder}' nicht gefunden."}
 
@@ -1369,15 +1389,15 @@ def mail_in_papierkorb(
                 logger.warning(
                     "mail_in_papierkorb_trash_not_found", extra={"agent_id": agent_id, "error": str(e)}
                 )
-                return {"fehler": f"Kein Papierkorb-Ordner erkannt — nichts verschoben: {e}"}
+                return {"fehler": "Kein Papierkorb-Ordner erkannt — nichts verschoben."}
             except Exception as e:
                 logger.warning("mail_in_papierkorb_move_failed", extra={"agent_id": agent_id, "error": str(e)})
-                return {"fehler": f"Verschieben fehlgeschlagen: {e}"}
+                return {"fehler": "Verschieben fehlgeschlagen."}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("mail_in_papierkorb_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     logger.info(
         "mail_moved_to_trash",
@@ -1438,7 +1458,11 @@ def entwurf_in_papierkorb(
                 try:
                     mailbox.folder.set(drafts_folder)
                 except Exception as e:
-                    return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar: {e}"}
+                    logger.warning(
+                        "entwurf_in_papierkorb_folder_set_failed",
+                        extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                    )
+                    return {"fehler": f"Entwürfe-Ordner '{drafts_folder}' nicht verfügbar."}
                 try:
                     messages = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
                 except Exception as e:
@@ -1446,7 +1470,7 @@ def entwurf_in_papierkorb(
                         "entwurf_in_papierkorb_fetch_failed",
                         extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                     )
-                    return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+                    return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen."}
                 if not messages:
                     return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
                 msg = messages[0]
@@ -1480,7 +1504,7 @@ def entwurf_in_papierkorb(
                     "entwurf_in_papierkorb_fetch_failed",
                     extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
                 )
-                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen: {e}"}
+                return {"fehler": f"Lesen des Entwurfs uid={uid_str} fehlgeschlagen."}
             if not messages:
                 return {"fehler": f"Entwurf mit uid={uid_str} nicht gefunden."}
 
@@ -1490,15 +1514,15 @@ def entwurf_in_papierkorb(
                 logger.warning(
                     "entwurf_in_papierkorb_trash_not_found", extra={"agent_id": agent_id, "error": str(e)}
                 )
-                return {"fehler": f"Kein Papierkorb-Ordner erkannt — nichts verschoben: {e}"}
+                return {"fehler": "Kein Papierkorb-Ordner erkannt — nichts verschoben."}
             except Exception as e:
                 logger.warning("entwurf_in_papierkorb_move_failed", extra={"agent_id": agent_id, "error": str(e)})
-                return {"fehler": f"Verschieben fehlgeschlagen: {e}"}
+                return {"fehler": "Verschieben fehlgeschlagen."}
     except ValueError:
         raise
     except Exception as e:
         logger.warning("entwurf_in_papierkorb_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
-        return {"fehler": f"IMAP-Verbindung fehlgeschlagen: {e}"}
+        return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
 
     logger.info(
         "draft_moved_to_trash",
@@ -1975,7 +1999,7 @@ def _run_anthropic_tool_loop(
             )
         except Exception as e:
             logger.warning("agentic_chat_llm_call_failed", extra={"agent_id": agent_id, "error": str(e)})
-            yield {"type": "text", "text": f"[Fehler beim LLM-Aufruf: {e}]"}
+            yield {"type": "text", "text": "[Fehler beim LLM-Aufruf — LLM-Dienst nicht erreichbar.]"}
             return
 
         content = list(response.content or [])
@@ -2031,7 +2055,7 @@ def _run_anthropic_tool_loop(
                     logger.warning(
                         "tool_handler_failed", extra={"tool": block.name, "error": str(e)}
                     )
-                    payload = {"fehler": f"Werkzeug '{block.name}' fehlgeschlagen: {e}"}
+                    payload = {"fehler": f"Werkzeug '{block.name}' fehlgeschlagen."}
                 if (
                     isinstance(payload, dict)
                     and payload.get("bestaetigung_erforderlich")

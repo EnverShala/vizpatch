@@ -258,27 +258,26 @@ def test_chat_send_injects_context_md_into_system_prompt(authed_client, mocker, 
     assert "Was steht in meiner context.md?" in sent_prompt
 
 
-def test_chat_send_multiline_error_encoded_as_sse_data_lines(authed_client, mocker, tmp_path, monkeypatch):
-    """Review WR-05: enthaelt str(e) Newlines (bei IMAP-/SDK-Exceptions
-    ueblich), muss der error-Frame jede Zeile als eigene `data:`-Zeile
-    kodieren (SSE-Spec) — sonst verwirft der Client die Folgezeilen stumm bzw.
-    ein `\\n\\n` im Fehlertext erzeugt Geister-Events."""
+def test_chat_send_stream_error_is_generic_no_leak(authed_client, mocker, tmp_path, monkeypatch):
+    """Review WR-06: der SSE-error-Frame darf KEINEN rohen Exception-Text
+    (Hostnamen/Server-Antworten) an den Client streamen — generische Meldung,
+    Details nur serverseitig geloggt. Der Frame bleibt als korrekt kodierte
+    `data:`-Zeile (SSE-Spec) erhalten (WR-05-Kodierung unveraendert)."""
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info", provider="anthropic")
 
     def _boom(*_args, **_kwargs):
         yield {"type": "text", "text": "Teil 1"}
-        raise RuntimeError("Zeile 1\nZeile 2\n\nZeile 4")
+        raise RuntimeError("imap.secret-host.internal Zeile 1\nZeile 2\n\nZeile 4")
 
     mocker.patch("src.main.chat_tools.run_agentic_chat", side_effect=_boom)
 
     response = authed_client.post("/chat/info/send", auth=("admin", "pw"), data={"message": "Hi"})
 
     assert response.status_code == 200
-    assert (
-        "event: error\ndata: Zeile 1\ndata: Zeile 2\ndata: \ndata: Zeile 4\n\n"
-        in response.text
-    )
+    assert "event: error\ndata: Interner Fehler bei der Verarbeitung.\n\n" in response.text
+    assert "secret-host" not in response.text
+    assert "Zeile 2" not in response.text
 
 
 def test_chat_send_broken_fernet_token_returns_400_not_500(authed_client, tmp_path, monkeypatch):
