@@ -2,10 +2,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+# Review CR-01: die Same-Origin-Middleware lehnt state-aendernde Requests ohne
+# passenden Origin/Referer ab. Ein echter Browser sendet bei Form-POSTs immer
+# Origin; der TestClient tut das nicht von allein. Deshalb bekommen die Fixtures
+# einen Default-Origin passend zur TestClient-Host (`testserver`) — genau wie ein
+# same-origin-Browser. Tests, die Cross-Origin/CSRF pruefen, ueberschreiben Origin
+# bzw. Referer pro Request explizit.
+TEST_ORIGIN = "http://testserver"
+
+
 @pytest.fixture
 def client():
     from src.main import app
-    with TestClient(app) as c:
+    with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
         yield c
 
 
@@ -14,7 +23,7 @@ def authed_client(monkeypatch):
     monkeypatch.setenv("WEBUI_USER", "admin")
     monkeypatch.setenv("WEBUI_PASSWORD", "pw")
     from src.main import app
-    with TestClient(app) as c:
+    with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
         yield c
 
 

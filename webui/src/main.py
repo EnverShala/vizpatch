@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
@@ -57,6 +57,78 @@ DEFAULT_ADDIN_BASE_URL = "https://CHANGE-ME.example"
 
 def _is_addin_embeddable_path(path: str) -> bool:
     return path.startswith("/addin/") or bool(_ADDIN_EMBED_PATH_RE.match(path))
+
+
+# --- CSRF-/Same-Origin-Enforcement (Review CR-01) ---
+# Session-lose, zu Basic-Auth (keine Cookies) passende Abwehr: fuer jede unsichere
+# Methode muss die Anfrage same-origin sein (Origin bevorzugt, sonst Referer-Host
+# == Host). Fehlen beide -> abgelehnt. Ein echter Browser sendet bei Form-POSTs
+# (auch cross-site) IMMER Origin bzw. Referer — nur ein CSRF-Angriff von einer
+# fremden Seite traegt eine fremde Origin/Referer.
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+# Add-in-Chat-Pfade (Phase 8): NUR diese duerfen zusaetzlich von den
+# konfigurierten Office/Outlook-Origins cross-origin angesprochen werden — sonst
+# funktioniert das Outlook-Add-in (Taskpane iframed das Chat-Embed und postet
+# nach /chat/{id}/send) nicht. Alle anderen state-aendernden Routen bleiben
+# strikt same-origin.
+_ADDIN_CHAT_PATH_RE = re.compile(r"^/chat/[^/]+/(send|embed)$")
+
+
+def _addin_allowed_origins() -> list[str]:
+    """Leitet die erlaubten Add-in-Origins aus ADDIN_FRAME_ANCESTORS (bzw. dem
+    Default) ab — dieselben `https://…`-Hosts, die auch in der gelockerten CSP
+    das Framing durch Outlook erlauben. `'self'` wird verworfen (Same-Origin ist
+    ohnehin generell erlaubt)."""
+    raw = os.getenv("ADDIN_FRAME_ANCESTORS", DEFAULT_ADDIN_FRAME_ANCESTORS)
+    return [tok for tok in raw.split() if tok.startswith("https://")]
+
+
+def _origin_pattern_match(origin: str, pattern: str) -> bool:
+    """Vergleicht eine Origin (`https://host`) gegen ein Frame-Ancestor-Pattern.
+    Exakter Treffer oder Wildcard-Subdomain (`https://*.office.com` deckt jede
+    echte Subdomain von office.com ab, NICHT office.com selbst)."""
+    if origin == pattern:
+        return True
+    scheme, _, host = origin.partition("://")
+    p_scheme, _, p_host = pattern.partition("://")
+    if scheme != p_scheme or not host:
+        return False
+    if p_host.startswith("*."):
+        suffix = p_host[1:]  # ".office.com"
+        return host.endswith(suffix) and len(host) > len(suffix)
+    return False
+
+
+def _origin_allowed_for_addin(origin: str) -> bool:
+    if not origin:
+        return False
+    return any(_origin_pattern_match(origin, pat) for pat in _addin_allowed_origins())
+
+
+@app.middleware("http")
+async def enforce_same_origin(request: Request, call_next):
+    """Review CR-01: CSRF-Abwehr fuer alle zustandsaendernden Requests. Same-Origin
+    ist fuer ALLE Pfade erlaubt; die konfigurierten Add-in-Origins zusaetzlich NUR
+    fuer die Add-in-Chat-Pfade (`POST /chat/{id}/send` bzw. das Embed). Alle
+    uebrigen state-aendernden Routen (`/save`, `/reset`, `/agents*`, `/agent/*`,
+    `/context/generate`, `/style/relearn`) bleiben strikt same-origin."""
+    if request.method not in _SAFE_METHODS:
+        origin = request.headers.get("origin")
+        host = request.headers.get("host")
+        referer = request.headers.get("referer")
+        ok = False
+        if origin:
+            ok = urlparse(origin).netloc == host
+        elif referer:
+            ok = urlparse(referer).netloc == host
+        # Add-in-Ausnahme (Origin-basiert): fremde Office/Outlook-Origins duerfen
+        # AUSSCHLIESSLICH den Add-in-Chat-Pfad ansprechen.
+        if not ok and origin and _ADDIN_CHAT_PATH_RE.match(request.url.path):
+            ok = _origin_allowed_for_addin(origin)
+        if not ok:
+            return PlainTextResponse("cross-origin request rejected", status_code=403)
+    return await call_next(request)
 
 
 @app.middleware("http")
