@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
+using VizpatchAddin;
 using VizpatchAddin.Core;
 
 namespace VizpatchAddin.TaskPane
@@ -20,9 +21,15 @@ namespace VizpatchAddin.TaskPane
     /// "Zuruecksetzen" erzeugt eine NEUE session_id und leert den In-Memory-
     /// Verlauf (analog webui/static/chat.js).
     ///
+    /// Mail-Kontext (D-86, Plan 08-03): ist die Checkbox "Aktuelle Mail
+    /// einbeziehen" aktiv, wird vor jedem Send ueber
+    /// <see cref="MailContextReader.TryBuildMailContext"/> der Kontext
+    /// (subject/sender/body) aus dem aktiven <c>MailItem</c> gebaut und als
+    /// <c>mail_context</c> an <see cref="ChatClient.StreamChatAsync"/> uebergeben.
+    ///
     /// Kein-Auto-Send (D-87): diese View ruft KEINE Outlook-Schreib-/Versand-APIs
-    /// auf und erzeugt keine MailItems — sie spricht ausschliesslich die Chat-API.
-    /// <c>mail_context</c> bleibt in diesem Plan null (kommt in Plan 08-03).
+    /// auf und erzeugt keine MailItems — sie liest nur die offene Mail und spricht
+    /// ausschliesslich die Chat-API.
     /// </summary>
     public class ChatView : UserControl
     {
@@ -30,6 +37,7 @@ namespace VizpatchAddin.TaskPane
         private TextBox _input;
         private Button _sendButton;
         private Button _resetButton;
+        private CheckBox _includeMailCheck;
 
         // In-Memory-Verlauf (D-58) — lebt nur mit der Sitzung.
         private readonly List<ChatTurn> _history = new List<ChatTurn>();
@@ -57,7 +65,7 @@ namespace VizpatchAddin.TaskPane
                 Font = new Font("Segoe UI", 9.5f),
             };
 
-            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 96, Padding = new Padding(6) };
+            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 124, Padding = new Padding(6) };
 
             _input = new TextBox
             {
@@ -85,7 +93,28 @@ namespace VizpatchAddin.TaskPane
             buttonBar.Controls.Add(_sendButton);
             buttonBar.Controls.Add(_resetButton);
 
+            // Optionsleiste: Mail-Kontext opt-in (Default aus). Erst wenn aktiv,
+            // liest das Add-in die offene/markierte Mail (Datensparsamkeit).
+            var optionsBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.LeftToRight,
+                Height = 26,
+                Padding = new Padding(0, 2, 0, 0),
+            };
+            _includeMailCheck = new CheckBox
+            {
+                Text = "Aktuelle Mail einbeziehen",
+                AutoSize = true,
+                Checked = false,
+                Font = new Font("Segoe UI", 9f),
+            };
+            optionsBar.Controls.Add(_includeMailCheck);
+
+            // Reihenfolge steuert das Docking: buttonBar zuunterst, optionsBar
+            // darueber, Eingabefeld fuellt den Rest.
             inputPanel.Controls.Add(_input);
+            inputPanel.Controls.Add(optionsBar);
             inputPanel.Controls.Add(buttonBar);
 
             this.Controls.Add(_log);
@@ -155,6 +184,21 @@ namespace VizpatchAddin.TaskPane
         {
             _sendButton.Enabled = false;
 
+            // Mail-Kontext (D-86) NUR bauen, wenn der Betreiber es ausdruecklich
+            // will. Der COM-Zugriff geschieht bewusst hier — noch auf dem UI-Thread
+            // vor dem await, wo das Outlook-Objektmodell erreichbar ist.
+            MailContext mailContext = null;
+            if (_includeMailCheck.Checked)
+            {
+                mailContext = TryBuildMailContextSafe();
+                if (mailContext == null)
+                {
+                    AppendSystemLine(
+                        "Hinweis: Keine Mail als Kontext gefunden "
+                        + "(keine Mail geoeffnet/markiert oder Nicht-Mail-Element).");
+                }
+            }
+
             AppendRoleLine("Sie", Color.FromArgb(0, 90, 158));
             AppendUserText(message);
             AppendRoleLine("Assistent", Color.FromArgb(34, 34, 34));
@@ -176,7 +220,7 @@ namespace VizpatchAddin.TaskPane
                         await client.StreamChatAsync(
                             message,
                             _history,
-                            /* mailContext: */ null,
+                            mailContext,
                             _sessionId,
                             (evt, data) => MarshalToUi(() =>
                             {
@@ -218,6 +262,25 @@ namespace VizpatchAddin.TaskPane
 
             AppendNewLine();
             _sendButton.Enabled = true;
+        }
+
+        /// <summary>
+        /// Baut den Mail-Kontext aus dem aktiven Outlook-Item robust — jeder
+        /// Fehler (kein Add-in-Host, COM-Problem) fuehrt zu <c>null</c> (kein
+        /// Mail-Block), nie zu einem Absturz der Chat-UI.
+        /// </summary>
+        private MailContext TryBuildMailContextSafe()
+        {
+            try
+            {
+                var addin = Globals.ThisAddIn;
+                var app = addin != null ? addin.Application : null;
+                return app != null ? MailContextReader.TryBuildMailContext(app) : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // --- UI-Thread-Marshalling + Log-Ausgabe -------------------------------
