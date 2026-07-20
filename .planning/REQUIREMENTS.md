@@ -129,12 +129,24 @@
 
 ---
 
-## v1.4 Requirements (Phase 8 — Outlook-Add-in)
+## v1.4 Requirements (Phase 8 — Outlook-Add-in, Office.js) — ⚠️ SUPERSEDED 2026-07-20
 
-- [x] **OUT-01**: Office.js-Add-in (Taskpane) mit validiertem Manifest; Sideloading in neuem Outlook + Outlook im Web dokumentiert, zentrale M365-Verteilung als Alternative beschrieben
-- [x] **OUT-02**: Taskpane lädt das Chat-Partial (CHAT-05) per HTTPS vom Kundenserver; Auth-Fluss dokumentiert
-- [x] **OUT-03**: Geöffnete Mail (Betreff, Absender, Body) wird via Office.js als Chat-Kontext übergeben
-- [x] **OUT-04**: HTTPS-Runbook-Kapitel für den Kundenserver (Reverse-Proxy vor der WebUI, Zertifikat, Ports); Add-in ist rein lesend (Kein-Auto-Send)
+> Office.js-Variante ersetzt durch die COM/VSTO-Neuplanung (Outlook classic, OUT-05…09). Grund: Office.js läuft nur auf M365/Exchange, nicht auf reinen IMAP-Konten; der Kunde nutzt Outlook classic. Code wurde gebaut, bleibt dormant.
+
+- [~] **OUT-01** *(superseded)*: Office.js-Add-in (Taskpane) mit validiertem Manifest; Sideloading in neuem Outlook + Outlook im Web dokumentiert, zentrale M365-Verteilung als Alternative beschrieben
+- [~] **OUT-02** *(superseded)*: Taskpane lädt das Chat-Partial (CHAT-05) per HTTPS vom Kundenserver; Auth-Fluss dokumentiert
+- [~] **OUT-03** *(superseded)*: Geöffnete Mail (Betreff, Absender, Body) wird via Office.js als Chat-Kontext übergeben
+- [~] **OUT-04** *(superseded)*: HTTPS-Runbook-Kapitel für den Kundenserver (Reverse-Proxy vor der WebUI, Zertifikat, Ports); Add-in ist rein lesend (Kein-Auto-Send)
+
+---
+
+## v1.7 Requirements (Phase 8 Neuplanung — COM/VSTO-Add-in für Outlook classic)
+
+- [ ] **OUT-05**: COM/VSTO-Add-in (C#/.NET Framework) für **Outlook classic** — Ribbon-Button + Custom Task Pane; Per-User-Installer (ClickOnce/MSI) + Voraussetzungen (.NET Framework/VSTO-Runtime) dokumentiert
+- [ ] **OUT-06**: Task Pane ruft die bestehende Chat-API (`POST /chat/{agent_id}/send`) über die konfigurierbare Backend-URL (LAN) auf und rendert den **SSE-Stream** inkrementell (Text + Werkzeug-Labels); Auth (Basic-Auth/Session) angebunden
+- [ ] **OUT-07**: Die agentischen Postfach-Werkzeuge (Phase 9, inkl. Bestätigungs-Gate via `session_id`) laufen über das Add-in end-to-end; resultierender Draft erscheint via IMAP-Sync in Outlooks Drafts-Ordner
+- [ ] **OUT-08**: Geöffnete/markierte Mail (Betreff/Absender/Body) wird übers Outlook-Objektmodell als `mail_context` (D-65) übergeben; defensiv bei Nicht-Mail-Items
+- [ ] **OUT-09**: Kein-Auto-Send strukturell — Add-in ruft keine Outlook-Send-/Write-APIs auf, erzeugt keine MailItems (rein lesend); Backend-URL/Zugangsdaten im Settings-Dialog konfigurierbar; LAN-Erreichbarkeit + optional HTTPS als Runbook-Kapitel
 
 ---
 

@@ -294,39 +294,36 @@ Plans:
 
 ---
 
-### Phase 8: Outlook-Add-in für den Agenten-Chat (v1.4)
+### Phase 8: Agenten-Chat als COM/VSTO-Add-in für Outlook classic (Neuplanung, v1.7)
 
-> **⏸️ STATUS 2026-07-19 — OPTIONAL / ON HOLD.** Der baubare Teil ist code-komplett (08-01…08-03 + 08-04 Task 1), aber die Phase wird **vorerst nicht abgeschlossen**. Grund: Office-Add-ins laufen technisch **nur auf Microsoft-Postfächern** (M365/Exchange/outlook.com), **nicht auf reinen IMAP-Konten** (GMX/IONOS/Gmail) — die Zielgruppe der Vizpatch-Provider. Solange nicht geklärt ist, ob der/die Kunde(n) ein M365-Postfach nutzen, bleibt das Add-in **optional**. Live-Sideload-Abnahme (08-04 Task 2) ausgesetzt. Entscheidung „umsetzen ja/nein" fällt, sobald ein konkreter Kunde ein Microsoft-Postfach mitbringt.
+> **🔄 NEUPLANUNG 2026-07-20 — TECHNOLOGIE-PIVOT.** Die ursprüngliche Phase 8 war ein **Office.js-Web-Add-in** (v1.4), das technisch **nur auf M365/Exchange** läuft, nicht auf reinen IMAP-Konten — deshalb war es „on hold". **Der Kunde nutzt Outlook classic** (Win32-Desktop). Das unterstützt **COM/VSTO-Add-ins** (nativer .NET-Code im Outlook-Prozess), die **unabhängig vom Kontotyp** — also auch auf dem IMAP-Postfach — funktionieren. Phase 8 wird daher als COM/VSTO-Add-in **neu geplant**. Alte Office.js-Planung archiviert unter `08-.../archive-officejs/`; der WebUI-seitige Office.js-Code bleibt dormant (nicht weiterentwickelt).
 
-**Goal:** Der Agenten-Chat aus Phase 7 wird als Office-Add-in (Office.js, Taskpane) in Outlook nutzbar — Desktop (Windows/Mac), neues Outlook und Outlook im Web. Das Add-in ist eine dünne Hülle: Es lädt das einbettbare Chat-Partial per HTTPS vom Kundenserver und reicht die gerade geöffnete Mail (Betreff/Absender/Body via Office.js) als Kontext in den Chat. Liefergegenstand: Manifest, Taskpane-Seite, Sideloading-/Central-Deployment-Doku und eine dokumentierte HTTPS-Vorgabe für den Kundenserver (Reverse-Proxy, z. B. Caddy mit selbstverwaltetem Zertifikat).
+**Goal:** Der **agentische** Chat (Phase 7 Chat-UI + Phase 9 Postfach-Werkzeuge) wird als **COM/VSTO-Add-in in Outlook classic** (Windows-Desktop) nutzbar — als **Thin-Client**: ein nativer Chat-Bereich (Custom Task Pane), der die bestehende Chat-API (`POST /chat/{agent_id}/send`, SSE) aufruft. Alle Werkzeuge + die Draft-Erzeugung bleiben serverseitig; das Add-in liest die offene Mail übers Outlook-Objektmodell und reicht sie als `mail_context`. Drafts entstehen serverseitig via IMAP APPEND und erscheinen durch IMAP-Sync in Outlooks Drafts-Ordner. Liefergegenstand: VSTO-Add-in-Projekt (C#/.NET Framework), Task Pane + SSE-Client, konfigurierbare Backend-URL/Zugangsdaten, Installer, Runbook-Kapitel (LAN + optional HTTPS).
 **Mode:** mvp
-**Ziel-Aufwand:** ~1.5–2 Werktage Vizionists (inkl. HTTPS-Setup-Doku)
-**Depends on:** Phase 7 (einbettbares Chat-Partial + /chat-API)
-**Motivation:** Betreiber arbeiten in Outlook, nicht im WebUI — der Chat kommt dorthin, wo die Mails gelesen werden.
+**Ziel-Aufwand:** ~2–3 Werktage Vizionists (VSTO-Neubau + SSE-Client + Installer + Doku)
+**Depends on:** Phase 7 (Chat-UI) + Phase 9 (agentische Postfach-Werkzeuge in `/chat`-API); Backend im LAN erreichbar; Windows-Rechner mit Outlook classic + .NET Framework/VSTO-Runtime
+**Motivation:** Betreiber arbeitet in Outlook classic, nicht im WebUI — der agentische Chat kommt dorthin, wo die Mails gelesen werden; COM/VSTO ist der einzige Weg, der auf dem IMAP-Postfach in Outlook classic läuft.
 
 **Success Criteria:**
 
-1. Add-in-Manifest validiert; Sideloading in Outlook (neues Outlook + OWA) funktioniert dokumentiert
-2. Taskpane lädt den Chat vom Kundenserver über HTTPS; Auth-Fluss dokumentiert (Basic-Auth/Session)
-3. Geöffnete Mail wird als Chat-Kontext übergeben (Betreff, Absender, Body) — der Chat kann Fragen zur konkreten Mail beantworten
-4. HTTPS-Setup auf dem Kundenserver als Runbook-Kapitel (Reverse-Proxy vor der WebUI, Ports, Zertifikat)
-5. Kein-Auto-Send gilt weiter: Das Add-in erzeugt/ändert keine Mails, es liest nur
+1. VSTO-Add-in installiert sich in Outlook classic (Ribbon-Button + Custom Task Pane); Installer + Voraussetzungen (.NET Framework/VSTO-Runtime) dokumentiert
+2. Task Pane ruft die bestehende Chat-API (`/chat/{agent_id}/send`) über die konfigurierbare Backend-URL im LAN auf und rendert den **SSE-Stream** inkrementell (Text + Werkzeug-Labels); Auth-Fluss (Basic-Auth/Session) dokumentiert
+3. Die agentischen Postfach-Werkzeuge (Phase 9, inkl. Bestätigungs-Gate via `session_id`) laufen über das Add-in end-to-end; ein resultierender Draft erscheint via IMAP-Sync in Outlooks Drafts-Ordner
+4. Geöffnete/markierte Mail wird übers Outlook-Objektmodell (Betreff/Absender/Body) als `mail_context` übergeben — der Chat kann Fragen zur konkreten Mail beantworten
+5. Kein-Auto-Send bleibt **strukturell**: Das Add-in ruft keine Outlook-Send-/Write-APIs auf und erzeugt keine MailItems — es liest nur
+6. Backend-URL/Zugangsdaten sind im Add-in konfigurierbar (Settings-Dialog); LAN-Erreichbarkeit + optional HTTPS als Runbook-Kapitel
 
-**Requirements mapped:** OUT-01, OUT-02, OUT-03, OUT-04
+**Requirements mapped:** OUT-05, OUT-06, OUT-07, OUT-08, OUT-09 (OUT-01…04 = superseded, Office.js)
 
-**Plans:** 4 plans (Wave 1: 08-01 | Wave 2: 08-02 | Wave 3: 08-03 | Wave 4: 08-04 - sequentiell, gemeinsame Dateien webui/src/main.py + addin_taskpane.html werden ueber die Waves erweitert) — 08-01…08-03 ausgeführt (code-komplett 2026-07-17); 08-04 Task 1 (Auto-Gate) grün, Task 2 (Live-Sideload in echtem Outlook + HTTPS) = PENDING menschlicher Checkpoint (D-71)
-
-Plans:
-- [x] 08-01-PLAN.md - Taskpane-Serving-Route (GET /addin/taskpane.html) + pfad-abhaengige CSP/frame-ancestors fuer Office-Einbettung (OUT-02) — abgeschlossen 2026-07-17, SUMMARY: `08-01-SUMMARY.md`
-- [x] 08-02-PLAN.md - XML-Manifest-Template (ADDIN_BASE_URL, ReadItem) + Office.js-Mail-Kontext via postMessage -> chat.js-Listener + Read-only-Waechter (OUT-01, OUT-03, OUT-04) — abgeschlossen 2026-07-17, SUMMARY: `08-02-SUMMARY.md`
-- [x] 08-03-PLAN.md - HTTPS-Runbook (Caddy Reverse-Proxy) + Sideloading/M365-Doku + Auth-Fluss + Deployment-Template-Env (OUT-01, OUT-02, OUT-04)
-- [ ] 08-04-PLAN.md - Menschlicher Sideload-Abnahme-Checkpoint (Manifest validieren, Live-HTTPS, Mail-Kontext, Kein-Auto-Send) - autonomous: false (OUT-01...04)
+**Plans:** noch zu erstellen (`/gsd:plan-phase 8`).
 
 **Hauptrisiken:**
 
-- HTTPS-Erreichbarkeit des Kundenservers vom Outlook-Client (LAN vs. extern) → Vorab-Preflight-Kriterium, ggf. nur-LAN-Doku
-- Office.js-Add-in-Verteilung (Manifest je Kunde, zentrale M365-Verteilung braucht Admin) → beide Wege dokumentieren
-- Iframe-/CSP-Beschränkungen der Taskpane → Chat-Partial ohne Fremd-Ressourcen bauen (ist es ohnehin, kein CDN)
+- **VSTO-Toolchain/Ziel-Framework** (VSTO braucht .NET Framework, nicht .NET 5+) → Researcher fixiert Ziel-Framework + Projekt-Setup; Build auf einer Windows-Maschine mit Office nötig
+- **SSE aus C# konsumieren** (`HttpClient` + manueller Event-Stream-Parser statt fertigem SSE-Client) → früh als Spike/kleinster Baustein absichern
+- **LAN-Erreichbarkeit + Basic-Auth über Klartext-HTTP** → HTTPS empfehlen (selbstsigniert + Client-Trust), Trade-off dokumentieren; Backend-URL konfigurierbar
+- **Bestätigungs-Gate (Papierkorb-Werkzeuge, Phase 9)** muss über den nativen Client korrekt greifen (`session_id`-Durchreichung) → im Abnahme-Checkpoint explizit prüfen
+- **Live-Abnahme braucht echtes Outlook classic** → menschlicher Checkpoint (autonomous: false)
 
 ---
 
