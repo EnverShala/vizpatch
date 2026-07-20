@@ -64,29 +64,48 @@ if [ "${#CS_FILES[@]}" -eq 0 ]; then
   exit 2
 fi
 
-# --- 2. Kommentar-Stripper: entfernt //-, ///-Zeilen- und /* */-Blockkommentare,
-#        behält aber die Zeilennummer als Präfix, damit Fundstellen exakt sind. ---
+# --- 2. Lexer-basierter Kommentar-/String-Stripper (WR-02): entfernt //-, ///-
+#        Zeilen- und /* */-Blockkommentare UND den Inhalt von String-/Char-
+#        Literalen, bevor gescannt wird. Damit koennen weder ein String-internes
+#        "https://…" den Rest der Zeile vor dem Scan verstecken, noch ein in einem
+#        String-Literal stehendes "mail.Send()" den Waechter selbst invalidieren.
+#        Die Zeilennummer bleibt als Präfix erhalten, damit Fundstellen exakt sind. ---
 strip_comments() {
   awk '
     BEGIN { inblock = 0 }
     {
       line = $0
-      if (inblock) {
-        idx = index(line, "*/")
-        if (idx > 0) { line = substr(line, idx + 2); inblock = 0 }
-        else { print NR ":"; next }
+      out = ""
+      n = length(line)
+      i = 1
+      instr = 0    # innerhalb "..."
+      inchar = 0   # innerhalb '\''...'\''
+      while (i <= n) {
+        c = substr(line, i, 1)
+        two = substr(line, i, 2)
+        if (inblock) {
+          if (two == "*/") { inblock = 0; i += 2; continue }
+          i++; continue
+        }
+        if (instr) {
+          if (c == "\\") { i += 2; continue }   # Escape im String ueberspringen
+          if (c == "\"") { instr = 0 }
+          i++; continue                          # String-Inhalt verwerfen
+        }
+        if (inchar) {
+          if (c == "\\") { i += 2; continue }
+          if (c == "'\''") { inchar = 0 }
+          i++; continue                          # Char-Inhalt verwerfen
+        }
+        # Normaler Code
+        if (two == "/*") { inblock = 1; i += 2; continue }
+        if (two == "//") { break }               # Rest der Zeile ist Kommentar
+        if (c == "\"") { instr = 1; i++; continue }
+        if (c == "'\''") { inchar = 1; i++; continue }
+        out = out c
+        i++
       }
-      # Inline-Blockkommentare /* ... */ entfernen
-      while ((s = index(line, "/*")) > 0) {
-        rest = substr(line, s + 2)
-        e = index(rest, "*/")
-        if (e > 0) { line = substr(line, 1, s - 1) substr(rest, e + 2) }
-        else { line = substr(line, 1, s - 1); inblock = 1; break }
-      }
-      # Zeilenkommentar // ... abschneiden (Code steht immer VOR dem //)
-      c = index(line, "//")
-      if (c > 0) line = substr(line, 1, c - 1)
-      print NR ":" line
+      print NR ":" out
     }
   ' "$1"
 }
@@ -102,14 +121,25 @@ CODE_STREAM="$(
 )"
 
 # --- 3. Muster ---
+# Optionaler Whitespace vor '(' (WR-04): C# erlaubt 'mail.Send ()' oder einen
+# Zeilenumbruch vor der Klammer. [[:space:]]* faengt das (zeilenintern) mit.
 # Eindeutig verbotene Outlook-Schreib-/Sende-/Compose-Aufrufe.
-UNAMBIGUOUS='\.Send\(|\.SaveAs\(|\.Reply\(|\.ReplyAll\(|\.Forward\(|\.CreateItem\(|new[[:space:]]+Outlook\.Application|CreateObject[[:space:]]*\('
+#   Application-Erzeugung alias-unabhaengig (WR-04): matcht 'new Outlook.Application('
+#   ebenso wie 'new OL.Application(' (beliebiger using-Alias) oder unqualifiziert
+#   'new Application('. 'new ApplicationException(' bleibt unberuehrt (nach
+#   'Application' folgt kein '(').
+# Die '...[[:space:]]*$'-Alternativen fangen zusaetzlich den Fall, dass das '('
+# erst in der naechsten Zeile steht (Zeilenumbruch vor der Klammer, WR-04): ein
+# Compose-Verb am Zeilenende ist hier immer verdaechtig — kein rein lesender
+# Zugriff endet exakt auf '.Send'/'.SaveAs'/'.Reply'/'.Forward'/'.CreateItem'
+# ('.SendAsync'/'.Sender' enden anders und matchen daher nicht).
+UNAMBIGUOUS='\.Send[[:space:]]*(\(|$)|\.SaveAs[[:space:]]*(\(|$)|\.Reply[[:space:]]*(\(|$)|\.ReplyAll[[:space:]]*(\(|$)|\.Forward[[:space:]]*(\(|$)|\.CreateItem[[:space:]]*(\(|$)|new[[:space:]]+([A-Za-z_][A-Za-z0-9_]*\.)*Application[[:space:]]*\(|CreateObject[[:space:]]*\('
 # Mehrdeutige Verben (nur verboten, wenn NICHT auf einem erlaubten Empfänger).
-AMBIGUOUS='\.Save\(|\.Move\(|\.Delete\('
+AMBIGUOUS='\.Save[[:space:]]*\(|\.Move[[:space:]]*\(|\.Delete[[:space:]]*\('
 # Allowlist: legitime Nicht-Outlook-Empfänger dieser Verben.
 #   SecureSettingsStore.Save  -> lokale DPAPI-Settings-Persistenz (kein Outlook)
 #   Directory.Delete/Move, File.Delete/Move -> Datei-System in den Tests
-SAFE_RECEIVERS='SecureSettingsStore\.Save\(|Directory\.(Delete|Move)\(|File\.(Delete|Move)\('
+SAFE_RECEIVERS='SecureSettingsStore\.Save[[:space:]]*\(|Directory\.(Delete|Move)[[:space:]]*\(|File\.(Delete|Move)[[:space:]]*\('
 
 FINDINGS=""
 
@@ -118,7 +148,23 @@ if [ -n "$unamb" ]; then
   FINDINGS+="$unamb"$'\n'
 fi
 
-amb="$(printf '%s\n' "$CODE_STREAM" | grep -E "$AMBIGUOUS" | grep -Ev "$SAFE_RECEIVERS" || true)"
+# Mehrdeutige Verben (WR-03): NICHT die ganze Zeile per Allowlist verwerfen —
+# sonst versteckt 'SecureSettingsStore.Save(s); mail.Delete();' das mail.Delete().
+# Stattdessen die erlaubten Empfänger-Aufrufe aus dem Code entfernen (nur fuer den
+# Test) und pruefen, ob DANACH noch ein mehrdeutiges Verb uebrig bleibt. Gemeldet
+# wird die urspruengliche Zeile.
+# Nur Zeilen, die ueberhaupt ein mehrdeutiges Verb enthalten, durchlaufen den
+# (teureren) Strip-Recheck — haelt den Wächter schnell (kein sed pro Quellzeile).
+amb_candidates="$(printf '%s\n' "$CODE_STREAM" | grep -E "$AMBIGUOUS" || true)"
+amb=""
+if [ -n "$amb_candidates" ]; then
+  amb="$(printf '%s\n' "$amb_candidates" | while IFS= read -r ln; do
+    stripped="$(printf '%s' "$ln" | sed -E "s/($SAFE_RECEIVERS)//g")"
+    if printf '%s' "$stripped" | grep -Eq "$AMBIGUOUS"; then
+      printf '%s\n' "$ln"
+    fi
+  done)"
+fi
 if [ -n "$amb" ]; then
   FINDINGS+="$amb"$'\n'
 fi
