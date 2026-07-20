@@ -39,6 +39,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google"}
 
+# Review IN-04: serverseitige Obergrenze fuer context.md/style.md ueber /save.
+MAX_CONFIG_MD_BYTES = 64 * 1024
+
 # Datenschutz-Zustimmung (D-68): Stand der Bestimmungen, mit denen ein
 # gegebenes PRIVACY_CONSENT_ACCEPTED=true korrespondiert (siehe _datenschutz.html).
 PRIVACY_CONSENT_VERSION = "2026-07-17"
@@ -675,6 +678,18 @@ def save(
     user: str = Depends(auth.require_auth),
 ):
     is_htmx = request.headers.get("HX-Request") == "true"
+
+    # Review IN-04: context_md/style_md serverseitig auf 64 KB begrenzen
+    # (Disk-DoS + spaeter voller Inhalt in jedem Prompt). VOR jeglichem Write
+    # dieses Requests geprueft -> kein Teil-Schreiben ueber dem Limit.
+    for field_label, field_val in (("context.md", context_md), ("style.md", style_md)):
+        if field_val is not None and len(field_val.encode("utf-8")) > MAX_CONFIG_MD_BYTES:
+            return _save_response(
+                request, is_htmx, False,
+                f"{field_label} ist zu groß (max. 64 KB) — nicht gespeichert.",
+                "error",
+            )
+
     existing = config_io.read_env_raw()
 
     # --- Datenschutz-Zustimmung (D-68): gated NUR den echten Agent-Konfig-Save
