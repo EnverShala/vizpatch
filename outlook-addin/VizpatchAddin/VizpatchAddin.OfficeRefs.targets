@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Office-/VSTO-Assembly-Referenzen des Add-ins, bewusst aus der .csproj
+  ausgelagert.
+
+  WARUM diese Datei existiert:
+  - Die Outlook-Objektmodell-Referenz (Primary Interop Assembly, PIA) und die
+    VSTO-Runtime-Assemblies MUESSEN referenziert werden, damit ein VSTO-Add-in
+    ueberhaupt kompiliert.
+  - Sie duerfen laut RESEARCH.md "Package Legitimacy Audit" (T-08-SC) NIEMALS
+    ueber NuGet (das unsupported "Microsoft.Office.Interop.Outlook"-Repackaging)
+    gezogen werden — sondern ausschliesslich ueber die von Visual Studio
+    ausgelieferte PIA mit EmbedInteropTypes=true.
+  - Diese Referenzen zeigen daher per HintPath auf die VS-eigene PIA
+    (Shared\Visual Studio Tools for Office\PIA) bzw. auf die VSTO-Runtime-
+    Reference-Assemblies der VS-Installation — KEIN PackageReference, KEIN NuGet.
+
+  Struktur gespiegelt aus der echten VS-VSTO-Outlook-Projektvorlage
+  (ProjectTemplates\CSharp\Office\Addins\...\VSTOOutlook15AddInV4): Kontrakt-DLLs
+  (Microsoft.Office.Tools[.Common|.Outlook]) + konkrete *.v4.0.Utilities-
+  Implementierungen + eingebettete PIA (Outlook/Office) + stdole. Der
+  useofficeinterop-Zweig der Vorlage (strong-name-PIA statt COMReference) ist
+  hier fest gewaehlt, damit KEIN registriertes TypeLib / installiertes Outlook
+  fuer den Build noetig ist.
+
+  Pfad-Basis: Visual-Studio-2026-Installation (VS 18 Community). Auf anderen
+  Build-Maschinen ggf. VsPiaDir/VstoRefDir anpassen (siehe README.addin-dev.md).
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup>
+    <VsPiaDir Condition="'$(VsPiaDir)' == ''">C:\Program Files (x86)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\</VsPiaDir>
+    <VstoRefDir Condition="'$(VstoRefDir)' == ''">C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\ReferenceAssemblies\v4.0\</VstoRefDir>
+  </PropertyGroup>
+
+  <!-- VSTO-Kontrakt-DLLs (oeffentliche Interfaces: CustomTaskPane, Factory,
+       CustomTaskPaneCollection, Ribbon-/FormRegion-Basen) — nicht kopiert. -->
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Tools.v4.0.Framework">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.v4.0.Framework.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Tools.Applications.Runtime">
+      <HintPath>$(VstoRefDir)Microsoft.VisualStudio.Tools.Applications.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Common">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Outlook">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.Outlook.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Konkrete VSTO-Implementierungen (OutlookAddInBase/AddInBase etc.) — kopiert. -->
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Tools.Common.v4.0.Utilities">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.Common.v4.0.Utilities.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Outlook.v4.0.Utilities">
+      <HintPath>$(VstoRefDir)Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Outlook-Objektmodell (PIA) + Office-Kern, eingebettete Interop-Typen —
+       VS-eigene PIA, KEIN NuGet (T-08-SC). -->
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Interop.Outlook">
+      <HintPath>$(VsPiaDir)Microsoft.Office.Interop.Outlook.dll</HintPath>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="office">
+      <HintPath>$(VsPiaDir)Office.dll</HintPath>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <Private>False</Private>
+    </Reference>
+    <!-- Echte stdole-PIA (7.0.3300.0) aus dem GAC — normal referenziert (nicht
+         eingebettet), wie in der VS-Vorlage. -->
+    <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <HintPath>C:\Windows\assembly\GAC\stdole\7.0.3300.0__b03f5f7f11d50a3a\stdole.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

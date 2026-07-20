@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ribbon-XML des Vizpatch-Add-ins (RESEARCH.md Pattern 1). Ein Toggle-Button
+  im Explorer-Ribbon (TabMail) blendet die "Vizpatch-Chat"-Task-Pane ein/aus.
+  Die Callback-Namen verweisen auf ChatRibbon.cs.
+-->
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="OnRibbonLoad">
+  <ribbon>
+    <tabs>
+      <tab idMso="TabMail" >
+        <group id="vizpatchGroup" label="Vizpatch">
+          <toggleButton id="vizpatchChatToggle"
+                        label="Vizpatch-Chat"
+                        size="large"
+                        imageMso="ConversationsGroup"
+                        onAction="OnToggleChat"
+                        getPressed="GetChatPressed"
+                        screentip="Vizpatch-Chat ein-/ausblenden"
+                        supertip="Blendet den Vizpatch-Chat-Bereich (Custom Task Pane) rechts im Outlook-Fenster ein oder aus." />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

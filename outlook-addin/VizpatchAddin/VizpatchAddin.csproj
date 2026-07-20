@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  VSTO-Outlook-classic-Add-in (Phase 8, D-82/D-83). LEGACY-Projektformat
+  (KEIN SDK-style) — VSTO/COM-Add-ins laufen ausschliesslich auf .NET
+  Framework 4.8 und benoetigen die VSTO-Build-Targets.
+
+  Baubar NUR mit der vollen MSBuild.exe aus Visual Studio (Office/SharePoint-
+  Workload), NICHT mit `dotnet build`. Siehe README.addin-dev.md.
+
+  Alle Office-/VSTO-Assembly-Referenzen liegen bewusst in
+  VizpatchAddin.OfficeRefs.targets (VS-eigene PIA via HintPath, KEIN NuGet —
+  Threat T-08-SC). Diese .csproj enthaelt daher selbst keinerlei Interop-
+  Referenz.
+-->
+<Project ToolsVersion="Current" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{CB562516-5216-4762-B565-2174A1F8C16B}</ProjectGuid>
+    <!-- VSTO-Outlook-Add-in (Office-Projekt-Flavor + C#). -->
+    <ProjectTypeGuids>{BAA0C2D2-18E2-41B9-852F-F413020CAA33};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <OutputType>Library</OutputType>
+    <RootNamespace>VizpatchAddin</RootNamespace>
+    <AssemblyName>VizpatchAddin</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <!-- Add-in-Host = Outlook: steuert Manifest-/Registrierungs-Generierung der VSTO-Targets. -->
+    <OfficeApplication>Outlook</OfficeApplication>
+    <!-- VSTO/ClickOnce verlangt signierte Manifeste. Signiert wird mit einem
+         selbstsignierten Entwickler-Zertifikat (VizpatchAddin_TemporaryKey.pfx,
+         Passwort "vizpatch") — analog dem von Visual Studio automatisch
+         erzeugten *_TemporaryKey.pfx. KEIN echtes Herausgeber-Zertifikat: fuer
+         den Vor-Ort-Erstinstall wird der Herausgeber einmalig bestaetigt
+         (RESEARCH.md Supply-Chain-Hinweis). Fuer eine Produktivverteilung ggf.
+         durch ein echtes Code-Signing-Zertifikat ersetzen. -->
+    <SignManifests>true</SignManifests>
+    <ManifestKeyFile>VizpatchAddin_TemporaryKey.pfx</ManifestKeyFile>
+    <ManifestCertificateThumbprint>2A40027065241B8D6F4CA9CB7869696CB4913DB1</ManifestCertificateThumbprint>
+    <LangVersion>latest</LangVersion>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <NoStandardLibraries>false</NoStandardLibraries>
+    <LoadBehavior>3</LoadBehavior>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <BootstrapperComponentsLocation>HomeSite</BootstrapperComponentsLocation>
+    <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
+    <!-- VSTO40 = VSTO-4.0-Programmiermodell; useofficeinterop waehlt in den
+         VSTO-Targets die strong-name-PIA-Referenz (statt COMReference/tlbimp),
+         sodass fuer den Build KEIN registriertes Outlook-TypeLib noetig ist. -->
+    <DefineConstants>VSTO40;useofficeinterop</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>$(DefineConstants);TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <!-- BCL-/Framework-Referenzen. -->
+  <ItemGroup>
+    <Reference Include="Accessibility" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <!-- Office-/VSTO-Referenzen (VS-eigene PIA + VSTO-Runtime, KEIN NuGet). -->
+  <Import Project="VizpatchAddin.OfficeRefs.targets" />
+
+  <!-- Laufzeit-Abhaengigkeiten der Core-Bibliothek (damit sie ins Ausgabe-
+       verzeichnis kopiert werden). NICHT der Outlook-Interop — der kommt
+       ausschliesslich aus der VS-PIA (siehe OfficeRefs.targets). -->
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VizpatchAddin.Core\VizpatchAddin.Core.csproj">
+      <Project>{59AE8368-D688-4DEB-A949-0D78AEA69FFB}</Project>
+      <Name>VizpatchAddin.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="ThisAddIn.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <None Include="ThisAddIn.Designer.xml">
+      <DependentUpon>ThisAddIn.cs</DependentUpon>
+    </None>
+    <Compile Include="ThisAddIn.Designer.cs">
+      <DependentUpon>ThisAddIn.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Ribbon\ChatRibbon.cs" />
+    <Compile Include="TaskPane\ChatTaskPaneHost.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <!-- Ribbon-XML wird zur Laufzeit als eingebettete Ressource geladen (GetCustomUI). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Ribbon\ChatRibbon.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="app.config" Condition="Exists('app.config')" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <!-- VSTO-Build-Targets. $(VSToolsPath) zeigt beim Aufruf ueber die volle
+       MSBuild.exe der VS-Installation standardmaessig nicht immer auf den
+       richtigen Ort; deshalb defensiv auf den VS-eigenen MSBuild-Zweig setzen,
+       falls die Datei am Default-Pfad fehlt. -->
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">18.0</VisualStudioVersion>
+    <VSToolsPath Condition="!Exists('$(VSToolsPath)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')">$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <Import Project="$(VSToolsPath)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="'$(VSToolsPath)' != ''" />
+
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{BAA0C2D2-18E2-41B9-852F-F413020CAA33}">
+        <ProjectProperties HostName="Outlook" HostPackage="{29A7B9D7-A7F1-4328-8EF0-6B2D1A56B2C1}" OfficeVersion="15.0" VstxVersion="4.0" ApplicationType="Outlook" Language="cs" TemplatesPath="" DebugInfoExeName="#Software\Microsoft\Office\16.0\Outlook\InstallRoot\Path#OUTLOOK.EXE" AddItemTemplatesGuid="{147FB6A7-F239-4523-AE65-B6A4E49B361F}" />
+        <Host Name="Outlook" GeneratedCodeNamespace="VizpatchAddin" IconIndex="0">
+          <HostItem Name="ThisAddIn" Code="ThisAddIn.cs" CanonicalName="AddIn" Blueprint="ThisAddIn.Designer.xml" GeneratedCode="ThisAddIn.Designer.cs" IconIndex="1" />
+        </Host>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+</Project>
