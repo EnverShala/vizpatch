@@ -575,8 +575,10 @@ def _parse_mail_context(raw: str) -> dict | None:
 def chat_send(
     request: Request,
     agent_id: str,
-    message: str = Form(...),
-    history: str = Form(""),
+    # Review WR-03: Groessen-Limits gegen Kosten-/Speicher-DoS (analog
+    # firma_input/style_note). message zusaetzlich in chat_tools hart gekappt.
+    message: str = Form(..., max_length=8000),
+    history: str = Form("", max_length=200_000),
     mail_context: str = Form(""),
     session_id: str = Form(""),
     user: str = Depends(auth.require_auth),

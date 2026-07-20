@@ -48,6 +48,12 @@ _IMAP_TIMEOUT_SECONDS = 20.0
 
 # Body-Kappung je Treffer (Kosten-/Prompt-Sicherheitsnetz, analog style_extract.MAX_BODY_CHARS).
 MAX_TOOL_RESULT_BODY_CHARS = 1500
+
+# Review WR-03: serverseitige Hart-Kappung der aktuellen Chat-Nachricht (analog
+# zum bestehenden mail_context.body-Truncate). Deckelt zusaetzlich zum
+# Form(max_length=8000)-Limit in main.py auch alle nicht ueber /send kommenden
+# Aufrufer (Kosten-/Speicher-DoS).
+MAX_MESSAGE_CHARS = 8000
 DEFAULT_SEARCH_LIMIT = 10
 MAX_SEARCH_LIMIT = 50
 
@@ -1808,6 +1814,11 @@ def _build_initial_messages(
     vorherigen Chat-Runden enthalten (Browser-Verlauf, kein Server-State) —
     diese werden hier erneut anonymisiert (dieselbe Instanz wie für Tool-
     Ergebnisse/Text-Blöcke dieser Runde, damit der Wert denselben Tag trägt)."""
+    # Review WR-03: message hart kappen (analog mail_context.body-Truncate) —
+    # VOR Anonymisierung/Zusammensetzen, deckelt Prompt-Groesse/Kosten auch fuer
+    # Aufrufer ohne das Form(max_length)-Limit aus main.py.
+    message = (message or "")[:MAX_MESSAGE_CHARS]
+
     messages: list[dict] = []
     for turn in history or []:
         role = turn.get("role")
