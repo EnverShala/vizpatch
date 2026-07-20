@@ -173,11 +173,35 @@
     }
   }
 
+  /* Auto-Grow (Design-Feinschliff 2026-07-19): das Textfeld waechst beim Tippen
+   * bis zur CSS-max-height mit (danach scrollt es intern). resize ist im CSS
+   * deaktiviert — diese Logik ersetzt den manuellen Anfasser. */
+  function autoGrow() {
+    input.style.height = 'auto';
+    input.style.height = input.scrollHeight + 'px';
+  }
+
+  input.addEventListener('input', autoGrow);
+
+  /* Enter = senden, Shift+Enter = Zeilenumbruch (uebliches Chat-Verhalten;
+   * der Platzhaltertext im Feld kuendigt es an). */
+  input.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submitCurrentInput();
+    }
+  });
+
+  function submitCurrentInput() {
+    const message = input.value.trim();
+    if (!message || sendBtn.disabled) return;
+    input.value = '';
+    input.style.height = ''; /* Auto-Grow-Hoehe zuruecksetzen */
+    sendMessage(message);
+  }
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
-    const message = input.value.trim();
-    if (!message) return;
-    input.value = '';
-    sendMessage(message);
+    submitCurrentInput();
   });
 })();

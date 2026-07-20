@@ -1,10 +1,10 @@
 <div id="chat-root" data-agent-id="{{ agent_id }}">
+  <div id="chat-toolbar">
+    <button type="button" id="chat-reset-btn" title="Verlauf leeren und neue Sitzung starten">&#x21bb; Verlauf zurücksetzen</button>
+  </div>
   <div id="chat-log" aria-live="polite"></div>
   <form id="chat-form">
-    <textarea id="chat-input" rows="2" placeholder="Nachricht eingeben…" required></textarea>
-    <div id="chat-controls">
-      <button type="submit" id="chat-send-btn">Senden</button>
-      <button type="button" id="chat-reset-btn">Verlauf zurücksetzen</button>
-    </div>
+    <textarea id="chat-input" rows="3" placeholder="Nachricht eingeben… (Enter = senden, Shift+Enter = neue Zeile)" required></textarea>
+    <button type="submit" id="chat-send-btn" title="Nachricht senden">Senden</button>
   </form>
 </div>

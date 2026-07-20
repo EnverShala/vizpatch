@@ -120,6 +120,9 @@ def test_index_and_embed_share_identical_chat_fragment_markup(authed_client, moc
 
     shared_fragment = (
         '<div id="chat-root" data-agent-id="info">\n'
+        '  <div id="chat-toolbar">\n'
+        '    <button type="button" id="chat-reset-btn" title="Verlauf leeren und neue Sitzung starten">&#x21bb; Verlauf zurücksetzen</button>\n'
+        '  </div>\n'
         '  <div id="chat-log" aria-live="polite"></div>\n'
         '  <form id="chat-form">'
     )
