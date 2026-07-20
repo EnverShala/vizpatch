@@ -30,7 +30,7 @@ import re
 import time
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from email.utils import format_datetime, make_msgid
+from email.utils import format_datetime, formataddr, getaddresses, make_msgid
 from typing import Callable, Iterator
 
 from anthropic import Anthropic
@@ -815,24 +815,45 @@ def entwurf_lesen(
     }
 
 
+def _sanitize_header_value(value: str) -> str:
+    """WR-04: CRLF-/Header-Injection strukturell ausschliessen — CR/LF zu Space,
+    trimmen. Fuer Subject/From (Einzelwert-Header) vor dem Setzen. To/Subject/From
+    stammen aus Mail-Inhalt bzw. LLM-Tool-Argumenten und sind untrusted."""
+    return (value or "").replace("\r", " ").replace("\n", " ").strip()
+
+
+def _sanitize_address_list(value: str) -> str:
+    """WR-04: Empfaenger normalisieren. Erst CRLF entfernen, dann per
+    getaddresses/formataddr in kanonische Adressen zerlegen und neu
+    zusammensetzen (strukturell kein Header-Splitting, auch bei mehreren
+    komma-separierten Empfaengern). Faellt auf den bereinigten Rohwert zurueck,
+    wenn keine Adresse erkannt wird."""
+    cleaned = _sanitize_header_value(value)
+    if not cleaned:
+        return ""
+    formatted = [formataddr((name, addr)) for name, addr in getaddresses([cleaned]) if addr]
+    return ", ".join(formatted) if formatted else cleaned
+
+
 def _build_edited_draft(original, neuer_text: str, betreff: str) -> bytes:
     """RFC-5322-Rebuild analog `agent/src/draft.py::build_reply_draft` (D-75): From/To
     aus dem Original-Entwurf übernommen, NEUES Message-ID, aber In-Reply-To/
     References UNVERÄNDERT aus dem Original (Threading bleibt erhalten, T-09-11).
     Reine Bytes für IMAP APPEND — kein Sende-Pfad, kein SMTP (D-77)."""
     msg = EmailMessage()
-    msg["From"] = original.from_ or ""
-    msg["To"] = _mail_recipients(original)
-    msg["Subject"] = betreff
+    # WR-04: From/To/Subject vor dem Setzen normalisieren (Header-Splitting).
+    msg["From"] = _sanitize_address_list(original.from_ or "")
+    msg["To"] = _sanitize_address_list(_mail_recipients(original))
+    msg["Subject"] = _sanitize_header_value(betreff)
     msg["Date"] = format_datetime(datetime.now(timezone.utc))
     sender_domain = (original.from_ or "").split("@")[-1] if "@" in (original.from_ or "") else "localhost"
     msg["Message-ID"] = make_msgid(domain=sender_domain)
 
     threading_headers = _threading_headers(original)
     if threading_headers["in_reply_to"]:
-        msg["In-Reply-To"] = threading_headers["in_reply_to"]
+        msg["In-Reply-To"] = _sanitize_header_value(threading_headers["in_reply_to"])
     if threading_headers["references"]:
-        msg["References"] = threading_headers["references"]
+        msg["References"] = _sanitize_header_value(threading_headers["references"])
 
     msg.set_content(neuer_text, subtype="plain", charset="utf-8")
     return bytes(msg)
@@ -951,7 +972,8 @@ def _build_new_draft(text: str, betreff: str, an: str = "", reply_to=None, von: 
 
     msg = EmailMessage()
     if (von or "").strip():
-        msg["From"] = von.strip()
+        # WR-04: Absender normalisieren (Header-Splitting).
+        msg["From"] = _sanitize_address_list(von.strip())
 
     if reply_to is not None:
         orig_from = (getattr(reply_to, "from_", "") or "").strip()
@@ -974,9 +996,16 @@ def _build_new_draft(text: str, betreff: str, an: str = "", reply_to=None, von: 
         except Exception:
             pass
         if orig_mid:
+            # WR-04: Message-IDs stammen aus Mail-Inhalt -> CRLF-normalisieren.
+            orig_mid = _sanitize_header_value(orig_mid)
+            orig_refs = _sanitize_header_value(orig_refs)
             msg["In-Reply-To"] = orig_mid
             msg["References"] = f"{orig_refs} {orig_mid}".strip() if orig_refs else orig_mid
 
+    # WR-04: To/Subject vor dem Setzen normalisieren (Header-Splitting). Die
+    # zurueckgegebenen effektiven Werte spiegeln die bereinigte Fassung.
+    to_addr = _sanitize_address_list(to_addr)
+    subject = _sanitize_header_value(subject)
     if to_addr:
         msg["To"] = to_addr
     msg["Subject"] = subject
