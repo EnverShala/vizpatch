@@ -37,6 +37,7 @@ namespace VizpatchAddin.TaskPane
         private TextBox _input;
         private Button _sendButton;
         private Button _resetButton;
+        private Button _settingsButton;
         private CheckBox _includeMailCheck;
 
         // In-Memory-Verlauf (D-58) — lebt nur mit der Sitzung.
@@ -90,8 +91,12 @@ namespace VizpatchAddin.TaskPane
             _resetButton = new Button { Text = "Zuruecksetzen", AutoSize = true };
             _resetButton.Click += ResetButton_Click;
 
+            _settingsButton = new Button { Text = "Einstellungen", AutoSize = true };
+            _settingsButton.Click += SettingsButton_Click;
+
             buttonBar.Controls.Add(_sendButton);
             buttonBar.Controls.Add(_resetButton);
+            buttonBar.Controls.Add(_settingsButton);
 
             // Optionsleiste: Mail-Kontext opt-in (Default aus). Erst wenn aktiv,
             // liest das Add-in die offene/markierte Mail (Datensparsamkeit).
@@ -166,6 +171,22 @@ namespace VizpatchAddin.TaskPane
             _sessionId = SessionIdGenerator.NewSessionId();
             _log.Clear();
             ShowConfigHintIfNeeded();
+        }
+
+        private void SettingsButton_Click(object sender, EventArgs e)
+        {
+            // Settings-Dialog (D-85): persistiert via SecureSettingsStore (DPAPI).
+            // Nach dem Speichern die Settings neu laden, damit der naechste Turn
+            // die aktualisierte Konfiguration verwendet.
+            using (var dialog = new SettingsDialog())
+            {
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    _settings = LoadSettingsSafe();
+                    AppendSystemLine("Einstellungen gespeichert.");
+                    ShowConfigHintIfNeeded();
+                }
+            }
         }
 
         private void TriggerSend()

@@ -115,6 +115,9 @@
       <DependentUpon>ThisAddIn.Designer.xml</DependentUpon>
     </Compile>
     <Compile Include="MailContextReader.cs" />
+    <Compile Include="SettingsDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Ribbon\ChatRibbon.cs" />
     <Compile Include="TaskPane\ChatTaskPaneHost.cs">
       <SubType>UserControl</SubType>
