@@ -113,11 +113,16 @@ namespace VizpatchAddin.Core
                 using (var reader = new StreamReader(stream, Encoding.UTF8))
                 {
                     var parser = new SseLineParser();
-                    while (!reader.EndOfStream)
+                    // Terminierung AUSSCHLIESSLICH ueber den Rueckgabewert von
+                    // ReadLineAsync() (== null am Stream-Ende). KEIN reader.EndOfStream:
+                    // dessen Getter liest bei Bedarf synchron das naechste Byte aus dem
+                    // Netzwerk-Stream vor und wuerde auf dem (bewusst nicht abgekoppelten)
+                    // UI-Thread blockieren, bis das Backend das naechste Byte sendet.
+                    // So bleibt der gesamte Lesepfad durchgehend asynchron.
+                    string line;
+                    while ((line = await reader.ReadLineAsync()) != null)
                     {
                         ct.ThrowIfCancellationRequested();
-                        string line = await reader.ReadLineAsync();
-                        if (line == null) break;
 
                         var frame = parser.Feed(line);
                         if (frame != null)
@@ -144,8 +149,10 @@ namespace VizpatchAddin.Core
             MailContext mailContext,
             string sessionId)
         {
+            // AgentId ist frei konfigurierbar -> als Pfadsegment enkodieren, damit
+            // Leerzeichen/Sonderzeichen (/, #, ?) keine falsche URL erzeugen.
             string url = _settings.BackendUrl.TrimEnd('/')
-                + "/chat/" + _settings.AgentId + "/send";
+                + "/chat/" + Uri.EscapeDataString(_settings.AgentId ?? "") + "/send";
 
             var fields = new List<KeyValuePair<string, string>>
             {

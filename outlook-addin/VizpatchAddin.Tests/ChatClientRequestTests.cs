@@ -36,6 +36,25 @@ namespace VizpatchAddin.Tests
         }
 
         [Fact]
+        public void BuildRequest_EncodesAgentIdInPath()
+        {
+            var settings = SampleSettings();
+            // Sonderzeichen in der frei konfigurierbaren Agent-ID muessen
+            // enkodiert werden (IN-01) — sonst entsteht eine falsche URL.
+            settings.AgentId = "team/eins raum#1";
+            using (var client = new ChatClient(settings, new NoopHandler()))
+            {
+                var req = client.BuildRequest("hallo", null, null, "sess-1");
+                // AbsoluteUri behaelt die Escapes bei (ToString() dekodiert %20 zu
+                // Anzeigezwecken); entscheidend: '/' -> %2F und '#' -> %23, sodass
+                // die Agent-ID den Pfad nicht aufbricht.
+                Assert.Equal(
+                    "https://vizpatch.lan:8000/chat/team%2Feins%20raum%231/send",
+                    req.RequestUri.AbsoluteUri);
+            }
+        }
+
+        [Fact]
         public void BuildRequest_SetsOriginHeaderToAddinOriginToken()
         {
             using (var client = new ChatClient(SampleSettings(), new NoopHandler()))
