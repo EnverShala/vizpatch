@@ -290,6 +290,7 @@ def agents_status(request: Request, user: str = Depends(auth.require_auth)):
 
 
 @app.post("/agents", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("30/minute")
 def create_agent(
     request: Request,
     name_or_email: str = Form(...),
@@ -302,7 +303,9 @@ def create_agent(
 
 
 @app.post("/agents/{agent_id}/rename", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("30/minute")
 def rename_agent_endpoint(
+    request: Request,
     agent_id: str,
     new_name: str = Form(...),
     user: str = Depends(auth.require_auth),
@@ -316,7 +319,9 @@ def rename_agent_endpoint(
 
 
 @app.post("/agents/{agent_id}/delete", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("30/minute")
 def delete_agent_endpoint(
+    request: Request,
     agent_id: str,
     confirmation: str = Form(""),
     user: str = Depends(auth.require_auth),
@@ -338,6 +343,7 @@ def delete_agent_endpoint(
     response_class=HTMLResponse,
     dependencies=[Depends(auth.require_setup)],
 )
+@limiter.limit("30/minute")
 def agent_flag_toggle(
     request: Request,
     agent_id: str,
@@ -366,6 +372,7 @@ def agent_flag_toggle(
     response_class=HTMLResponse,
     dependencies=[Depends(auth.require_setup)],
 )
+@limiter.limit("30/minute")
 def agent_action(request: Request, action: str, user: str = Depends(auth.require_auth)):
     """Globale Admin-Funktion (Phase-4-Umfang): steuert den EINEN agent-Service via Docker."""
     if action not in ("start", "stop"):
@@ -428,7 +435,7 @@ STY05_HINT = (
 
 
 @app.post("/style/relearn", dependencies=[Depends(auth.require_setup)])
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 def style_relearn(
     request: Request,
     agent_id: str = Form(...),
@@ -852,7 +859,9 @@ def save(
 
 
 @app.post("/reset", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("3/minute")
 def reset_all_endpoint(
+    request: Request,
     confirmation: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
