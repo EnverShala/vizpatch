@@ -14,9 +14,11 @@
 
 {% if not auth_enabled %}
 <div class="banner-warning">
-  &#9888; <strong>Kein Login-Schutz aktiv.</strong>
-  Diese WebUI hat Root-Zugriff auf den Host (Docker-Socket) — bitte nur im vertrauenswürdigen LAN erreichbar machen
-  oder unten unter "WebUI-Login" (optional) einen Benutzer + Passwort setzen.
+  &#9888; <strong>Kein Login-Schutz aktiv — bitte zuerst Zugangsdaten setzen.</strong>
+  Diese WebUI hat Root-Zugriff auf den Host (Docker-Socket). Solange kein WebUI-Passwort gesetzt ist, sind
+  gefährliche Aktionen (Agenten anlegen/löschen, Start/Stop, Zero-Reset, Chat) gesperrt.
+  Bitte unten unter „WebUI-Login" einen Benutzer + Passwort setzen (oder — nur für isolierte Setups —
+  <code>VIZPATCH_ALLOW_NO_AUTH=true</code> setzen). Erreichbar bitte ausschließlich im vertrauenswürdigen LAN.
 </div>
 {% endif %}
 

@@ -281,7 +281,7 @@ def agents_status(request: Request, user: str = Depends(auth.require_auth)):
     )
 
 
-@app.post("/agents")
+@app.post("/agents", dependencies=[Depends(auth.require_setup)])
 def create_agent(
     request: Request,
     name_or_email: str = Form(...),
@@ -293,7 +293,7 @@ def create_agent(
     return RedirectResponse(f"/?agent_id={slug}", status_code=303)
 
 
-@app.post("/agents/{agent_id}/rename")
+@app.post("/agents/{agent_id}/rename", dependencies=[Depends(auth.require_setup)])
 def rename_agent_endpoint(
     agent_id: str,
     new_name: str = Form(...),
@@ -307,7 +307,7 @@ def rename_agent_endpoint(
     return RedirectResponse(f"/?agent_id={new_slug}", status_code=303)
 
 
-@app.post("/agents/{agent_id}/delete")
+@app.post("/agents/{agent_id}/delete", dependencies=[Depends(auth.require_setup)])
 def delete_agent_endpoint(
     agent_id: str,
     confirmation: str = Form(""),
@@ -325,7 +325,11 @@ def delete_agent_endpoint(
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/agents/{agent_id}/{action}", response_class=HTMLResponse)
+@app.post(
+    "/agents/{agent_id}/{action}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(auth.require_setup)],
+)
 def agent_flag_toggle(
     request: Request,
     agent_id: str,
@@ -349,7 +353,11 @@ def agent_flag_toggle(
     )
 
 
-@app.post("/agent/{action}", response_class=HTMLResponse)
+@app.post(
+    "/agent/{action}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(auth.require_setup)],
+)
 def agent_action(request: Request, action: str, user: str = Depends(auth.require_auth)):
     """Globale Admin-Funktion (Phase-4-Umfang): steuert den EINEN agent-Service via Docker."""
     if action not in ("start", "stop"):
@@ -366,7 +374,7 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
     )
 
 
-@app.post("/context/generate")
+@app.post("/context/generate", dependencies=[Depends(auth.require_setup)])
 @limiter.limit("10/minute")
 def context_generate(
     request: Request,
@@ -411,7 +419,7 @@ STY05_HINT = (
 )
 
 
-@app.post("/style/relearn")
+@app.post("/style/relearn", dependencies=[Depends(auth.require_setup)])
 @limiter.limit("5/minute")
 def style_relearn(
     request: Request,
@@ -543,7 +551,7 @@ def _parse_mail_context(raw: str) -> dict | None:
     }
 
 
-@app.post("/chat/{agent_id}/send")
+@app.post("/chat/{agent_id}/send", dependencies=[Depends(auth.require_setup)])
 @limiter.limit(
     # Review IN-02: Default aus chat.CHAT_RATE_LIMIT_PER_MIN_DEFAULT statt
     # hier erneut hartkodiert — kein Konstanten-Drift zwischen den Modulen.
@@ -835,7 +843,7 @@ def save(
     return _save_response(request, is_htmx, True, "Gespeichert", "saved")
 
 
-@app.post("/reset")
+@app.post("/reset", dependencies=[Depends(auth.require_setup)])
 def reset_all_endpoint(
     confirmation: str = Form(""),
     user: str = Depends(auth.require_auth),

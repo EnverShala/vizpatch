@@ -77,6 +77,30 @@ def is_auth_enabled() -> bool:
     return bool(user and password)
 
 
+def _allow_no_auth() -> bool:
+    return (os.getenv("VIZPATCH_ALLOW_NO_AUTH") or "").strip().lower() == "true"
+
+
+# WR-07: Meldung bewusst als Modul-Konstante — Tests pruefen darauf, ohne den
+# Text zu duplizieren.
+NO_AUTH_SETUP_HINT = (
+    "Bitte zuerst WebUI-Benutzer + Passwort setzen (oder VIZPATCH_ALLOW_NO_AUTH=true)."
+)
+
+
+def require_setup() -> None:
+    """WR-07 (Setup-Zwang, Docker-Socket = Host-Root): solange KEIN WebUI-Passwort
+    gesetzt ist UND VIZPATCH_ALLOW_NO_AUTH != true, werden gefaehrliche
+    state-aendernde Routen (/reset, /agents*, /agent/*, /context/generate,
+    /style/relearn, /chat/*/send) blockiert. `/save` haengt bewusst NICHT an dieser
+    Dependency, damit der Zero-Config-Bootstrap (Passwort erstmalig setzen) nie
+    bricht. Sobald ein Passwort gesetzt ist, greift die normale Basic-Auth;
+    `VIZPATCH_ALLOW_NO_AUTH=true` ist der explizite Bypass fuer isolierte Setups."""
+    if is_auth_enabled() or _allow_no_auth():
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NO_AUTH_SETUP_HINT)
+
+
 def hash_password(plaintext: str) -> str:
     return bcrypt.hashpw(plaintext.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
 
