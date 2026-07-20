@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    COM-freie Kernbibliothek des Outlook-classic-Add-ins (Phase 8, D-82/D-83).
+    Ziel-Framework net48: VSTO/COM-Add-ins laufen ausschliesslich auf .NET
+    Framework (nicht .NET 5+/Core) — diese Bibliothek teilt bewusst dasselbe
+    Ziel, damit sie vom COM-Huellprojekt (Plan 08-02) referenziert werden kann.
+    Sie enthaelt KEINE Outlook-Interop-Referenz und ist damit ohne installiertes
+    Outlook per xUnit testbar.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>VizpatchAddin.Core</RootNamespace>
+    <AssemblyName>VizpatchAddin.Core</AssemblyName>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Approved laut RESEARCH.md Package Legitimacy Audit (nuget.org, ~8,5 Mrd. Downloads). -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- DPAPI (System.Security.Cryptography.ProtectedData): Windows-native
+         Per-User-Verschluesselung des Basic-Auth-Passworts. Auf net48 ueber das
+         BCL-kompatible NuGet-Paket eingebunden (Klasse ProtectedData). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
