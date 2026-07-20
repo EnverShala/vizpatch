@@ -145,7 +145,7 @@
 - [ ] **OUT-05**: COM/VSTO-Add-in (C#/.NET Framework) für **Outlook classic** — Ribbon-Button + Custom Task Pane; Per-User-Installer (ClickOnce/MSI) + Voraussetzungen (.NET Framework/VSTO-Runtime) dokumentiert
 - [x] **OUT-06**: Task Pane ruft die bestehende Chat-API (`POST /chat/{agent_id}/send`) über die konfigurierbare Backend-URL (LAN) auf und rendert den **SSE-Stream** inkrementell (Text + Werkzeug-Labels); Auth (Basic-Auth/Session) angebunden
 - [x] **OUT-07**: Die agentischen Postfach-Werkzeuge (Phase 9, inkl. Bestätigungs-Gate via `session_id`) laufen über das Add-in end-to-end; resultierender Draft erscheint via IMAP-Sync in Outlooks Drafts-Ordner
-- [ ] **OUT-08**: Geöffnete/markierte Mail (Betreff/Absender/Body) wird übers Outlook-Objektmodell als `mail_context` (D-65) übergeben; defensiv bei Nicht-Mail-Items
+- [x] **OUT-08**: Geöffnete/markierte Mail (Betreff/Absender/Body) wird übers Outlook-Objektmodell als `mail_context` (D-65) übergeben; defensiv bei Nicht-Mail-Items
 - [x] **OUT-09**: Kein-Auto-Send strukturell — Add-in ruft keine Outlook-Send-/Write-APIs auf, erzeugt keine MailItems (rein lesend); Backend-URL/Zugangsdaten im Settings-Dialog konfigurierbar; LAN-Erreichbarkeit + optional HTTPS als Runbook-Kapitel
 
 ---
