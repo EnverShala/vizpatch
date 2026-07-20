@@ -61,9 +61,11 @@ dafuer ist die volle `MSBuild.exe` aus der Visual-Studio-Installation noetig.
 2. Im Menueband erscheint unter **Start (Mail)** die Gruppe **Vizpatch** mit dem
    Toggle-Button **Vizpatch-Chat**.
 3. Toggle klicken -> die Task Pane **Vizpatch-Chat** erscheint rechts; erneut -> weg.
-4. Backend-Zugang provisorisch hinterlegen (Settings-Dialog folgt in Plan 08-03):
-   `%AppData%\Vizpatch\OutlookAddin\settings.json` (Passwort wird DPAPI-verschluesselt
-   abgelegt — beim ersten Speichern ueber den kuenftigen Dialog).
+4. Backend-Zugang ueber den **"Einstellungen"-Button** in der Task Pane hinterlegen
+   (Backend-URL, Agent-ID, Zugangsdaten, Origin-Token, Zertifikats-Optionen). Die Werte
+   landen in `%AppData%\Vizpatch\OutlookAddin\settings.json`; das Passwort wird dabei
+   DPAPI-verschluesselt abgelegt (nie im Klartext). Manuelles Editieren der Datei ist
+   nicht noetig.
 
 ## Architektur-Leitplanken
 
