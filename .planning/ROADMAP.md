@@ -315,7 +315,12 @@ Plans:
 
 **Requirements mapped:** OUT-05, OUT-06, OUT-07, OUT-08, OUT-09 (OUT-01…04 = superseded, Office.js)
 
-**Plans:** noch zu erstellen (`/gsd:plan-phase 8`).
+**Plans:** 4 Plans (4 Waves)
+
+- [ ] 08-01-PLAN.md — Core-Bibliothek (COM-frei): SSE-Zeilenparser + ChatClient (Form-POST + Origin/Basic-Auth-CSRF-Workaround) + DTOs + DPAPI-Settings + xUnit-Tests
+- [ ] 08-02-PLAN.md — VSTO-Hülle: Ribbon-Toggle + CustomTaskPane + ChatView (inkrementelles SSE-Rendering, session_id) + thinnest-slice-Live-Checkpoint
+- [ ] 08-03-PLAN.md — Mail-Kontext übers Outlook-Objektmodell (defensiv) + Settings-Dialog (DPAPI, Cert-Trade-off)
+- [ ] 08-04-PLAN.md — ClickOnce-/LAN-/HTTPS-Runbook + struktureller Kein-Auto-Send-Quellwächter + Live-Abnahme (Werkzeuge/Gate/Draft)
 
 **Hauptrisiken:**
 
