@@ -502,7 +502,7 @@ Plans:
 **Goal:** Der agentische WebUI-Chat kann Datei-Anhänge an Entwürfe hängen. Der Betreiber lädt ad-hoc eine Datei hoch (alle Dateitypen, Variante C), der Agent ruft das neue Werkzeug `entwurf_mit_anhang` auf, das den Entwurf als MIME-multipart baut und per IMAP APPEND im Drafts-Ordner ablegt — **Kein Senden**, Anhang nur am Entwurf. Nur WebUI (Add-in-Upload zurückgestellt).
 **Requirements**: ATT-01…05
 **Depends on:** Phase 9 (agentischer Chat + `chat_tools.py`)
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -515,7 +515,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 12-03-PLAN.md — Chat-UI-Upload-Widget + Metadaten-Anhang + Live-Abnahme (ATT-03)
+- [x] 12-03-PLAN.md — Chat-UI-Upload-Widget + Metadaten-Anhang + Live-Abnahme (ATT-03)
 
 ---
 

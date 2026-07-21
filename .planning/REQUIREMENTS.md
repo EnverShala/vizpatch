@@ -247,4 +247,4 @@
 | OUT-01, OUT-04 | Phase 8 (v1.4) | ✅ Done (08-02 Code + 08-03 Doku) — Manifest (OUT-01-Code) + Kein-Auto-Send-Wächter (OUT-04-Code) aus 08-02; Sideloading-/M365-Doku (OUT-01) + HTTPS-Runbook (OUT-04) aus 08-03. Live-Sideload-Abnahme (D-71) bleibt separater Checkpoint in 08-04, siehe 08-02-SUMMARY.md + 08-03-SUMMARY.md |
 | OUT-02 | Phase 8 (v1.4) | ✅ Done (08-01 Code + 08-03 Doku) — 08-01 liefert den Taskpane-Serving-Teil, Auth-Fluss-Doku aus 08-03, siehe 08-01-SUMMARY.md + 08-03-SUMMARY.md |
 | OUT-03 | Phase 8 (v1.4) | ✅ Done (08-02) — Office.js → postMessage → chat.js liefert Mail-Kontext, siehe 08-02-SUMMARY.md |
-| ATT-01 … ATT-05 | Phase 12 (v1.8) | Pending |
+| ATT-01 … ATT-05 | Phase 12 (v1.8) | ✅ Done (2026-07-21) — 12-01/12-02/12-03 ausgeführt, End-to-End live abgenommen (Betreiber), siehe 12-03-SUMMARY.md |
