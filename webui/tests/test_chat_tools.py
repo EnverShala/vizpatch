@@ -2541,3 +2541,84 @@ def test_papierkorb_ziel_stays_raw_without_anonymizer(mocker, tmp_path, monkeypa
 
     assert result["ziel"]["absender"] == "kunde@example.com"
     assert result["ziel"]["betreff"] == "Rechnung"
+
+
+# --- Phase 12 (ATT-02): Pending-Upload-Store ---
+
+def test_register_pending_upload_then_consume_returns_entry(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "anhang.pdf"
+    upload_path.write_bytes(b"%PDF-1.4 fake")
+
+    chat_tools.register_pending_upload(
+        "info", "sess-1", upload_path, "anhang.pdf", 13, "application/pdf"
+    )
+
+    entry = chat_tools._consume_pending_upload("info", "sess-1")
+    assert entry is not None
+    assert entry["path"] == upload_path
+    assert entry["filename"] == "anhang.pdf"
+    assert entry["size"] == 13
+    assert entry["mimetype"] == "application/pdf"
+
+
+def test_consume_pending_upload_twice_returns_none_second_time(tmp_path, monkeypatch):
+    """Einmal konsumierbar (pop) — der zweite Aufruf mit derselben session_id
+    liefert None, weil der Eintrag bereits entfernt wurde."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "anhang.pdf"
+    chat_tools.register_pending_upload(
+        "info", "sess-2", upload_path, "anhang.pdf", 5, "application/pdf"
+    )
+
+    first = chat_tools._consume_pending_upload("info", "sess-2")
+    assert first is not None
+
+    second = chat_tools._consume_pending_upload("info", "sess-2")
+    assert second is None
+
+
+def test_consume_pending_upload_no_entry_returns_none(tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    assert chat_tools._consume_pending_upload("info", "unknown-session") is None
+
+
+def test_register_pending_upload_empty_session_id_is_noop(tmp_path, monkeypatch):
+    """Ein leeres session_id registriert nichts (konsistent mit
+    `_authorize_session`) — kein Eintrag, der spaeter unter einer leeren
+    Sitzungs-Identitaet konsumierbar waere."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    before = dict(chat_tools._pending_uploads)
+    chat_tools.register_pending_upload(
+        "info", "", tmp_path / "anhang.pdf", "anhang.pdf", 5, "application/pdf"
+    )
+    assert chat_tools._pending_uploads == before
+    assert chat_tools._consume_pending_upload("info", "") is None
+
+
+def test_pending_upload_expired_ttl_returns_none(tmp_path, monkeypatch):
+    """Ein Eintrag aelter als `_PENDING_UPLOAD_TTL_SECONDS` gilt als nicht
+    vorhanden (D-95-Hygiene), analog `test_session_authorization_expires_after_ttl`."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "alt.pdf"
+    chat_tools.register_pending_upload(
+        "info", "sess-ttl", upload_path, "alt.pdf", 5, "application/pdf"
+    )
+    key = chat_tools._session_key("info", "sess-ttl")
+    chat_tools._pending_uploads[key]["registered_at"] = (
+        chat_tools._pending_uploads[key]["registered_at"]
+        - chat_tools._PENDING_UPLOAD_TTL_SECONDS
+        - 1
+    )
+
+    assert chat_tools._consume_pending_upload("info", "sess-ttl") is None

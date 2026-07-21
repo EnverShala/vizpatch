@@ -57,3 +57,15 @@ def reset_chat_tools_session_authorization():
     chat_tools._authorized_move_sessions.clear()
     yield
     chat_tools._authorized_move_sessions.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_pending_uploads():
+    """Phase 12 (ATT-02): der Pending-Upload-Store (`chat_tools._pending_uploads`)
+    ist analog zu `_authorized_move_sessions` ein reiner In-Memory-Prozess-
+    Zustand — ohne Reset könnten sich Tests über den module-level `dict` hinweg
+    beeinflussen."""
+    import src.chat_tools as chat_tools
+    chat_tools._pending_uploads.clear()
+    yield
+    chat_tools._pending_uploads.clear()

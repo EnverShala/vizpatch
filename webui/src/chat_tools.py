@@ -31,6 +31,7 @@ import time
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, formataddr, getaddresses, make_msgid
+from pathlib import Path
 from typing import Callable, Iterator
 
 from anthropic import Anthropic
@@ -1164,6 +1165,61 @@ _authorized_move_sessions: dict[str, float] = {}
 _SESSION_AUTHORIZATION_TTL_SECONDS = 12 * 3600
 
 _SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb"}
+
+
+# --- Phase 12 (ATT-02, D-92/95/96): Pending-Upload-Store ---
+#
+# Der Betreiber laedt eine Datei ad-hoc im Chat hoch (POST /chat/{agent_id}/
+# upload, Plan 12-02); der Endpoint schreibt sie serverseitig in eine tmp-Datei
+# und registriert hier NUR eine Referenz (Pfad + Metadaten) unter dem exakt
+# gleichen HMAC-Sitzungsschluessel (`_session_key`) wie die Move-Autorisierung
+# oben. Das LLM sieht NIE den Pfad/Inhalt -- nur Name/Groesse/Typ als DATEN-
+# Block (`_build_initial_messages`, Task 3) bzw. im Tool-Result von
+# `entwurf_mit_anhang` (Task 2). Beim Tool-Aufruf injiziert die Tool-Schleife
+# `session_id` serverseitig (`_SESSION_SCOPED_TOOLS`) -- das LLM kann diese
+# Referenz nicht selbst konstruieren/faelschen (T-12-01).
+#
+# Assumption A2 (12-RESEARCH.md): Prozess-lokales Dict, TTL-basiert -- ueber-
+# lebt KEINEN WebUI-Prozess-Neustart zwischen Upload und Chat-Turn. Akzeptabel
+# fuer den Single-Process-Phase-4-Service, exakt wie bereits bei
+# `_authorized_move_sessions` akzeptiert.
+_pending_uploads: dict[str, dict] = {}
+
+_PENDING_UPLOAD_TTL_SECONDS = 3600
+
+
+def register_pending_upload(
+    agent_id: str, session_id: str, path: Path, filename: str, size: int, mimetype: str
+) -> None:
+    """Registriert eine hochgeladene Datei fuer GENAU diese (agent_id,
+    session_id)-Chat-Sitzung. Ein leeres `session_id` -> sofortiges no-op
+    (konsistent mit `_authorize_session`/`_session_authorized` -- eine Sitzung
+    ohne Identitaet kann nichts registrieren/konsumieren)."""
+    if not session_id:
+        return
+    key = _session_key(agent_id, session_id)
+    _pending_uploads[key] = {
+        "path": path,
+        "filename": filename,
+        "size": size,
+        "mimetype": mimetype,
+        "registered_at": time.time(),
+    }
+
+
+def _consume_pending_upload(agent_id: str, session_id: str) -> dict | None:
+    """Konsumiert (pop -- EINMAL abrufbar, danach ist der Eintrag weg) den
+    Pending-Upload dieser Sitzung. Kein Eintrag -> None. Ein Eintrag aelter als
+    `_PENDING_UPLOAD_TTL_SECONDS` gilt ebenfalls als nicht vorhanden -> None
+    (D-95-Hygiene: verhindert, dass eine laengst verwaiste tmp-Datei-Referenz
+    Wochen spaeter noch einen Entwurf-Anhang bauen wuerde)."""
+    key = _session_key(agent_id, session_id)
+    entry = _pending_uploads.pop(key, None)
+    if entry is None:
+        return None
+    if time.time() - entry["registered_at"] > _PENDING_UPLOAD_TTL_SECONDS:
+        return None
+    return entry
 
 
 def _confirmation_secret() -> bytes:
