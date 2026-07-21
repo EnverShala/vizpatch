@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-07-21T11:38:50.547Z"
+last_updated: "2026-07-21T11:48:27.049Z"
 progress:
   total_phases: 12
   completed_phases: 7
   total_plans: 42
-  completed_plans: 40
+  completed_plans: 41
   percent: 58
 ---
 
@@ -20,7 +20,7 @@ progress:
 
 ## Current Phase
 
-**Phase 12 — Datei-Upload-Anhänge an Entwürfe (v1.8) 🔧 In Ausführung — Plan 12-01/3 abgeschlossen.** Zehntes Chat-Werkzeug `entwurf_mit_anhang` in `webui/src/chat_tools.py`: Pending-Upload-Store (`register_pending_upload`/`_consume_pending_upload`, Prozess-lokal, TTL 3600s, HMAC-Sitzungsschlüssel wie `_authorized_move_sessions`), `_build_new_draft_mit_anhang` (RFC-5322-MIME-multipart + Base64-Anhang via `EmailMessage.add_attachment()`, Threading-Header bei Antwort-Entwürfen erhalten), IMAP-APPEND in den Drafts-Ordner (kein Senden). Registriert in `TOOL_HANDLERS`/`TOOL_SCHEMAS`/`_SESSION_SCOPED_TOOLS`, NICHT in `_ANON_AWARE_TOOLS` (kein Text-Body zum Anonymisieren). Beide hartkodierten Guard-Allowlists synchronisiert — AST-/Schema-Kein-Auto-Send-Wächter (CTOOL-05) bleiben grün. Metadaten-DATEN-Block (`attachment_meta`) in `_build_initial_messages`, durchgereicht bis `run_agentic_chat` — trägt nur Dateiname/Größe/Typ, nie den Inhalt (ATT-05/D-96). tmp-Cleanup im `finally` deckt Erfolg/IMAP-Fehler/Größenüberschreitung ab. **ATT-02/ATT-04/ATT-05 code-seitig erfüllt.** 480 webui Tests grün / 3 skipped (keine Regression). **Noch offen: Plan 12-02 (Upload-Endpoint `/chat/{agent_id}/upload`) und Plan 12-03 (Chat-UI-Upload-Widget) — dieser Plan liefert nur die serverseitige Kern-Fähigkeit, kein Browser-Pfad zum Auslösen.**
+**Phase 12 — Datei-Upload-Anhänge an Entwürfe (v1.8) 🔧 In Ausführung — Plan 12-02/3 abgeschlossen.** Zehntes Chat-Werkzeug `entwurf_mit_anhang` in `webui/src/chat_tools.py` (Plan 12-01): Pending-Upload-Store (`register_pending_upload`/`_consume_pending_upload`, Prozess-lokal, TTL 3600s, HMAC-Sitzungsschlüssel wie `_authorized_move_sessions`), `_build_new_draft_mit_anhang` (RFC-5322-MIME-multipart + Base64-Anhang via `EmailMessage.add_attachment()`, Threading-Header bei Antwort-Entwürfen erhalten), IMAP-APPEND in den Drafts-Ordner (kein Senden). Registriert in `TOOL_HANDLERS`/`TOOL_SCHEMAS`/`_SESSION_SCOPED_TOOLS`, NICHT in `_ANON_AWARE_TOOLS` (kein Text-Body zum Anonymisieren). Beide hartkodierten Guard-Allowlists synchronisiert — AST-/Schema-Kein-Auto-Send-Wächter (CTOOL-05) bleiben grün. Metadaten-DATEN-Block (`attachment_meta`) in `_build_initial_messages`, durchgereicht bis `run_agentic_chat` — trägt nur Dateiname/Größe/Typ, nie den Inhalt (ATT-05/D-96). tmp-Cleanup im `finally` deckt Erfolg/IMAP-Fehler/Größenüberschreitung ab. **Plan 12-02:** neuer authentifizierter, streamender Upload-Endpoint `POST /chat/{agent_id}/upload` (`webui/src/main.py`) — server-generierte tempfile, 1-MB-Chunk-Read (`file.file.read`, kein Full-Memory-Load), Live-Byte-Zähler gegen `MAX_ATTACHMENT_MB` (Default 15, `agent/docker-compose.yml`-Compose-Env), 413 + tmp-Cleanup bei Überschreitung, `os.path.basename`-Sanitizing gegen Path-Traversal. `chat_send` reicht das neue Formfeld `attachment_meta` (defensiv geparst, analog `_parse_mail_context`) als DATEN an `run_agentic_chat` durch. **ATT-01…05 code-seitig vollständig erfüllt.** 489 webui Tests grün / 3 skipped (keine Regression). **Noch offen: Plan 12-03 (Chat-UI-Upload-Widget) — dieser Plan liefert Endpoint + Durchreichung, aber noch kein Browser-Pfad (File-Input/fetch) zum Auslösen.**
 
 **Vorherige Phase — Phase 10 — Reversible Pseudonymisierung vor LLM (v1.6, Variante A) ✅ Abgeschlossen.** Alle 4 Plans ausgeführt: 10-01 (reversible `Anonymizer`-Engine in `agent/src/pii.py`, byte-identische `webui/src/pii.py`, 6 getypte Regex IBAN/KARTE/EMAIL/URL/DATUM/TELEFON + RAM-Mapping + `warn_residual_placeholders`-Nachlauf, angebunden an classify+generate), 10-02 (WebUI `style_extract.py` anonymisiert-vor-Truncate + `chat.py` `deanonymize_stream`-Streaming-Puffer + anonymizer-fähiges `build_chat_prompt`), 10-03 (agentische Tool-Schleife `chat_tools.py`: geteilte `Anonymizer`-Instanz pro Turn, De-Anon von Text UND Tool-Argumenten vor Handler-Aufruf, Flag-aus-Fallback), 10-04 (DSGVO/AVV-Doku ehrlich auf Variante A: strukturierte PII maskiert, Namen/Orte weiter ans LLM → pseudonym ≠ anonym ErwG 26, AVV bleibt nötig). **ANON-01…05 vollständig.** **10-04 Task 2 (rechtliche DSGVO/AVV-Abnahme) am 2026-07-20 vom Betreiber/DSB (info@vizionists.com) freigegeben**
 
@@ -47,7 +47,7 @@ progress:
 | 7 — Agenten-Chat im WebUI (v1.3) | ✅ Code-komplett — alle 4 Plans (07-01…07-04) abgeschlossen; nur **Browser-Klick-Abnahme des Chats offen** (menschlicher Check) | 2026-07-17 | 2026-07-17 |
 | 8 — Outlook-Add-in für den Agenten-Chat (COM/VSTO, v1.4) | ✅ Code-komplett — alle 4 Plans ausgeführt: 08-01 (COM-freie Core: SSE-Parser + ChatClient + DPAPI-Settings) + 08-02 (VSTO-Hülle: Ribbon + CustomTaskPane + SSE-ChatView) + 08-03 (Mail-Kontext übers Objektmodell + Settings-Dialog) + 08-04 (Kein-Auto-Send-Quellwächter `scripts/check-addin-no-autosend.sh` grün + ClickOnce/LAN/HTTPS-Runbook `deployment/README.addin-outlook.md`); MSBuild grün, 23/23 Tests grün; **alle 5 SC am 2026-07-21 live in echtem Outlook classic abgenommen** (SSE-Chat, Mail-Kontext, Werkzeuge/Gate/Draft via IMAP-Sync, Settings-Persistenz) | 2026-07-17 | 2026-07-21 |
 | 9 — Agentischer Chat mit Postfach-Werkzeugen (v1.5) | ✅ Code-komplett — alle 5 Plans ausgeführt: 09-01 (Walking Skeleton) + 09-02 (Entwürfe-Werkzeuge, CTOOL-02) + 09-03 (`entwurf_bearbeiten` + Papierkorb-Erkennung, CTOOL-03) + 09-04 (Bestätigungs-Token-Gate, CTOOL-04) + 09-05 (AST-Kein-Auto-Send-Wächter + Datenschutz/AVV-Angleichung, CTOOL-05) | 2026-07-18 | 2026-07-18 |
-| 12 — Datei-Upload-Anhänge an Entwürfe (v1.8) | 🔧 In Ausführung — Plan 12-01/3 abgeschlossen: `entwurf_mit_anhang` + Pending-Upload-Store + Metadaten-DATEN-Block (ATT-02/04/05), 480 webui Tests grün. Offen: 12-02 (Upload-Endpoint), 12-03 (Chat-UI-Widget) | 2026-07-21 | — |
+| 12 — Datei-Upload-Anhänge an Entwürfe (v1.8) | 🔧 In Ausführung — Plan 12-02/3 abgeschlossen: `entwurf_mit_anhang` + Pending-Upload-Store (12-01), Upload-Endpoint `/chat/{agent_id}/upload` + `MAX_ATTACHMENT_MB`-Compose-Env + `attachment_meta`-Durchreichung (12-02, ATT-01/03), 489 webui Tests grün. Offen: 12-03 (Chat-UI-Widget) | 2026-07-21 | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 

@@ -189,9 +189,9 @@
 
 **Scope-Entscheidung 2026-07-21 (Variante C, Betreiber):** Ad-hoc-Upload, alle Dateitypen, **nur WebUI**. Der Anhang kommt direkt vom vertrauenswürdigen Nutzer (Stationsleitung) per Upload — nicht aus Mail-Inhalt → Prompt-Injection-Risiko der Quelle entfällt weitgehend. **Kein-Auto-Send bleibt:** Anhang landet nur am Entwurf. Add-in-Upload zurückgestellt.
 
-- [ ] **ATT-01**: Ad-hoc-Upload-Endpoint in der WebUI (Multipart, nur authentifizierte Session) — alle Dateitypen, Streaming-Upload in temporäre Datei (kein Full-Memory-Load); konfigurierbares Größenlimit `MAX_ATTACHMENT_MB` (Default 15), Ablehnung bei Überschreitung mit klarer Meldung
+- [x] **ATT-01**: Ad-hoc-Upload-Endpoint in der WebUI (Multipart, nur authentifizierte Session) — alle Dateitypen, Streaming-Upload in temporäre Datei (kein Full-Memory-Load); konfigurierbares Größenlimit `MAX_ATTACHMENT_MB` (Default 15), Ablehnung bei Überschreitung mit klarer Meldung
 - [x] **ATT-02**: Neues Chat-Werkzeug `entwurf_mit_anhang` in `webui/src/chat_tools.py` — baut Entwurf als RFC-5322 MIME-multipart mit Base64-Anhang-Part (analog `_build_new_draft`/`_build_edited_draft`), legt ihn per IMAP APPEND im Drafts-Ordner ab; Threading-Header (`In-Reply-To`/`References`) erhalten; kein Senden
-- [ ] **ATT-03**: Chat-UI-Upload (HTMX) — Nutzer lädt Datei im Chat hoch; die hochgeladene Datei wird dem laufenden Chat-Turn als referenzierbarer Anhang verfügbar gemacht, sodass der Agent `entwurf_mit_anhang` aufrufen kann
+- [x] **ATT-03**: Chat-UI-Upload (HTMX) — Nutzer lädt Datei im Chat hoch; die hochgeladene Datei wird dem laufenden Chat-Turn als referenzierbarer Anhang verfügbar gemacht, sodass der Agent `entwurf_mit_anhang` aufrufen kann
 - [x] **ATT-04**: Kein-Auto-Send strukturell erhalten — kein SMTP/Send-Werkzeug; der bestehende AST-Kein-Auto-Send-Wächter (CTOOL-05) deckt `entwurf_mit_anhang` mit ab (grün); temporäre Upload-Dateien werden nach dem APPEND im `finally`-Block gelöscht
 - [x] **ATT-05**: Sicherheitsgrenze — der Datei-Rohinhalt geht NICHT ans LLM (Agent sieht nur Dateiname/Metadaten im Tool-Result); PII-/Anonymisierungs-Pfade unberührt
 
