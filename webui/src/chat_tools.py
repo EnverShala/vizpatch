@@ -304,6 +304,35 @@ def _uid_still_in_folder(mailbox, uid: str, folder: str) -> bool:
     return bool(remaining)
 
 
+def _uids_of_message_id_in_folder(mailbox, message_id: str, folder: str) -> list[str]:
+    """Gibt die AKTUELLEN UIDs zurück, unter denen `message_id` in `folder` liegt
+    (reiner Lese-Fetch, keine Nebenwirkung). Robuster als `_uid_still_in_folder`
+    gegen Server, die UIDs instabil halten oder beim COPY eines Entwurfs eine
+    eigenständige Kopie mit NEUER uid im Quell-Ordner belassen (Gmail-Drafts,
+    Live-Bug #gmail-draft-move): eine uid-only-Prüfung findet die ursprüngliche
+    uid dort nicht mehr und meldet fälschlich "sauber verschoben", während das
+    Original unter einer neu vergebenen uid stehenbleibt. Keine Message-ID /
+    Fetch-Fehler -> leere Liste (fail-closed: ohne Fund kein Bereinigungsziel)."""
+    if not message_id:
+        return []
+    try:
+        mailbox.folder.set(folder)
+        found = list(
+            mailbox.fetch(AND(header=H("Message-ID", message_id)), mark_seen=False, limit=5)
+        )
+    except Exception as e:
+        logger.warning(
+            "source_residual_lookup_failed",
+            extra={"folder": folder, "error": str(e)},
+        )
+        return []
+    return [
+        str(getattr(m, "uid", "") or "").strip()
+        for m in found
+        if str(getattr(m, "uid", "") or "").strip()
+    ]
+
+
 def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
     """D-76: verschiebt `uid` aus `source_folder` in den erkannten Papierkorb-Ordner
     — REVERSIBEL (die Nachricht bleibt im Papierkorb erhalten und wird DORT NIE
@@ -377,45 +406,70 @@ def _move_to_trash(mailbox, uid: str, source_folder: str) -> str:
 
     mailbox.move([uid], trash_folder)
 
-    if _uid_still_in_folder(mailbox, uid, source_folder):
+    # Robuste Quell-Verifikation per uid UND Message-ID. Gmail (und andere Server)
+    # vergeben Entwürfen beim COPY neue UIDs bzw. legen die Kopie als eigenständige
+    # Nachricht im Quell-Ordner ab (Live-Bug #gmail-draft-move, server_supports_move=
+    # false): eine uid-only-Prüfung findet die ursprüngliche uid dann nicht mehr und
+    # meldet fälschlich "sauber verschoben", während das Original unter einer NEUEN
+    # uid stehenbleibt. Die Message-ID-Suche erkennt die neu vergebene(n) uid(s) und
+    # macht sie zum Bereinigungsziel.
+    residual_uids = _uids_of_message_id_in_folder(mailbox, message_id, source_folder)
+    uid_present = _uid_still_in_folder(mailbox, uid, source_folder)
+    cleanup_uids = sorted({u for u in (([uid] if uid_present else []) + residual_uids) if u})
+
+    if cleanup_uids:
         logger.warning(
             "move_to_trash_source_still_present_after_move",
-            extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
+            extra={
+                "uid": uid,
+                "residual_uids": cleanup_uids,
+                "source_folder": source_folder,
+                "trash_folder": trash_folder,
+            },
         )
         # CR-05 (a): kein hartes Löschen ohne Papierkorb-Ankunfts-Nachweis.
         if not _message_id_in_folder(mailbox, message_id, trash_folder):
             raise MailboxMoveError(
                 f"uid={uid} ist nach move() weiterhin im Quell-Ordner "
-                f"'{source_folder}' UND die Ankunft der Nachricht im Papierkorb "
-                f"'{trash_folder}' konnte nicht per Message-ID nachgewiesen werden "
-                f"— der Lösch-Fallback wird verweigert, damit nicht die einzige "
-                f"Kopie endgültig verloren geht (kein stiller Datenverlust, bitte "
-                f"IMAP-Server-Log prüfen)."
+                f"'{source_folder}' (uids={cleanup_uids}) UND die Ankunft der "
+                f"Nachricht im Papierkorb '{trash_folder}' konnte nicht per "
+                f"Message-ID nachgewiesen werden — der Lösch-Fallback wird "
+                f"verweigert, damit nicht die einzige Kopie endgültig verloren "
+                f"geht (kein stiller Datenverlust, bitte IMAP-Server-Log prüfen)."
             )
         # CR-05 (b): gezieltes UID EXPUNGE (UIDPLUS) statt folder-weitem EXPUNGE.
         if "UIDPLUS" not in capabilities:
             raise MailboxMoveError(
                 f"uid={uid} liegt nach move() weiterhin in '{source_folder}' "
-                f"(die Kopie ist im Papierkorb '{trash_folder}' angekommen), aber "
-                f"der Server bietet kein UIDPLUS — ein gezieltes UID EXPUNGE ist "
-                f"nicht möglich und ein folder-weites EXPUNGE wird verweigert "
-                f"(würde fremde \\Deleted-markierte Nachrichten mitlöschen). Die "
-                f"Quell-Kopie bitte manuell entfernen."
+                f"(uids={cleanup_uids}, die Kopie ist im Papierkorb "
+                f"'{trash_folder}' angekommen), aber der Server bietet kein "
+                f"UIDPLUS — ein gezieltes UID EXPUNGE ist nicht möglich und ein "
+                f"folder-weites EXPUNGE wird verweigert (würde fremde "
+                f"\\Deleted-markierte Nachrichten mitlöschen). Die Quell-Kopie "
+                f"bitte manuell entfernen."
             )
         logger.warning(
             "move_to_trash_fallback_targeted_uid_expunge",
-            extra={"uid": uid, "source_folder": source_folder, "trash_folder": trash_folder},
+            extra={
+                "uid": uid,
+                "cleanup_uids": cleanup_uids,
+                "source_folder": source_folder,
+                "trash_folder": trash_folder,
+            },
         )
         mailbox.folder.set(source_folder)
-        mailbox.flag([uid], MailMessageFlags.DELETED, True)
-        mailbox.client.uid("EXPUNGE", uid)
-        if _uid_still_in_folder(mailbox, uid, source_folder):
+        for cleanup_uid in cleanup_uids:
+            mailbox.flag([cleanup_uid], MailMessageFlags.DELETED, True)
+            mailbox.client.uid("EXPUNGE", cleanup_uid)
+        if _uid_still_in_folder(mailbox, uid, source_folder) or _uids_of_message_id_in_folder(
+            mailbox, message_id, source_folder
+        ):
             raise MailboxMoveError(
                 f"uid={uid} ist nach move() UND anschließendem gezielten "
-                f"UID-EXPUNGE-Fallback weiterhin im Quell-Ordner '{source_folder}' "
-                f"vorhanden — das Verschieben nach '{trash_folder}' konnte nicht "
-                f"sicher bestätigt werden (kein stiller Erfolg, bitte "
-                f"IMAP-Server-Log prüfen)."
+                f"UID-EXPUNGE-Fallback (uids={cleanup_uids}) weiterhin im "
+                f"Quell-Ordner '{source_folder}' vorhanden — das Verschieben nach "
+                f"'{trash_folder}' konnte nicht sicher bestätigt werden (kein "
+                f"stiller Erfolg, bitte IMAP-Server-Log prüfen)."
             )
 
     logger.info(

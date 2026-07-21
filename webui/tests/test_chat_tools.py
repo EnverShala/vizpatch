@@ -612,10 +612,11 @@ def test_move_to_trash_source_left_behind_triggers_targeted_uid_expunge_then_suc
     def _fetch_side_effect(*_args, **_kwargs):
         call_count["n"] += 1
         # 1: Pre-Move-Fetch (Message-ID sichern) -> Nachricht da.
-        # 2: Quell-Verifikation nach move() -> Nachricht NOCH da (IONOS-Bug).
-        # 3: Papierkorb-Ankunfts-Nachweis (Message-ID-Suche) -> gefunden.
-        # 4: Quell-Verifikation nach gezieltem UID EXPUNGE -> leer.
-        return [_msg_with_mid()] if call_count["n"] <= 3 else []
+        # 2: Quell-Rest-Suche per Message-ID nach move() -> Nachricht NOCH da.
+        # 3: Quell-uid-Verifikation nach move() -> uid NOCH da (IONOS-Bug).
+        # 4: Papierkorb-Ankunfts-Nachweis (Message-ID-Suche) -> gefunden.
+        # 5+6: Quell-Verifikation nach gezieltem UID EXPUNGE (uid + Message-ID) -> leer.
+        return [_msg_with_mid()] if call_count["n"] <= 4 else []
 
     mailbox.fetch.side_effect = _fetch_side_effect
 
@@ -627,6 +628,61 @@ def test_move_to_trash_source_left_behind_triggers_targeted_uid_expunge_then_suc
 
     mailbox.flag.assert_called_once_with(["42"], MailMessageFlags.DELETED, True)
     mailbox.client.uid.assert_called_once_with("EXPUNGE", "42")
+    mailbox.delete.assert_not_called()
+    mailbox.expunge.assert_not_called()
+
+
+def test_move_to_trash_gmail_reassigned_uid_cleaned_via_message_id():
+    """Live-Bug #gmail-draft-move: Gmail meldet kein 'MOVE' (copy+delete-Pfad),
+    vergibt Entwürfen beim COPY aber eine NEUE uid und lässt das Original als
+    eigenständige Draft im Quell-Ordner. Die ALTE uid ist nach move() dort weg
+    (uid-only-Prüfung meldet fälschlich 'verschoben'), doch die Message-ID-Suche
+    findet die Nachricht unter der neuen uid — der Fallback muss GENAU DIESE neue
+    uid gezielt expungen (nicht die alte), erst nach Papierkorb-Ankunfts-Nachweis."""
+    import src.chat_tools as chat_tools
+
+    OLD_UID, NEW_UID, MID = "1835", "1902", "<draft-xyz@example.com>"
+
+    mailbox = MagicMock()
+    mailbox.client.capabilities = ("UIDPLUS",)  # kein 'MOVE' (wie Gmail), UIDPLUS da
+    mailbox.folder.list.return_value = [
+        _fake_folder_info("[Gmail]/Papierkorb", flags=("\\Trash",))
+    ]
+    current_folder = {"name": None}
+    mailbox.folder.set.side_effect = lambda name, *a, **kw: current_folder.__setitem__("name", name)
+    expunged = {"done": False}
+
+    def _fetch_side_effect(*args, **_kwargs):
+        crit = str(args[0]) if args else ""
+        is_mid_search = "message-id" in crit.lower()
+        if not mailbox.move.called:
+            # Pre-Move: Original unter alter uid im Quell-Ordner (Message-ID sichern).
+            return [_msg_with_mid(uid=OLD_UID, mid=MID)]
+        if is_mid_search:
+            if current_folder["name"] and "Papierkorb" in current_folder["name"]:
+                return [_msg_with_mid(uid="99", mid=MID)]  # Kopie im Papierkorb angekommen
+            # Quell-Ordner: vor dem Expunge unter NEUER uid, danach leer.
+            return [] if expunged["done"] else [_msg_with_mid(uid=NEW_UID, mid=MID)]
+        # uid-Suche der ALTEN uid im Quell-Ordner nach move() -> weg.
+        return []
+
+    mailbox.fetch.side_effect = _fetch_side_effect
+
+    def _uid_cmd(cmd, _u):
+        if cmd == "EXPUNGE":
+            expunged["done"] = True
+
+    mailbox.client.uid.side_effect = _uid_cmd
+
+    trash_folder = chat_tools._move_to_trash(mailbox, OLD_UID, "[Gmail]/Entwürfe")
+
+    from imap_tools import MailMessageFlags
+
+    assert trash_folder == "[Gmail]/Papierkorb"
+    mailbox.move.assert_called_once_with([OLD_UID], "[Gmail]/Papierkorb")
+    # GEZIELT die neu vergebene uid bereinigt, nicht die alte.
+    mailbox.flag.assert_called_once_with([NEW_UID], MailMessageFlags.DELETED, True)
+    mailbox.client.uid.assert_called_once_with("EXPUNGE", NEW_UID)
     mailbox.delete.assert_not_called()
     mailbox.expunge.assert_not_called()
 
