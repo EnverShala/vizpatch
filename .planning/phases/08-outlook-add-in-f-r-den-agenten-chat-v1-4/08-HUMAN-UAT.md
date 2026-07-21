@@ -33,7 +33,7 @@ result: [pending]
 
 ### 4. SC4 — Realer mail_context aus geöffneter/markierter Mail + Nicht-Mail-Robustheit
 expected: Mail öffnen/markieren, Checkbox „Aktuelle Mail einbeziehen" aktiv, Frage „Fasse diese Mail zusammen" → Antwort bezieht sich auf die konkrete Mail; danach Termin/Kontakt markieren → kein Absturz, Hinweiszeile „Keine Mail als Kontext gefunden".
-result: [pending]
+result: passed (2026-07-21 — positiver Fall: Zusammenfassung trifft die konkrete Mail; Gegenprobe: Kontaktliste → kein Absturz, meldet „keine Mail")
 
 ### 5. SC6 (Live-Anteil) — Settings persistieren über Outlook-Neustart; settings.json ohne Klartext-Passwort
 expected: Werte im Settings-Dialog speichern, Outlook neu starten → Werte bleiben; `%AppData%\Vizpatch\OutlookAddin\settings.json` enthält das Passwort NUR als DPAPI-Base64 (kein Klartext); „leer = unverändert" funktioniert; TrustAnyCertificate Default AUS mit rotem Warntext.
@@ -42,9 +42,9 @@ result: [pending]
 ## Summary
 
 total: 5
-passed: 2
+passed: 3
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
