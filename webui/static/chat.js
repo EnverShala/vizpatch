@@ -117,6 +117,7 @@
   function resetHistory() {
     history = [];
     sessionId = generateSessionId();
+    pendingAttachment = null;
     log.innerHTML = '';
   }
 
@@ -161,6 +162,16 @@
     if (mailContext) {
       fd.append('mail_context', JSON.stringify(mailContext));
     }
+    /* Anhang-Metadaten (ATT-03, Plan 12-03): nur mitschicken, wenn ein Upload
+     * seit dem letzten Send noch nicht konsumiert wurde. Der serverseitige
+     * Pending-Upload ist einmal konsumierbar (12-01) — pendingAttachment wird
+     * daher NACH diesem Send unabhaengig vom Ausgang zurueckgesetzt (T-12-12:
+     * ein zweiter Send darf nie veraltete Metadaten eines bereits verbrauchten
+     * oder abgelaufenen Uploads mitschicken). */
+    const attachmentForThisSend = pendingAttachment;
+    if (attachmentForThisSend) {
+      fd.append('attachment_meta', JSON.stringify(attachmentForThisSend));
+    }
 
     let assistantText = '';
     let sawError = false;
@@ -171,6 +182,13 @@
         const errText = await res.text();
         assistantBubble.textContent = 'Fehler ' + res.status + ': ' + errText;
         return;
+      }
+      if (attachmentForThisSend) {
+        /* Der serverseitige Pending-Upload wird von diesem Turn konsumiert
+         * (oder war schon fuer diesen Turn bestimmt) — ein Folge-Send darf
+         * ihn nicht nochmal mitschicken. */
+        pendingAttachment = null;
+        addUploadStatus('Anhang gesendet: ' + attachmentForThisSend.dateiname);
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
