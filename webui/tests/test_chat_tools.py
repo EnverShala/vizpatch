@@ -818,6 +818,49 @@ def test_entwurf_bearbeiten_appends_new_version_preserving_threading_and_moves_o
     mock_mailbox.delete.assert_not_called()
 
 
+def test_entwurf_bearbeiten_changes_recipient_when_neuer_empfaenger_given(mocker, tmp_path, monkeypatch):
+    """CTOOL-03-Erweiterung (Problem 3): `neuer_empfaenger` ersetzt das To-Feld der
+    neuen Fassung; der alte Empfänger ist nicht mehr enthalten."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Angebot", from_="info@ionos.de", to=("alt@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten(
+        "info", uid="7", neuer_text="Neuer Text.", neuer_empfaenger="neu@example.com"
+    )
+
+    assert "fehler" not in result
+    mock_mailbox.append.assert_called_once()
+    appended = mock_mailbox.append.call_args.args[0]
+    assert b"neu@example.com" in appended
+    assert b"alt@example.com" not in appended
+
+
+def test_entwurf_bearbeiten_keeps_recipient_without_neuer_empfaenger(mocker, tmp_path, monkeypatch):
+    """Rückwärtskompatibel: ohne `neuer_empfaenger` bleibt der Original-Empfänger."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(uid="7", subject="Angebot", from_="info@ionos.de", to=("alt@example.com",))
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_bearbeiten("info", uid="7", neuer_text="Neuer Text.")
+
+    assert "fehler" not in result
+    appended = mock_mailbox.append.call_args.args[0]
+    assert b"alt@example.com" in appended
+
+
 def test_entwurf_bearbeiten_no_trash_folder_returns_error_dict_no_crash(mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _write_agent_env("info")
@@ -3095,3 +3138,52 @@ def test_run_agentic_chat_and_tool_loop_accept_attachment_meta_parameter():
     loop_params = inspect.signature(chat_tools._run_anthropic_tool_loop).parameters
     assert "attachment_meta" in loop_params
     assert loop_params["attachment_meta"].default is None
+
+
+# --- Problem 1: session-persistenter Anonymizer (Pseudonyme über Turns konsistent) ---
+
+
+def test_session_anonymizer_persists_mapping_across_turns(tmp_path, monkeypatch):
+    """Kern-Test: EINE Anonymizer-Instanz je (agent_id, session_id) — ein in Turn 1
+    vergebenes Pseudonym bleibt in Turn 2 (gleiche session_id) rückauflösbar."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    a1 = chat_tools._get_session_anonymizer("info", "sess-1", True)
+    tag = a1.anonymize("max@example.com")
+    assert "max@example.com" not in tag  # wurde pseudonymisiert
+
+    # Turn 2, gleiche Sitzung -> gleiche Instanz -> Pseudonym auflösbar
+    a2 = chat_tools._get_session_anonymizer("info", "sess-1", True)
+    assert a2 is a1
+    assert a2.deanonymize(tag) == "max@example.com"
+
+
+def test_session_anonymizer_isolated_across_sessions(tmp_path, monkeypatch):
+    """Verschiedene session_id -> verschiedene Instanzen (kein PII-Cross-Talk)."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    a = chat_tools._get_session_anonymizer("info", "sess-A", True)
+    b = chat_tools._get_session_anonymizer("info", "sess-B", True)
+    assert a is not b
+
+
+def test_session_anonymizer_empty_session_never_cached(tmp_path, monkeypatch):
+    """Leeres session_id -> jedes Mal frische Instanz (identitätslose Aufrufer
+    teilen kein Mapping)."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    a = chat_tools._get_session_anonymizer("info", "", True)
+    b = chat_tools._get_session_anonymizer("info", "", True)
+    assert a is not None
+    assert a is not b
+
+
+def test_session_anonymizer_disabled_returns_none(tmp_path, monkeypatch):
+    """ENABLE_PII_REDACTION aus (enabled=False) -> None (unverändertes Alt-Verhalten)."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    assert chat_tools._get_session_anonymizer("info", "sess-1", False) is None

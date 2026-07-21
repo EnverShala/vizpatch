@@ -69,3 +69,14 @@ def reset_pending_uploads():
     chat_tools._pending_uploads.clear()
     yield
     chat_tools._pending_uploads.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_session_anonymizers():
+    """Problem 1: der session-persistente Anonymizer-Store (`chat_tools.
+    _session_anonymizers`) ist analog ein reiner In-Memory-Prozess-Zustand — ohne
+    Reset könnten Pseudonym-Mappings zwischen Tests durchsickern."""
+    import src.chat_tools as chat_tools
+    chat_tools._session_anonymizers.clear()
+    yield
+    chat_tools._session_anonymizers.clear()
