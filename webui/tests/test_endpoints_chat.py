@@ -680,3 +680,66 @@ def test_chat_upload_streams_via_file_read_not_full_read(authed_client, mocker, 
     # geprueft ueber den vollstaendigen Read-Ausdruck (robust gegen die erklaerende
     # Docstring-Erwaehnung "KEIN `file.read()`" weiter oben in derselben Funktion).
     assert "while chunk := file.file.read(1024 * 1024)" in source
+
+
+# --- attachment_meta-Durchreichung an run_agentic_chat (Plan 12-02, ATT-03) ---
+
+
+def test_chat_send_with_attachment_metadata_reaches_prompt(authed_client, mocker, tmp_path, monkeypatch):
+    """ATT-03: das attachment_meta-Formfeld (JSON-String, vom vorherigen Upload-
+    Response uebernommen) wird geparst und unveraendert als attachment_meta=
+    an chat_tools.run_agentic_chat() durchgereicht."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    import json as _json
+
+    mock_run = mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter([{"type": "text", "text": "Ok."}]),
+    )
+    meta = {"dateiname": "rechnung.pdf", "groesse": 1234, "mimetyp": "application/pdf"}
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Haenge das an einen Entwurf.", "attachment_meta": _json.dumps(meta)},
+    )
+    assert response.status_code == 200
+    forwarded = mock_run.call_args.kwargs["attachment_meta"]
+    assert forwarded == {"dateiname": "rechnung.pdf", "groesse": 1234, "mimetyp": "application/pdf"}
+
+
+def test_chat_send_without_attachment_metadata_still_works_backward_compat(authed_client, mocker, tmp_path, monkeypatch):
+    """Rueckwaertskompatibilitaet: fehlt attachment_meta (aelteres Frontend/kein
+    Upload in dieser Sitzung), bleibt /send nutzbar — attachment_meta=None,
+    kein Crash."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    mock_run = mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter([{"type": "text", "text": "Ok."}]),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Hi"},
+    )
+    assert response.status_code == 200
+    assert mock_run.call_args.kwargs["attachment_meta"] is None
+
+
+def test_chat_send_with_broken_attachment_metadata_json_falls_back_to_none(authed_client, mocker, tmp_path, monkeypatch):
+    """Kaputtes JSON im attachment_meta-Formfeld -> None statt Crash (analog
+    _parse_mail_context bei kaputtem mail_context)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info", provider="anthropic")
+    mock_run = mocker.patch(
+        "src.main.chat_tools.run_agentic_chat",
+        return_value=iter([{"type": "text", "text": "Ok."}]),
+    )
+    response = authed_client.post(
+        "/chat/info/send",
+        auth=("admin", "pw"),
+        data={"message": "Hi", "attachment_meta": "{kaputtes json"},
+    )
+    assert response.status_code == 200
+    assert mock_run.call_args.kwargs["attachment_meta"] is None

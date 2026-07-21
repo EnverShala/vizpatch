@@ -602,6 +602,31 @@ def _parse_mail_context(raw: str) -> dict | None:
     }
 
 
+def _parse_attachment_meta(raw: str) -> dict | None:
+    """Parst das optionale attachment_meta-Formfeld (Phase 12, ATT-03) defensiv —
+    streng nach dem Muster von `_parse_mail_context`: bei Parse-Fehler oder
+    falscher Struktur `None` (kein DATEN-Block, kein Crash, Rueckwaertskompat).
+    Traegt NUR Metadaten (Dateiname/Groesse/Mimetyp) einer zuvor per
+    `/chat/{agent_id}/upload` hochgeladenen Datei — NIE den Dateiinhalt (D-96)."""
+    if not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        groesse = int(data.get("groesse") or 0)
+    except (TypeError, ValueError):
+        groesse = 0
+    return {
+        "dateiname": str(data.get("dateiname") or ""),
+        "groesse": groesse,
+        "mimetyp": str(data.get("mimetyp") or ""),
+    }
+
+
 @app.post("/chat/{agent_id}/send", dependencies=[Depends(auth.require_setup)])
 @limiter.limit(
     # Review IN-02: Default aus chat.CHAT_RATE_LIMIT_PER_MIN_DEFAULT statt
@@ -617,6 +642,7 @@ def chat_send(
     history: str = Form("", max_length=200_000),
     mail_context: str = Form(""),
     session_id: str = Form(""),
+    attachment_meta: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
     """Streamt eine agentische Chat-Antwort via SSE (D-62/D-72/D-80). Provider/
@@ -633,6 +659,13 @@ def chat_send(
     Verschiebung in den Papierkorb erneut bestätigt werden muss oder ob die
     Sitzung bereits (durch eine frühere bestätigte Verschiebung) autorisiert ist.
 
+    `attachment_meta` (Phase 12, ATT-03): optionales JSON-Formfeld mit den
+    Metadaten ({"dateiname", "groesse", "mimetyp"}) einer zuvor per
+    `/chat/{agent_id}/upload` hochgeladenen Datei. Defensiv über
+    `_parse_attachment_meta` geparst (analog `_parse_mail_context`) und
+    unverändert als `attachment_meta=` an `chat_tools.run_agentic_chat()`
+    durchgereicht — NIE der Dateiinhalt (D-96).
+
     PLAN-CHECKER-W1: `run_agentic_chat` ist ein Generator — dessen Rumpf läuft
     erst beim ersten `next()`, also NACH dem 200-Commit der StreamingResponse.
     Damit ein invalider `agent_id` (ValueError) oder ein fehlender Key
@@ -642,6 +675,7 @@ def chat_send(
     startet."""
     parsed_history = _parse_chat_history(history)
     parsed_mail_context = _parse_mail_context(mail_context)
+    parsed_attachment_meta = _parse_attachment_meta(attachment_meta)
 
     try:
         chat.resolve_chat_target(agent_id)
@@ -661,7 +695,12 @@ def chat_send(
     def _stream():
         try:
             for event in chat_tools.run_agentic_chat(
-                agent_id, message, parsed_history, parsed_mail_context, session_id=session_id
+                agent_id,
+                message,
+                parsed_history,
+                parsed_mail_context,
+                session_id=session_id,
+                attachment_meta=parsed_attachment_meta,
             ):
                 if event.get("type") == "tool":
                     yield f"event: tool\ndata: {event.get('label', '')}\n\n"
