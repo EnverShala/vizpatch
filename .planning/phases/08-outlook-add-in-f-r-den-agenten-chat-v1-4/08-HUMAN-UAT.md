@@ -21,11 +21,11 @@ updated: "2026-07-20"
 
 ### 1. SC1 — Installation + Ribbon + Task Pane in echtem Outlook classic
 expected: Nach ClickOnce-Install lädt das Add-in in Outlook classic; Menüband-Gruppe „Vizpatch" mit Toggle-Button „Vizpatch-Chat" sichtbar; Toggle blendet die CustomTaskPane rechts ein/aus (VisibleChanged-Sync).
-result: [pending]
+result: passed (2026-07-21 — Add-in lädt in Outlook classic, Task Pane rendert den Chat-Bereich)
 
 ### 2. SC2 — SSE-Chat-Roundtrip gegen reale Backend-Instanz im LAN (KEIN HTTP-403)
 expected: Getippte Frage streamt inkrementell in den Log; KEIN 403 (Origin-Workaround greift); ggf. [Werkzeug]-Hinweiszeilen; Reset erzeugt neue session_id. **Besonders prüfen (CR-01-Fix):** der Chat-Bereich bleibt während des Streamens bedienbar/reagiert (kein eingefrorener UI-Thread).
-result: [pending]
+result: passed (2026-07-21 — Roundtrip live über http://10.200.4.32:8080, Agent enver-vizionists-account; Antwort streamt, kein 403 → Origin-Workaround greift in der Praxis)
 
 ### 3. SC3 — Agentische Werkzeuge + Bestätigungs-Gate + Draft via IMAP-Sync end-to-end
 expected: `mails_suchen` liefert Treffer; bestätigungspflichtige Aktion (Papierkorb) zeigt Rückfrage und wird erst NACH Bestätigung ausgeführt (session_id-HMAC-Gate greift über den nativen Client); erzeugter Draft erscheint via IMAP-Sync in Outlooks Drafts-Ordner.
@@ -42,9 +42,9 @@ result: [pending]
 ## Summary
 
 total: 5
-passed: 0
+passed: 2
 issues: 0
-pending: 5
+pending: 3
 skipped: 0
 blocked: 0
 
