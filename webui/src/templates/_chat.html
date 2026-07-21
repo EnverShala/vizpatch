@@ -4,6 +4,8 @@
   </div>
   <div id="chat-log" aria-live="polite"></div>
   <form id="chat-form">
+    <label id="chat-file-label" for="chat-file-input" title="Datei anhängen (für den nächsten Entwurf)">&#x1F4CE;</label>
+    <input type="file" id="chat-file-input" hidden>
     <textarea id="chat-input" rows="3" placeholder="Nachricht eingeben… (Enter = senden, Shift+Enter = neue Zeile)" required></textarea>
     <button type="submit" id="chat-send-btn" title="Nachricht senden">Senden</button>
   </form>

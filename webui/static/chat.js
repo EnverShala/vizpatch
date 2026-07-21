@@ -27,6 +27,52 @@
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('chat-send-btn');
   const resetBtn = document.getElementById('chat-reset-btn');
+  const fileInput = document.getElementById('chat-file-input');
+
+  /* Anhang-Widget (ATT-03, Plan 12-03): Datei wird SOFORT bei Auswahl an
+   * /chat/{agentId}/upload gestreamt (server-seitiger Pending-Upload-Store,
+   * 12-01/12-02) — der Dateiinhalt selbst verlaesst den Browser sofort und
+   * wird NIE in `history`/localStorage gehalten (T-12-11). Nur die vom Server
+   * zurueckgegebenen Metadaten (Dateiname/Groesse/Typ) werden hier gemerkt und
+   * dem naechsten sendMessage()-Aufruf als `attachment_meta` mitgegeben. */
+  let pendingAttachment = null;
+
+  function addUploadStatus(text) {
+    const statusLine = document.createElement('div');
+    statusLine.className = 'chat-upload-status';
+    statusLine.textContent = text;
+    log.appendChild(statusLine);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', async function () {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('session_id', sessionId);
+
+      try {
+        const res = await fetch('/chat/' + agentId + '/upload', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const errText = await res.text();
+          addUploadStatus('Anhang abgelehnt (' + res.status + '): ' + errText);
+          return;
+        }
+        const data = await res.json();
+        pendingAttachment = { dateiname: data.dateiname, groesse: data.groesse, mimetyp: data.mimetyp };
+        addUploadStatus('Anhang bereit: ' + data.dateiname);
+      } catch (e) {
+        addUploadStatus('Netzwerkfehler beim Hochladen: ' + e);
+      } finally {
+        /* Denselben Dateinamen erneut hochladbar machen (change-Event feuert
+         * sonst beim zweiten Auswaehlen derselben Datei nicht erneut). */
+        fileInput.value = '';
+      }
+    });
+  }
 
   /** Zuletzt per postMessage empfangene Mail (D-69) — Default null (kein
    * Mail-Kontext), z. B. solange kein Add-in eingebettet ist oder noch keine

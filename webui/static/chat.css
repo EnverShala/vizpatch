@@ -101,6 +101,16 @@ body.chat-standalone #chat-root {
   padding: 0.1rem 0.4rem;
 }
 
+/* Upload-Statuszeile (Plan 12-03, ATT-03): dezenter Hinweis nach Datei-Upload
+ * (Erfolg oder Ablehnung) — gleiches Muster wie .chat-tool-activity. */
+.chat-upload-status {
+  align-self: flex-start;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: #6b7280;
+  padding: 0.1rem 0.4rem;
+}
+
 /* Compose-Zeile: grosses Auto-Grow-Textfeld + einziger Primaer-Button.
  * align-items:flex-end haelt den Senden-Button an der Unterkante, wenn das
  * Textfeld beim Tippen mitwaechst (chat.js Auto-Grow). */
@@ -109,6 +119,25 @@ body.chat-standalone #chat-root {
   gap: 0.5rem;
   align-items: flex-end;
   flex-shrink: 0;
+}
+
+/* Anhang-Button (Plan 12-03): dezentes Icon-Label neben dem Textfeld,
+ * oeffnet das versteckte <input type="file"> (kein eigener Datei-Browser-UI). */
+#chat-file-label {
+  flex-shrink: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  cursor: pointer;
+  background: #fff;
+  color: #6b7280;
+}
+
+#chat-file-label:hover {
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 #chat-input {
