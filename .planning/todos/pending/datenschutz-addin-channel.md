@@ -33,6 +33,17 @@ Vorschlagstext für `_datenschutz.html` (+ ggf. AVV §6.2) **entwerfen**, dann
 eigenmächtig ändern. Ggf. mit der Gate-Reduktion (`chat-confirmation-gate-reduce`)
 und der Anhang-Phase (`chat-draft-attachments`) in einer Doku-Runde bündeln.
 
-## Nicht jetzt
+## ENTSCHEIDUNG (Betreiber 2026-07-21): AM ENDE BÜNDELN
 
-Rechtstext-Abnahme → bewusst nach den funktionalen Phasen bündeln.
+Datenschutz + AVV werden **nicht einzeln** angepasst, sondern **gesammelt nach den
+funktionalen Phasen** in EINEM konsolidierten Vorschlagstext → EINE DSB-Abnahme.
+Zu bündelnde compliance-berührende Punkte:
+- **dieser Punkt** — Add-in-Zugangskanal + `mail_context`-Übermittlung + lokale
+  DPAPI-Zugangsdaten
+- [[chat-draft-attachments]] — hochgeladene Datei-Anhänge (neuer Datenfluss)
+- [[chat-confirmation-gate-reduce]] — Bestätigungs-Gate-Änderung berührt
+  Datenschutz Ziffer 6 + AVV §6.2
+
+**Trigger:** Sobald die funktionalen Phasen (v. a. Anhang-Upload) durch sind →
+ich entwerfe den konsolidierten `_datenschutz.html`- + AVV-Vorschlag, Betreiber/DSB
+nimmt ab (Muster Phase 10, D-89). Verbindlicher Text wird NIE ohne Freigabe geändert.
