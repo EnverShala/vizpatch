@@ -1,7 +1,8 @@
 ---
 phase: 08-outlook-add-in-f-r-den-agenten-chat-v1-4
 verified: 2026-07-20T00:00:00Z
-status: human_needed
+status: passed
+live_acceptance: "2026-07-21 — alle 5 Success Criteria in echtem Outlook classic abgenommen (siehe 08-HUMAN-UAT.md); OUT-05/OUT-07 damit SATISFIED"
 score: 16/16 strukturelle (buildbare) Must-Haves verifiziert — 22/22 Tests grün, Kein-Auto-Send-Wächter grün; die Live-Abnahme-Anteile von SC1–SC4 sind offen
 overrides_applied: 0
 human_verification:

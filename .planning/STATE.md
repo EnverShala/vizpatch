@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-07-19T02:50:50.471Z"
+last_updated: "2026-07-21T00:00:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 39
-  completed_plans: 35
-  percent: 55
+  completed_plans: 39
+  percent: 74
 ---
 
 # STATE — Vizpatch (schmaler KI-Email-Agent)
@@ -43,7 +43,7 @@ progress:
 | 5 — Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | ✅ Code ausgeführt (6/6 Plans + Fixes WR-01…06, CR-01) — **05.06-Verifikation (Tasks 1–3) deferred** bis OpenAI/Google-Keys vorliegen | 2026-07-15 | 2026-07-17 |
 | 6 — Schreibstil-Adaption pro Agent (v1.3) | ✅ Code-komplett — 06.01–06.03 abgeschlossen, 06.04 Task 1 (A/B-Fixtures) fertig; **06.04 Task 2 (A/B-Ton-Abnahme) = menschlicher Checkpoint offen** | 2026-07-17 | — |
 | 7 — Agenten-Chat im WebUI (v1.3) | ✅ Code-komplett — alle 4 Plans (07-01…07-04) abgeschlossen; nur **Browser-Klick-Abnahme des Chats offen** (menschlicher Check) | 2026-07-17 | 2026-07-17 |
-| 8 — Outlook-Add-in für den Agenten-Chat (COM/VSTO, v1.4) | ✅ Code-komplett — alle 4 Plans ausgeführt: 08-01 (COM-freie Core: SSE-Parser + ChatClient + DPAPI-Settings) + 08-02 (VSTO-Hülle: Ribbon + CustomTaskPane + SSE-ChatView) + 08-03 (Mail-Kontext übers Objektmodell + Settings-Dialog) + 08-04 (Kein-Auto-Send-Quellwächter `scripts/check-addin-no-autosend.sh` grün + ClickOnce/LAN/HTTPS-Runbook `deployment/README.addin-outlook.md`); MSBuild grün, 22/22 Tests grün; **gebündelte Live-Abnahme in echtem Outlook classic (D-89, Werkzeuge/Gate/Draft) offen** | 2026-07-17 | — |
+| 8 — Outlook-Add-in für den Agenten-Chat (COM/VSTO, v1.4) | ✅ Code-komplett — alle 4 Plans ausgeführt: 08-01 (COM-freie Core: SSE-Parser + ChatClient + DPAPI-Settings) + 08-02 (VSTO-Hülle: Ribbon + CustomTaskPane + SSE-ChatView) + 08-03 (Mail-Kontext übers Objektmodell + Settings-Dialog) + 08-04 (Kein-Auto-Send-Quellwächter `scripts/check-addin-no-autosend.sh` grün + ClickOnce/LAN/HTTPS-Runbook `deployment/README.addin-outlook.md`); MSBuild grün, 23/23 Tests grün; **alle 5 SC am 2026-07-21 live in echtem Outlook classic abgenommen** (SSE-Chat, Mail-Kontext, Werkzeuge/Gate/Draft via IMAP-Sync, Settings-Persistenz) | 2026-07-17 | 2026-07-21 |
 | 9 — Agentischer Chat mit Postfach-Werkzeugen (v1.5) | ✅ Code-komplett — alle 5 Plans ausgeführt: 09-01 (Walking Skeleton) + 09-02 (Entwürfe-Werkzeuge, CTOOL-02) + 09-03 (`entwurf_bearbeiten` + Papierkorb-Erkennung, CTOOL-03) + 09-04 (Bestätigungs-Token-Gate, CTOOL-04) + 09-05 (AST-Kein-Auto-Send-Wächter + Datenschutz/AVV-Angleichung, CTOOL-05) | 2026-07-18 | 2026-07-18 |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
@@ -129,6 +129,7 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 
 ## History
 
+- **2026-07-21** — **Phase 8 (COM/VSTO-Outlook-Add-in) ausgeführt + live abgenommen — ABGESCHLOSSEN.** Alle 4 Plans auf einer Windows-Maschine mit VS Community 2026 (.NET-Desktop + Office/SharePoint-Workload) ausgeführt: 08-01 (COM-freie `VizpatchAddin.Core` — SSE-Parser/ChatClient/DPAPI-Settings, real gebaut + 22/22 xUnit grün), 08-02 (VSTO-Hülle Ribbon+CustomTaskPane+SSE-ChatView; Blocker: VSTO-4.0-Basisklassen sind Interfaces → `OutlookAddInBase` aus VS-Vorlage gespiegelt), 08-03 (MailContextReader übers Objektmodell + SettingsDialog DPAPI), 08-04 (Kein-Auto-Send-Quellwächter `scripts/check-addin-no-autosend.sh` grün + ClickOnce/LAN-Runbook). **Verifier: 16/16 strukturell → nach Live-Abnahme `passed`.** **Code-Review** fand 1 Blocker + 6 Warnings → **alle behoben** (CR-01 UI-Thread-Freeze via `ReadLineAsync()`, WR-01 COM-Freigabe, WR-05/06 Cancellation/finally, WR-02/03/04 Wächter gehärtet), Rebuild grün, **23/23 Tests**. **Live-Abnahme in echtem Outlook classic (Betreiber, Stationsleitung) alle 5 SC grün:** SSE-Chat streamt, Mail-Kontext trifft die konkrete Mail, Werkzeuge+Bestätigungs-Gate+Draft via IMAP-Sync, Settings persistieren über Neustart, Passwort DPAPI-only. OUT-05…09 SATISFIED. **Beim Rollout auf die WSL-Ubuntu-Test-Instanz (`/home/enver_shala/vizpatch-test`, image-basiert `vizpatch-webui:v1.5.2`) drei Bugs gefunden+gefixt:** (1) veraltete WebUI (Update-Buttons) → Image aus aktuellem Quellstand neu gebaut; (2) **leerer `ADDIN_FRAME_ANCESTORS`-Compose-Env überschrieb den Code-Default → 403 für jeden Add-in-Request** (Laufzeit-Fix via Compose-`.env` + Code-Fix `os.getenv(...) or DEFAULT` committet `3ae770c`); (3) Add-in-Chat-Kontrast (weiß-auf-weiß) + WebUI „2. Agent nicht anlegbar" + „Provider erkannt"→„LLM-Provider erkannt" (Commit `a6edda6`). **Offene Feature-Wünsche des Betreibers als Todos erfasst** (`.planning/todos/pending/`): Datei-Upload-Anhänge an Entwürfe (Variante C: Ad-hoc-Upload, alle Dateitypen, nur Stationsleitung, ~15 MB Limit, Kein-Auto-Send bleibt) — **nächste geplante Phase**; context.md-Pflege-Werkzeug im Chat; Bestätigungs-Gate reduzieren/abschaltbar (`CHAT_REQUIRE_TRASH_CONFIRM`, WebUI-Toggle) inkl. Rechtstext-Angleichung. **Nächster Schritt:** `/gsd:plan-phase` für die Anhang-Upload-Phase.
 - **2026-07-20** — **Phase 8 neu geplant (Pivot).** Kunde nutzt Outlook classic → Add-in von Office.js (M365-only, on hold, archiviert unter `08-.../archive-officejs/`) auf **COM/VSTO** (Thin-Client gegen bestehende `/chat`-API, SSE, Werkzeuge+Drafts serverseitig) umgestellt. CONTEXT (D-82…D-89), ROADMAP, REQUIREMENTS (OUT-01…04 superseded, OUT-05…09 neu) aktualisiert. Research + Planner (4 Plans, 4 Waves) + Plan-Checker (PASS, keine Blocker) durchlaufen. Kritischer Fund: nativer `HttpClient` braucht expliziten `Origin`-Header (in `ADDIN_FRAME_ANCESTORS`), sonst 403 durch `enforce_same_origin` — Fix ohne Backend-Änderung. Build/Live-Tasks = `autonomous: false` (kein VS/Office auf Dev-Maschine). Nächster Schritt: `/gsd:execute-phase 08` auf Windows+VS+Office+LAN-Backend.
 - **2026-07-09** — Projekt initialisiert. Initialer Multi-Tenant-Plan.
 - **2026-07-09** — Phase 1 Context (Runde 1) mit InboxZero-Basis, Vizionists-managed Hosting.

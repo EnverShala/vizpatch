@@ -16,7 +16,7 @@
 | 5 | Multi-LLM, Multi-Agent & Verschlüsselung (v1.2) | Ein API-Key-Feld mit Provider-Autodetect (Anthropic / OpenAI / Google Gemini, D-51), mehrere Agenten (Mail-Accounts) parallel verwalten/ausführen, Secrets verschlüsselt at-rest | LLM-01…04, MA-01…05, SEC-01…03 | 6 | 📋 6 plans, 4 waves — Ausführung nach Esso-Rollout |
 | 6 | Schreibstil-Adaption pro Agent (v1.3) | Automatische Stil-Extraktion aus dem Gesendet-Ordner beim Agent-Setup (style.md pro Agent), Re-Learn-Button, Prompt-Hierarchie context.md > style.md | STY-01…05 | 5 | 📝 Roadmap-Eintrag — Detail-Plan nach Phase-5-Execution |
 | 7 | Agenten-Chat im WebUI (v1.3) | Chat pro Agent mit context.md/style.md/Status-Wissen, SSE-Streaming, einbettbares Partial als Vorarbeit für Outlook | CHAT-01…05 | 5 | 📋 4 plans, 4 waves (sequentiell) — geplant 2026-07-17 |
-| 8 | Agenten-Chat als COM/VSTO-Add-in für Outlook classic (Neuplanung, v1.7) | Nativer Task-Pane-Thin-Client über die bestehende /chat-API (SSE), Mail-Kontext übers Outlook-Objektmodell, Werkzeuge + Drafts serverseitig, Kein-Auto-Send | OUT-05…09 | 6 | ✅ Code-komplett (4/4 Plans, MSBuild grün, 22/22 Tests, Kein-Auto-Send-Wächter grün) — **Live-Abnahme in echtem Outlook classic offen** (Pivot von Office.js/OUT-01…04, archiviert) |
+| 8 | Agenten-Chat als COM/VSTO-Add-in für Outlook classic (Neuplanung, v1.7) | Nativer Task-Pane-Thin-Client über die bestehende /chat-API (SSE), Mail-Kontext übers Outlook-Objektmodell, Werkzeuge + Drafts serverseitig, Kein-Auto-Send | OUT-05…09 | 6 | ✅ Complete (2026-07-21) — 4/4 Plans, MSBuild grün, 23/23 Tests, Kein-Auto-Send-Wächter grün; **alle 5 SC live in echtem Outlook classic abgenommen** (Pivot von Office.js/OUT-01…04, archiviert) |
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
 | 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | ✅ Complete (2026-07-20) — 4 plans, DSGVO/AVV vom DSB freigegeben |
 | 11 | Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) | v1.2–v1.6 komplett bei Vizionists gegen Test-Postfach durchtesten + Update/Rollback lokal proben, damit der Kunden-Rollout ein Nicht-Ereignis wird | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
@@ -315,7 +315,7 @@ Plans:
 
 **Requirements mapped:** OUT-05, OUT-06, OUT-07, OUT-08, OUT-09 (OUT-01…04 = superseded, Office.js)
 
-**Plans:** 4/4 plans complete
+**Plans:** 4/4 plans complete — ✅ **Phase abgeschlossen 2026-07-21**, alle 5 SC live in echtem Outlook classic abgenommen (siehe `08-HUMAN-UAT.md`). Während der Abnahme behoben: Code-Review-Blocker CR-01 (UI-Thread-Freeze) + Warnings, leerer `ADDIN_FRAME_ANCESTORS`-Env überschrieb Default (403-Fix), Add-in-Chat-Kontrast. Offene Feature-Wünsche als Todos: Datei-Upload-Anhänge (Variante C), context.md-Pflege-Werkzeug, Bestätigungs-Gate reduzieren.
 
 - [x] 08-01-PLAN.md — Core-Bibliothek (COM-frei): SSE-Zeilenparser + ChatClient (Form-POST + Origin/Basic-Auth-CSRF-Workaround) + DTOs + DPAPI-Settings + xUnit-Tests
 - [x] 08-02-PLAN.md — VSTO-Hülle: Ribbon-Toggle + CustomTaskPane + ChatView (inkrementelles SSE-Rendering, session_id) + thinnest-slice-Live-Checkpoint

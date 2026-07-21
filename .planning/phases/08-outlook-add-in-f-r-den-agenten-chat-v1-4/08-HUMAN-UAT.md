@@ -1,14 +1,14 @@
 ---
-status: partial
+status: resolved
 phase: 08-outlook-add-in-f-r-den-agenten-chat-v1-4
 source: [08-VERIFICATION.md, 08-04-SUMMARY.md]
 started: "2026-07-20"
-updated: "2026-07-20"
+updated: "2026-07-21"
 ---
 
 ## Current Test
 
-[awaiting human testing — gebündelte Live-Abnahme in echtem Outlook classic]
+[abgeschlossen — alle 5 Items am 2026-07-21 in echtem Outlook classic abgenommen]
 
 ## Voraussetzungen (einmalig)
 
@@ -37,14 +37,14 @@ result: passed (2026-07-21 — positiver Fall: Zusammenfassung trifft die konkre
 
 ### 5. SC6 (Live-Anteil) — Settings persistieren über Outlook-Neustart; settings.json ohne Klartext-Passwort
 expected: Werte im Settings-Dialog speichern, Outlook neu starten → Werte bleiben; `%AppData%\Vizpatch\OutlookAddin\settings.json` enthält das Passwort NUR als DPAPI-Base64 (kein Klartext); „leer = unverändert" funktioniert; TrustAnyCertificate Default AUS mit rotem Warntext.
-result: [pending]
+result: passed (2026-07-21 — Outlook komplett geschlossen/neu gestartet, Einstellungen persistieren, Chat läuft sofort; Passwort-at-rest DPAPI-only in settings.json verifiziert, kein Klartext)
 
 ## Summary
 
 total: 5
-passed: 4
+passed: 5
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
