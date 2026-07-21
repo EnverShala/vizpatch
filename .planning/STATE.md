@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-07-21T00:00:00.000Z"
+last_updated: "2026-07-21T11:22:41.390Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 7
-  total_plans: 39
+  total_plans: 42
   completed_plans: 39
-  percent: 74
+  percent: 58
 ---
 
 # STATE — Vizpatch (schmaler KI-Email-Agent)
@@ -45,6 +45,7 @@ progress:
 | 7 — Agenten-Chat im WebUI (v1.3) | ✅ Code-komplett — alle 4 Plans (07-01…07-04) abgeschlossen; nur **Browser-Klick-Abnahme des Chats offen** (menschlicher Check) | 2026-07-17 | 2026-07-17 |
 | 8 — Outlook-Add-in für den Agenten-Chat (COM/VSTO, v1.4) | ✅ Code-komplett — alle 4 Plans ausgeführt: 08-01 (COM-freie Core: SSE-Parser + ChatClient + DPAPI-Settings) + 08-02 (VSTO-Hülle: Ribbon + CustomTaskPane + SSE-ChatView) + 08-03 (Mail-Kontext übers Objektmodell + Settings-Dialog) + 08-04 (Kein-Auto-Send-Quellwächter `scripts/check-addin-no-autosend.sh` grün + ClickOnce/LAN/HTTPS-Runbook `deployment/README.addin-outlook.md`); MSBuild grün, 23/23 Tests grün; **alle 5 SC am 2026-07-21 live in echtem Outlook classic abgenommen** (SSE-Chat, Mail-Kontext, Werkzeuge/Gate/Draft via IMAP-Sync, Settings-Persistenz) | 2026-07-17 | 2026-07-21 |
 | 9 — Agentischer Chat mit Postfach-Werkzeugen (v1.5) | ✅ Code-komplett — alle 5 Plans ausgeführt: 09-01 (Walking Skeleton) + 09-02 (Entwürfe-Werkzeuge, CTOOL-02) + 09-03 (`entwurf_bearbeiten` + Papierkorb-Erkennung, CTOOL-03) + 09-04 (Bestätigungs-Token-Gate, CTOOL-04) + 09-05 (AST-Kein-Auto-Send-Wächter + Datenschutz/AVV-Angleichung, CTOOL-05) | 2026-07-18 | 2026-07-18 |
+| 12 — Datei-Upload-Anhänge an Entwürfe (v1.8) | 📋 Geplant (2026-07-21) — 3 Plans/3 Waves, plan-checker grün; Variante C (Ad-hoc-Upload, alle Typen, nur WebUI), Werkzeug `entwurf_mit_anhang`, `MAX_ATTACHMENT_MB`=15, Kein-Auto-Send strukturell. ATT-01…05 | — | — |
 
 ## Phase-4-Plans (alle abgeschlossen 2026-07-13)
 
@@ -126,6 +127,7 @@ Artefakte: `.planning/phases/05-multi-llm-multi-agent-verschl-sselung-v1-2/` (05
 - Detail-Planung (`/gsd:plan-phase 6/7/8`) bewusst NACH Phase-5-Execution — die Phasen bauen auf Phase-5-Artefakten auf (agents-Layout, LLM-Adapter), gegen die der Planner erst planen kann, wenn sie im Code existieren.
 - **App-weiter Security-Audit + Härtung (2026-07-20):** Audit über die ganze App (`10-SECURITY-AUDIT.md`) — SSRF/Command-Injection/Path-Traversal/XSS/Prompt-Injection sauber. Behoben: CSRF (Same-Origin-Middleware, Add-in-Origin-Ausnahme nur für `/chat/send|embed`), Setup-Zwang bei fehlendem Passwort (`/save` bleibt offen für Bootstrap, `VIZPATCH_ALLOW_NO_AUTH`-Bypass), Trusted-Proxy-XFF (`TRUSTED_PROXY`), Rate-Limits (CRUD 30/min, `/reset` 3/min, LLM 10/min), Größen-Limits (Chat 8k/200k, context/style 64 KB), CRLF-Header-Injection in Draft-Buildern, generische Fehlermeldungen. 8 `fix(security)`-Commits, webui 462 + agent 134 Tests grün. **WebUI-Update-Buttons entfernt (2026-07-20)** — Updates laufen per SSH (`deployment/UPDATE-RUNBOOK-SSH.md`, voller Agent+WebUI-Update, verlustfrei via `./config` + Volume `agent-data`). Chat-Design verfeinert.
 - **CTOOL-04 gelockert (2026-07-19, Betreiber-Entscheidung):** Papierkorb-Verschiebungen im agentischen Chat verlangen die Bestätigung nur noch **einmal pro Chat-Sitzung** (statt pro Aktion). Erst-Verschiebung → weiterhin gehärtetes Zwei-Schritt-Token-Gate (schützt gegen Prompt-Injection-Erstmissbrauch); danach ist die Sitzung serverseitig autorisiert (In-Memory-HMAC-Set, `session_id`-Nonce vom chat.js, neu bei Reset). Reversibel/Papierkorb/Protokollierung unverändert. Code + Tests (411 webui grün) + Rechtstexte (CTOOL-04, ROADMAP SC3, Datenschutz Ziffer 6, AVV §3/§4/§6) angeglichen. Commits `98190c7`, `af53b6c`.
+- Phase 12 hinzugefügt (2026-07-21): Datei-Upload-Anhänge an Entwürfe — Betreiber-Feature-Wunsch aus der Phase-8-Live-Abnahme (Variante C: Ad-hoc-Upload, alle Dateitypen, nur Stationsleitung, ~15 MB Limit, Kein-Auto-Send bleibt strukturell). Todo unter `.planning/todos/pending/`. Noch nicht geplant.
 
 ## History
 

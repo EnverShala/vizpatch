@@ -20,6 +20,7 @@
 | 9 | Agentischer Chat mit Postfach-Werkzeugen (v1.5) | Chat mit Tool-Use: Mails suchen/lesen, Entwürfe anlegen/bearbeiten, in Papierkorb verschieben (Bestätigung), Kein-Auto-Send | CTOOL-01…05 | 6 | ✅ Code-komplett (2026-07-18) |
 | 10 | Reversible Pseudonymisierung vor LLM (v1.6) | **Variante A (regex-only):** strukturierte PII (E-Mail/Telefon/IBAN/Kreditkarte/URL/Datum) reversibel via pii.py, kein NER. Namen → ANON-06 deferred | ANON-01…05 | 5 | ✅ Complete (2026-07-20) — 4 plans, DSGVO/AVV vom DSB freigegeben |
 | 11 | Lokale Voll-Abnahme & Update-Probe v1.6 (Rollout-Vorbereitung) | v1.2–v1.6 komplett bei Vizionists gegen Test-Postfach durchtesten + Update/Rollback lokal proben, damit der Kunden-Rollout ein Nicht-Ereignis wird | RLL-01…05 | 5 | 📝 Roadmap-Eintrag (2026-07-19) — Detail-Plan später |
+| 12 | Datei-Upload-Anhänge an Entwürfe (v1.8) | WebUI-Chat hängt ad-hoc hochgeladene Dateien (Variante C, alle Typen) per `entwurf_mit_anhang` an Entwürfe (MIME + IMAP APPEND), Kein-Auto-Send bleibt | ATT-01…05 | — | ⏳ Pending — Planung läuft |
 
 **38 Requirements (v1) + Phase 5 (v1.2) + Phasen 6–8 (v1.3/v1.4 Backlog: STY/CHAT/OUT). Phase 4 wurde 2026-07-12 vorgezogen — die Esso-Tankstelle Leonberg bekommt den ersten produktiven Rollout bereits mit Browser-UI. Standalone-.exe/Docker-lose Distribution wurde bewusst verworfen (2026-07-16, zu großer Architektur-Umbau — Docker bleibt Deployment-Standard).**
 
@@ -155,7 +156,6 @@ Plans:
 
 - [ ] 04.05-update-autostart-deployment-PLAN.md - GHCR-Pull + Tarball-Upload + install-autostart.sh + build-deployment-package.sh v1.1.0 (UI-05) — Hinweis: WebUI-Update-Buttons am 2026-07-20 wieder entfernt; Updates laufen per SSH (`deployment/UPDATE-RUNBOOK-SSH.md`)
 
-
 **Hauptrisiken:**
 
 - Docker-Socket-Mount vom `webui`-Container hat Root-äquivalente Rechte auf dem Host → Basic-Auth zwingend erforderlich, Doku warnt vor Exposure jenseits LAN
@@ -226,6 +226,7 @@ Plans:
 **Plans:** 3/4 plans executed — 06-04 Task 1 (Fixtures) fertig, Task 2 (Checkpoint) PENDING
 
 Plans:
+
 - [x] 06-01-PLAN.md — Agent-Injection: style.md-Feld + {style_md}-Prompt-Block mit Hierarchie (STY-02)
 - [x] 06-02-PLAN.md — WebUI-Extraktions-Service: extract_style() + pii/llm-Duplikate (Drift-Guard) + \Sent-Detection + agents_io-style-I/O (STY-01/04/05)
 - [x] 06-03-PLAN.md — WebUI-UI+Endpoints: style-Fieldset + Freitext + Enable-Schalter + /style/relearn + Auto-Extraktion beim Setup (STY-01/03/05)
@@ -405,12 +406,16 @@ Kreditkarte, Telefon, E-Mail) erreichen den Anbieter nicht mehr.
 1. Reversible Pseudonymisierungs-Engine: erkennt strukturierte PII (E-Mail, Telefon, IBAN, Kreditkarte, URL,
    Datum) per Regex UND unstrukturierte (Person/Firma/Ort) per deutschem NER; ersetzt durch stabile
    Platzhalter; hält ein **lokales Mapping Platzhalter↔Original**, das den Server nie verlässt.
+
 2. Alle LLM-Pfade nutzen die Pipeline: **anonymisieren VOR Übermittlung**, **de-anonymisieren NACH der Antwort**
    — Klassifikation, Draft-Generierung, Stil-Extraktion, Chat und agentische Tool-Ergebnisse.
+
 3. De-Anonymisierung stellt in der LLM-Ausgabe alle Platzhalter korrekt wieder her; erzeugte Drafts/Antworten
    enthalten die echten Daten, kein Platzhalter-Leck.
+
 4. **Erkennungs-Coverage messbar** an Fixtures (Precision/Recall der PII-Erkennung dokumentiert); übersehene
    Entitäten werden als Restrisiko behandelt; Feature per Flag schaltbar mit sauberem Fallback.
+
 5. **DSGVO/AVV-Neubewertung dokumentiert:** der Anbieter erhält nur pseudonymisierte Daten; Datenschutzerklärung
    + AVV-Checkliste aktualisiert. **Ehrlicher Hinweis:** pseudonymisierte Daten bleiben rechtlich
    personenbezogen (ErwG 26) — die endgültige „AVV-nicht-nötig"-Aussage trifft der/die Datenschutzbeauftragte.
@@ -491,6 +496,26 @@ Plans:
 | **Summe (v1)** | **~4.5–5 Werktage** | **~5.5 h** |
 
 **Realistischer Kalender:** Woche 1 = Phase 1 + Phase 2 fertig. Woche 2 = Phase 4 (Web-UI) → Vor-Ort-Termin bei Esso Leonberg mit UI-Rollout. Woche 3 = Phase 3 (Tuning + Übergabe, teilweise parallel).
+
+### Phase 12: Datei-Upload-Anhänge an Entwürfe (v1.8)
+
+**Goal:** Der agentische WebUI-Chat kann Datei-Anhänge an Entwürfe hängen. Der Betreiber lädt ad-hoc eine Datei hoch (alle Dateitypen, Variante C), der Agent ruft das neue Werkzeug `entwurf_mit_anhang` auf, das den Entwurf als MIME-multipart baut und per IMAP APPEND im Drafts-Ordner ablegt — **Kein Senden**, Anhang nur am Entwurf. Nur WebUI (Add-in-Upload zurückgestellt).
+**Requirements**: ATT-01…05
+**Depends on:** Phase 9 (agentischer Chat + `chat_tools.py`)
+**Plans:** 3 plans (Wave 1: 12-01 | Wave 2: 12-02 | Wave 3: 12-03 — sequentiell)
+
+Plans:
+**Wave 1**
+
+- [ ] 12-01-PLAN.md — entwurf_mit_anhang-Werkzeug + Pending-Upload-Store + MIME-Bau + Guard-Sync (ATT-02/04/05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 12-02-PLAN.md — Upload-Endpoint /chat/{id}/upload (Streaming, MAX_ATTACHMENT_MB) + attachment_meta-Durchreichen (ATT-01/03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 12-03-PLAN.md — Chat-UI-Upload-Widget + Metadaten-Anhang + Live-Abnahme (ATT-03)
 
 ---
 
