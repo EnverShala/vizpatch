@@ -1208,6 +1208,44 @@ def test_entwurf_in_papierkorb_flag_disabled_moves_without_confirmation(mocker, 
     assert "bestaetigung_erforderlich" not in result
 
 
+def test_tool_schemas_for_omits_confirmation_when_flag_disabled(tmp_path, monkeypatch):
+    """ENABLE_TRASH_CONFIRMATION=false: die Papierkorb-Werkzeuge werden dem LLM OHNE
+    Bestätigungs-Workflow und OHNE confirmed/confirmation_token angeboten — damit
+    das Modell nicht über eine (nicht existierende) Bestätigung rationalisiert."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+    monkeypatch.setenv("ENABLE_TRASH_CONFIRMATION", "false")
+
+    import src.chat_tools as chat_tools
+
+    schemas = {s["name"]: s for s in chat_tools._tool_schemas_for("info")}
+    for name in ("mail_in_papierkorb", "entwurf_in_papierkorb"):
+        props = schemas[name]["input_schema"]["properties"]
+        assert "confirmed" not in props
+        assert "confirmation_token" not in props
+        desc = schemas[name]["description"].lower()
+        assert "bestätig" not in desc
+        assert "confirmation_token" not in desc
+    # statische TOOL_SCHEMAS bleibt unangetastet (Default-Sicherheits-Workflow)
+    static = {s["name"]: s for s in chat_tools.TOOL_SCHEMAS}
+    assert "confirmed" in static["mail_in_papierkorb"]["input_schema"]["properties"]
+
+
+def test_tool_schemas_for_keeps_confirmation_by_default(tmp_path, monkeypatch):
+    """Default (Flag nicht gesetzt): _tool_schemas_for liefert die vollen Schemas
+    inkl. confirmed/confirmation_token — unveränderter Sicherheits-Workflow."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+    monkeypatch.delenv("ENABLE_TRASH_CONFIRMATION", raising=False)
+
+    import src.chat_tools as chat_tools
+
+    schemas = {s["name"]: s for s in chat_tools._tool_schemas_for("info")}
+    props = schemas["mail_in_papierkorb"]["input_schema"]["properties"]
+    assert "confirmed" in props
+    assert "confirmation_token" in props
+
+
 def test_mail_in_papierkorb_confirmed_true_no_trash_folder_returns_error_no_crash(mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _write_agent_env("info")
