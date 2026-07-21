@@ -1,12 +1,14 @@
 import json
 import logging
+import mimetypes
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -41,6 +43,17 @@ PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Goog
 
 # Review IN-04: serverseitige Obergrenze fuer context.md/style.md ueber /save.
 MAX_CONFIG_MD_BYTES = 64 * 1024
+
+# Phase 12 (ATT-01, D-94): Default-Obergrenze fuer Chat-Datei-Uploads (Rohgroesse,
+# NICHT die spaeter base64-aufgeblähte Anhang-Groesse — siehe 12-RESEARCH.md Pitfall 4).
+# Ueberschreibbar via MAX_ATTACHMENT_MB (agent/docker-compose.yml, globales Muster wie
+# CHAT_MAX_TOKENS, Assumption A1 — kein per-Agent-Wert).
+MAX_ATTACHMENT_MB_DEFAULT = 15
+
+# tmp-Zielverzeichnis fuer Chat-Uploads (Streaming-Ziel vor der Pending-Upload-
+# Registrierung, chat_tools.register_pending_upload). Container-lokal, kein
+# /data-Volume-Bezug (Assumption A3, Single-Container-Deployment).
+_CHAT_UPLOAD_TMP_DIRNAME = "vizpatch-uploads"
 
 # Datenschutz-Zustimmung (D-68): Stand der Bestimmungen, mit denen ein
 # gegebenes PRIVACY_CONSENT_ACCEPTED=true korrespondiert (siehe _datenschutz.html).
@@ -668,6 +681,74 @@ def chat_send(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/chat/{agent_id}/upload", dependencies=[Depends(auth.require_setup)])
+@limiter.limit(
+    # Dieselbe Rate-Limit-Konstruktion wie chat_send (T-12-06, DoS-Schutz).
+    lambda: f"{os.getenv('CHAT_RATE_LIMIT_PER_MIN', str(chat.CHAT_RATE_LIMIT_PER_MIN_DEFAULT))}/minute"
+)
+def chat_upload(
+    request: Request,
+    agent_id: str,
+    file: UploadFile = File(...),
+    session_id: str = Form(""),
+    user: str = Depends(auth.require_auth),
+):
+    """Streaming-Datei-Upload für den Chat-Tool-Loop (ATT-01, D-92/94/96): legt die
+    hochgeladene Datei server-generiert benannt in einem tmp-Verzeichnis ab und
+    registriert sie im Pending-Upload-Store (`chat_tools.register_pending_upload`) —
+    das eigentliche MIME-/IMAP-APPEND übernimmt `entwurf_mit_anhang` (Plan 12-01) im
+    nächsten Chat-Turn.
+
+    Dieselbe Auth-Kombination wie `chat_send` (`auth.require_setup` +
+    `auth.require_auth`, D-95/ASVS V2). `agent_id` läuft durch denselben
+    Existenz-Guard wie `chat_embed` (ASVS V4). Der Client-Dateiname wird NUR über
+    `os.path.basename()` sanitized für Anzeige/Content-Disposition genutzt — das
+    tmp-File selbst bekommt einen server-generierten Namen via `tempfile.mkstemp`
+    (T-12-07/ASVS V5, Path-Traversal ausgeschlossen).
+
+    Streaming: `file.file.read(1 MB)`-Chunks (KEIN `file.read()` — Full-Memory-Load,
+    verletzt D-96) mit einem Live-Byte-Zähler gegen `MAX_ATTACHMENT_MB` (Default 15,
+    T-12-06/Pitfall 4 aus 12-RESEARCH.md: Prüfung gegen die ROHE Byte-Anzahl, nicht
+    die spätere base64-aufgeblähte Größe). Bei Überschreitung: 413 + tmp-Cleanup."""
+    if agent_id not in agents_io.list_agent_ids():
+        raise HTTPException(status_code=404, detail="agent not found")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id fehlt")
+
+    max_bytes = chat._int_env("MAX_ATTACHMENT_MB", MAX_ATTACHMENT_MB_DEFAULT) * 1024 * 1024
+    filename = os.path.basename(file.filename or "anhang")
+
+    tmp_dir = Path(tempfile.gettempdir()) / _CHAT_UPLOAD_TMP_DIRNAME
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_name = tempfile.mkstemp(dir=tmp_dir, suffix=".upload")
+    tmp_path = Path(tmp_name)
+    os.close(tmp_fd)
+
+    written = 0
+    try:
+        with tmp_path.open("wb") as out:
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Datei überschreitet das Limit von {max_bytes // (1024 * 1024)} MB.",
+                    )
+                out.write(chunk)
+    except HTTPException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        logger.warning("chat_upload_failed", extra={"agent_id": agent_id, "error": str(e)})
+        raise HTTPException(status_code=400, detail="Upload fehlgeschlagen.")
+
+    mimetyp, _ = mimetypes.guess_type(filename)
+    mimetyp = mimetyp or "application/octet-stream"
+    chat_tools.register_pending_upload(agent_id, session_id, tmp_path, filename, written, mimetyp)
+    return {"ok": True, "dateiname": filename, "groesse": written, "mimetyp": mimetyp}
 
 
 def _save_response(request: Request, is_htmx: bool, ok: bool, message: str, redirect_query: str) -> object:

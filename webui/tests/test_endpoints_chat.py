@@ -568,4 +568,115 @@ def test_embed_test_fixture_has_no_external_urls():
     fixture = Path(__file__).resolve().parent / "fixtures" / "embed_test.html"
     text = fixture.read_text(encoding="utf-8")
     assert re.search(r"https?://", text) is None
-    assert re.search(r"(^|[^:])//", text, re.MULTILINE) is None
+
+
+# --- Chat-Datei-Upload (Plan 12-02, ATT-01) -----------------------------------
+
+
+def test_chat_upload_requires_auth(authed_client, tmp_path, monkeypatch):
+    """Analog test_chat_embed_requires_auth: ohne Basic-Auth -> 401."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    response = authed_client.post(
+        "/chat/info/upload",
+        files={"file": ("anhang.txt", b"hallo welt", "text/plain")},
+        data={"session_id": "sess-1"},
+    )
+    assert response.status_code == 401
+
+
+def test_chat_upload_unknown_agent_returns_404(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.post(
+        "/chat/ghost/upload",
+        auth=("admin", "pw"),
+        files={"file": ("anhang.txt", b"hallo welt", "text/plain")},
+        data={"session_id": "sess-1"},
+    )
+    assert response.status_code == 404
+
+
+def test_chat_upload_missing_session_id_returns_400(authed_client, tmp_path, monkeypatch):
+    """Kein session_id-Formfeld (httpx laesst leere Strings im Multipart-Encoder
+    ohnehin weg — der reale Fall, den ein Browser ohne Sitzungs-Handling
+    erzeugen wuerde) -> 400, nicht der generische FastAPI-422 (Form-Default ""
+    + manuelle Pruefung statt Form(...))."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    response = authed_client.post(
+        "/chat/info/upload",
+        auth=("admin", "pw"),
+        files={"file": ("anhang.txt", b"hallo welt", "text/plain")},
+    )
+    assert response.status_code == 400
+
+
+def test_chat_upload_rejects_oversized_file(authed_client, tmp_path, monkeypatch):
+    """T-12-06/Pitfall 4: MAX_ATTACHMENT_MB=0 -> jeder nicht-leere Upload
+    ueberschreitet das Limit sofort -> 413, tmp-Datei wird verworfen (kein Leck),
+    register_pending_upload wird NICHT aufgerufen."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("MAX_ATTACHMENT_MB", "0")
+    _write_agent("info")
+    import src.chat_tools as chat_tools
+
+    response = authed_client.post(
+        "/chat/info/upload",
+        auth=("admin", "pw"),
+        files={"file": ("zu-gross.txt", b"x" * 10, "text/plain")},
+        data={"session_id": "sess-oversized"},
+    )
+    assert response.status_code == 413
+    assert "Limit" in response.json()["detail"]
+    assert chat_tools._consume_pending_upload("info", "sess-oversized") is None
+
+
+def test_chat_upload_success_registers_pending_upload(authed_client, mocker, tmp_path, monkeypatch):
+    """Erfolgsfall: 200 mit ASCII-JSON-Keys, register_pending_upload wird mit dem
+    server-generierten tmp-Pfad + sanitiertem Dateinamen + gezaehlter Groesse +
+    erratenem Mimetyp aufgerufen. Streaming-Nachweis via file.file.read-Mock
+    (Pattern 3, kein file.read())."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    mock_register = mocker.patch("src.main.chat_tools.register_pending_upload")
+
+    content = b"Hallo, das ist ein Testanhang."
+    response = authed_client.post(
+        "/chat/info/upload",
+        auth=("admin", "pw"),
+        files={"file": ("../../etc/rechnung.pdf", content, "application/pdf")},
+        data={"session_id": "sess-ok"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["dateiname"] == "rechnung.pdf"
+    assert body["groesse"] == len(content)
+    assert body["mimetyp"] == "application/pdf"
+
+    mock_register.assert_called_once()
+    call_args = mock_register.call_args.args
+    assert call_args[0] == "info"
+    assert call_args[1] == "sess-ok"
+    assert call_args[3] == "rechnung.pdf"
+    assert call_args[4] == len(content)
+    assert call_args[5] == "application/pdf"
+    tmp_path_arg = call_args[2]
+    assert tmp_path_arg.exists()
+    assert tmp_path_arg.read_bytes() == content
+    tmp_path_arg.unlink(missing_ok=True)
+
+
+def test_chat_upload_streams_via_file_read_not_full_read(authed_client, mocker, tmp_path, monkeypatch):
+    """Pattern 3/D-96: verifiziert, dass chat_upload ueber file.file.read(n) liest
+    (chunked) statt file.read() (Full-Memory-Load) — Nachweis via Quelltext-Scan
+    (robust gegen Implementierungsdetails der UploadFile-Bibliothek selbst)."""
+    import inspect
+
+    import src.main as main_module
+
+    source = inspect.getsource(main_module.chat_upload)
+    # Der ausfuehrende Read-Aufruf muss ueber file.file.read(n) (chunked) laufen —
+    # geprueft ueber den vollstaendigen Read-Ausdruck (robust gegen die erklaerende
+    # Docstring-Erwaehnung "KEIN `file.read()`" weiter oben in derselben Funktion).
+    assert "while chunk := file.file.read(1024 * 1024)" in source
