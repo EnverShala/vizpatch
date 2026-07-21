@@ -91,7 +91,11 @@ def _addin_allowed_origins() -> list[str]:
     Default) ab — dieselben `https://…`-Hosts, die auch in der gelockerten CSP
     das Framing durch Outlook erlauben. `'self'` wird verworfen (Same-Origin ist
     ohnehin generell erlaubt)."""
-    raw = os.getenv("ADDIN_FRAME_ANCESTORS", DEFAULT_ADDIN_FRAME_ANCESTORS)
+    # Ein gesetzter, aber LEERER Env-Wert (z. B. `ADDIN_FRAME_ANCESTORS: ${...:-}`
+    # aus der Compose) darf den Default NICHT überschreiben — sonst wären gar keine
+    # Add-in-Origins erlaubt und jeder Add-in-Request liefe in 403. `or`-Fallback +
+    # strip() fangen leere/whitespace-Werte ab.
+    raw = (os.getenv("ADDIN_FRAME_ANCESTORS") or "").strip() or DEFAULT_ADDIN_FRAME_ANCESTORS
     return [tok for tok in raw.split() if tok.startswith("https://")]
 
 
@@ -157,7 +161,7 @@ async def add_security_headers(request: Request, call_next):
         # zulaesst (kein `*`-Wildcard, Clickjacking-Schutz).
         if "X-Frame-Options" in response.headers:
             del response.headers["X-Frame-Options"]
-        frame_ancestors = os.getenv("ADDIN_FRAME_ANCESTORS", DEFAULT_ADDIN_FRAME_ANCESTORS)
+        frame_ancestors = (os.getenv("ADDIN_FRAME_ANCESTORS") or "").strip() or DEFAULT_ADDIN_FRAME_ANCESTORS
         script_src = "'self' 'unsafe-inline'"
         frame_src_directive = ""
         if path.startswith("/addin/"):
