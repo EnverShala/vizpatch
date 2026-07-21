@@ -1032,6 +1032,75 @@ def _build_new_draft(text: str, betreff: str, an: str = "", reply_to=None, von: 
     return bytes(msg), subject, to_addr
 
 
+def _build_new_draft_mit_anhang(
+    text: str,
+    betreff: str,
+    anhang_bytes: bytes,
+    anhang_dateiname: str,
+    anhang_mimetyp: str,
+    an: str = "",
+    reply_to=None,
+    von: str = "",
+) -> tuple[bytes, str, str]:
+    """Erweiterung von `_build_new_draft` (ATT-02, D-93) um einen Datei-Anhang
+    als separaten Base64-MIME-Part. Identischer Header-/Threading-/Message-ID-
+    Aufbau wie `_build_new_draft` (siehe dort für Details) — der Unterschied
+    ist ausschließlich der Body-Aufbau: ERST `set_content(text, ...)` (macht
+    die Nachricht `text/plain`), DANACH `add_attachment(...)` (konvertiert
+    automatisch zu `multipart/mixed` und setzt `Content-Disposition:
+    attachment`). Diese Reihenfolge ist zwingend (12-RESEARCH.md Pitfall 3) —
+    vertauscht wirft `add_attachment()` einen `TypeError`. Gibt (bytes,
+    effektiver_betreff, effektiver_empfaenger) zurück."""
+    to_addr = (an or "").strip()
+    subject = (betreff or "").strip()
+    domain = (von or "").split("@")[-1] if "@" in (von or "") else "localhost"
+
+    msg = EmailMessage()
+    if (von or "").strip():
+        msg["From"] = _sanitize_address_list(von.strip())
+
+    if reply_to is not None:
+        orig_from = (getattr(reply_to, "from_", "") or "").strip()
+        if not to_addr:
+            to_addr = orig_from
+        if not subject:
+            orig_subj = (getattr(reply_to, "subject", "") or "").strip()
+            subject = orig_subj if orig_subj.lower().startswith("re:") else (f"Re: {orig_subj}".strip() if orig_subj else "")
+        orig_mid = ""
+        orig_refs = ""
+        try:
+            headers = getattr(reply_to, "headers", None) or {}
+            orig_mid = str(_first(headers.get("message-id")) or "").strip()
+            orig_refs = str(_first(headers.get("references")) or "").strip()
+        except Exception:
+            pass
+        if orig_mid:
+            orig_mid = _sanitize_header_value(orig_mid)
+            orig_refs = _sanitize_header_value(orig_refs)
+            msg["In-Reply-To"] = orig_mid
+            msg["References"] = f"{orig_refs} {orig_mid}".strip() if orig_refs else orig_mid
+
+    to_addr = _sanitize_address_list(to_addr)
+    subject = _sanitize_header_value(subject)
+    if to_addr:
+        msg["To"] = to_addr
+    msg["Subject"] = subject
+    msg["Date"] = format_datetime(datetime.now(timezone.utc))
+    msg["Message-ID"] = make_msgid(domain=domain or "localhost")
+
+    # Pitfall 3 (12-RESEARCH.md): set_content() ZUERST, add_attachment() DANACH.
+    msg.set_content(text, subtype="plain", charset="utf-8")
+
+    maintype, _, subtype = (anhang_mimetyp or "application/octet-stream").partition("/")
+    msg.add_attachment(
+        anhang_bytes,
+        maintype=maintype or "application",
+        subtype=subtype or "octet-stream",
+        filename=anhang_dateiname,
+    )
+    return bytes(msg), subject, to_addr
+
+
 def entwurf_erstellen(
     agent_id: str,
     text: str,
@@ -1114,6 +1183,135 @@ def entwurf_erstellen(
     }
 
 
+def entwurf_mit_anhang(
+    agent_id: str,
+    text: str,
+    betreff: str = "",
+    an: str | None = None,
+    in_reply_to_uid: str | None = None,
+    quell_ordner: str = "INBOX",
+    session_id: str = "",
+    *,
+    anonymizer: "pii.Anonymizer | None" = None,
+) -> dict:
+    """Handelndes Werkzeug (ATT-02, D-92/93/95/96): legt einen NEUEN Entwurf MIT
+    Datei-Anhang im Entwürfe-Ordner an (IMAP APPEND, `\\Draft`-Flag) — der
+    Anhang stammt aus einer VORHER per `/chat/{agent_id}/upload` hochgeladenen
+    Datei, die serverseitig über `session_id` aufgelöst wird
+    (`_consume_pending_upload`). Das LLM liefert `session_id` NIE selbst — sie
+    wird von der Tool-Schleife injiziert (`_SESSION_SCOPED_TOOLS`), das Modell
+    kann diese Referenz nicht selbst konstruieren/fälschen (T-12-01). Sendet
+    NICHTS — Kein-Auto-Send gilt (D-95).
+
+    Der Datei-Rohinhalt erreicht NIE das Tool-Result (ATT-05/D-96/T-12-02) —
+    nur Dateiname/Ordner/Betreff/Empfänger. Die tmp-Upload-Datei wird in JEDEM
+    Ausgang (Erfolg, IMAP-Fehler, kein Pending-Upload) im `finally`-Block
+    gelöscht (D-95/T-12-03, 12-RESEARCH.md Pitfall 5)."""
+    text_str = (text or "").strip()
+    if not text_str:
+        return {"fehler": "Kein Text angegeben."}
+
+    pending = _consume_pending_upload(agent_id, session_id)
+    if pending is None:
+        return {
+            "fehler": (
+                "Kein hochgeladener Anhang für diese Sitzung gefunden. "
+                "Bitte zuerst eine Datei hochladen."
+            )
+        }
+
+    tmp_path: Path = pending["path"]
+    drafts_folder = None
+    is_reply = False
+    uid_str = ""
+    try:
+        # Defense-in-Depth (T-12-05, 12-RESEARCH.md Pitfall 4): die
+        # PRIMÄRPRÜFUNG läuft bereits im Upload-Endpoint (Plan 12-02) gegen die
+        # tatsächlich gestreamte Rohgröße — diese zweite Prüfung fängt den
+        # (unwahrscheinlichen) Fall ab, dass sich die Datei zwischen Upload und
+        # Tool-Aufruf verändert hätte. Geprüft wird IMMER die rohe (unkodierte)
+        # Byte-Anzahl, NIE die base64-aufgeblähte Größe.
+        max_bytes = chat._int_env("MAX_ATTACHMENT_MB", 15) * 1024 * 1024
+        if pending["size"] > max_bytes:
+            return {
+                "fehler": (
+                    f"Anhang '{pending['filename']}' ({pending['size']} Bytes) "
+                    f"überschreitet das Limit von {max_bytes // (1024 * 1024)} MB."
+                )
+            }
+
+        try:
+            anhang_bytes = tmp_path.read_bytes()
+        except OSError as e:
+            logger.warning(
+                "entwurf_mit_anhang_tmp_read_failed", extra={"agent_id": agent_id, "error": str(e)}
+            )
+            return {"fehler": "Hochgeladene Datei konnte nicht gelesen werden (evtl. abgelaufen)."}
+
+        try:
+            with open_agent_mailbox(agent_id) as mailbox:
+                env = read_env_raw(agent_id)
+                own = (env.get("IMAP_USER") or "").strip()
+                drafts_folder = _resolve_drafts_folder(mailbox, env)
+
+                reply_to = None
+                uid_str = str(in_reply_to_uid or "").strip()
+                if uid_str:
+                    if not _UID_RE.match(uid_str):
+                        return _invalid_uid_error(uid_str)
+                    is_reply = True
+                    folder = (quell_ordner or "INBOX").strip() or "INBOX"
+                    try:
+                        mailbox.folder.set(folder)
+                        msgs = list(mailbox.fetch(AND(uid=uid_str), mark_seen=False, limit=1))
+                    except Exception:
+                        return {"fehler": f"Lesen der Bezugs-Mail uid={uid_str} in '{folder}' fehlgeschlagen."}
+                    if not msgs:
+                        return {"fehler": f"Bezugs-Mail uid={uid_str} in '{folder}' nicht gefunden."}
+                    reply_to = msgs[0]
+
+                new_bytes, eff_betreff, eff_an = _build_new_draft_mit_anhang(
+                    text_str,
+                    betreff or "",
+                    anhang_bytes,
+                    pending["filename"],
+                    pending["mimetype"],
+                    an=an or "",
+                    reply_to=reply_to,
+                    von=own,
+                )
+                try:
+                    mailbox.append(new_bytes, folder=drafts_folder, flag_set=[MailMessageFlags.DRAFT])
+                except Exception as e:
+                    logger.warning(
+                        "entwurf_mit_anhang_append_failed",
+                        extra={"agent_id": agent_id, "folder": drafts_folder, "error": str(e)},
+                    )
+                    return {"fehler": f"Ablegen des Entwurfs im Ordner '{drafts_folder}' fehlgeschlagen."}
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.warning("entwurf_mit_anhang_imap_connect_failed", extra={"agent_id": agent_id, "error": str(e)})
+            return {"fehler": "IMAP-Verbindung fehlgeschlagen."}
+    finally:
+        # D-95/Pitfall 5 (12-RESEARCH.md): tmp-Cleanup in JEDEM Ausgang, nicht
+        # nur bei Erfolg — sonst sammeln sich verwaiste Upload-Dateien an.
+        tmp_path.unlink(missing_ok=True)
+
+    logger.info(
+        "entwurf_mit_anhang_erstellt",
+        extra={"agent_id": agent_id, "drafts_folder": drafts_folder, "antwort": is_reply},
+    )
+    return {
+        "ok": True,
+        "ordner": drafts_folder,
+        "betreff": _anon_field(anonymizer, eff_betreff),
+        "an": _anon_field(anonymizer, eff_an),
+        "anhang_dateiname": pending["filename"],
+        "antwort_auf_uid": uid_str if is_reply else None,
+    }
+
+
 # --- CTOOL-04 (D-76, HIGH RISK): Bestätigungs-Token für destruktive Werkzeuge ---
 #
 # W2-Hardening (Plan-Checker-Warnung zu 09-04): ein bloßes `confirmed=true`, das
@@ -1164,7 +1362,7 @@ _authorized_move_sessions: dict[str, float] = {}
 
 _SESSION_AUTHORIZATION_TTL_SECONDS = 12 * 3600
 
-_SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb"}
+_SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb", "entwurf_mit_anhang"}
 
 
 # --- Phase 12 (ATT-02, D-92/95/96): Pending-Upload-Store ---
@@ -1773,6 +1971,45 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
+        "name": "entwurf_mit_anhang",
+        "description": (
+            "Legt einen NEUEN E-Mail-Entwurf MIT Datei-Anhang im Entwürfe-Ordner "
+            "an (IMAP APPEND, kein Senden) — nutze dies, wenn der Betreiber zuvor "
+            "eine Datei im Chat hochgeladen hat und diese an einen Entwurf hängen "
+            "möchte. Für eine Antwort auf eine bestimmte Mail 'in_reply_to_uid' "
+            "(und ggf. 'quell_ordner', Standard INBOX) angeben — Empfänger, "
+            "Betreff ('Re: …') und Threading werden dann automatisch gesetzt. "
+            "Sonst 'an' und 'betreff' angeben. Sendet NICHTS."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Der Nachrichtentext des Entwurfs.",
+                },
+                "betreff": {
+                    "type": "string",
+                    "description": "Betreff. Bei Antwort optional (wird aus der Bezugs-Mail als 'Re: …' abgeleitet).",
+                },
+                "an": {
+                    "type": "string",
+                    "description": "Empfänger-Adresse. Bei Antwort optional (wird aus der Bezugs-Mail übernommen).",
+                },
+                "in_reply_to_uid": {
+                    "type": "string",
+                    "description": "Optional: uid der Mail, auf die geantwortet wird (für Empfänger/Betreff/Threading).",
+                },
+                "quell_ordner": {
+                    "type": "string",
+                    "description": "Ordner der Bezugs-Mail für 'in_reply_to_uid' (Standard INBOX).",
+                },
+            },
+            "required": ["text"],
+            # KEIN "session_id"-Feld hier -- wird serverseitig injiziert (_SESSION_SCOPED_TOOLS).
+        },
+    },
+    {
         "name": "mail_in_papierkorb",
         "description": (
             "Verschiebt eine Mail in den Papierkorb (KEIN endgültiges Löschen — "
@@ -1892,6 +2129,7 @@ TOOL_HANDLERS: dict[str, Callable[..., dict]] = {
     "entwurf_lesen": entwurf_lesen,
     "entwurf_bearbeiten": entwurf_bearbeiten,
     "entwurf_erstellen": entwurf_erstellen,
+    "entwurf_mit_anhang": entwurf_mit_anhang,
     "mail_in_papierkorb": mail_in_papierkorb,
     "entwurf_in_papierkorb": entwurf_in_papierkorb,
 }

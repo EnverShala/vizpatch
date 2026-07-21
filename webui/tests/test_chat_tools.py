@@ -205,9 +205,10 @@ def test_mails_suchen_respects_limit_and_folder(mocker, tmp_path, monkeypatch):
 
 
 def test_tool_handlers_registry_contains_all_registered_tools():
-    """Erweitert um `mail_in_papierkorb`/`entwurf_in_papierkorb` (09-04, CTOOL-04) —
-    die destruktiven Bestätigungs-Gate-Werkzeuge, letzte Ergänzung des Werkzeugsatzes
-    aus Phase 9 (D-74..D-76)."""
+    """Erweitert um `entwurf_mit_anhang` (Phase 12, ATT-02) — das zehnte
+    Werkzeug (Datei-Anhang an Entwürfe). Vorher erweitert um
+    `mail_in_papierkorb`/`entwurf_in_papierkorb` (09-04, CTOOL-04) — die
+    destruktiven Bestätigungs-Gate-Werkzeuge (D-74..D-76)."""
     import src.chat_tools as chat_tools
 
     expected = {
@@ -218,6 +219,7 @@ def test_tool_handlers_registry_contains_all_registered_tools():
         "entwurf_lesen",
         "entwurf_bearbeiten",
         "entwurf_erstellen",
+        "entwurf_mit_anhang",
         "mail_in_papierkorb",
         "entwurf_in_papierkorb",
     }
@@ -2056,11 +2058,11 @@ def test_guard_ignores_allowed_no_send_negations_in_description():
 
 def test_tool_handlers_whitelist_is_exactly_the_seven_allowed_tools_no_send_tool():
     """CTOOL-05/D-77 — struktureller Nachweis, dass der Werkzeugsatz
-    AUSSCHLIESSLICH die sieben erlaubten (nicht-sendenden) Werkzeuge enthält:
-    kein zusätzliches, insbesondere kein Sende-Werkzeug wurde registriert.
-    Ergänzt `test_tool_handlers_registry_contains_all_registered_tools` (09-04)
-    um den expliziten Kein-Auto-Send-Rahmen dieses Plans (letzte Ergänzung des
-    Werkzeugsatzes aus Phase 9, D-74..D-77)."""
+    AUSSCHLIESSLICH die erlaubten (nicht-sendenden) Werkzeuge enthält: kein
+    zusätzliches, insbesondere kein Sende-Werkzeug wurde registriert. Erweitert
+    um `entwurf_mit_anhang` (Phase 12, ATT-02/ATT-04 — Datei-Anhang, weiterhin
+    kein Senden). Ergänzt `test_tool_handlers_registry_contains_all_registered_tools`
+    (09-04) um den expliziten Kein-Auto-Send-Rahmen (D-74..D-77/D-95)."""
     import src.chat_tools as chat_tools
 
     allowed = {
@@ -2071,6 +2073,7 @@ def test_tool_handlers_whitelist_is_exactly_the_seven_allowed_tools_no_send_tool
         "entwurf_lesen",
         "entwurf_bearbeiten",
         "entwurf_erstellen",
+        "entwurf_mit_anhang",
         "mail_in_papierkorb",
         "entwurf_in_papierkorb",
     }
@@ -2206,6 +2209,244 @@ def test_entwurf_erstellen_invalid_agent_id_raises_value_error(tmp_path, monkeyp
 
     with pytest.raises(ValueError):
         chat_tools.entwurf_erstellen("../evil", text="Text")
+
+
+# --- entwurf_mit_anhang (Phase 12, ATT-02): neuer Entwurf MIT Datei-Anhang ---
+
+def test_build_new_draft_mit_anhang_is_multipart_with_two_parts():
+    """12-RESEARCH.md Pitfall 3: set_content() ZUERST, add_attachment() DANACH
+    -- die erzeugten Bytes muessen als multipart/mixed mit genau 2 Parts (Text
+    + Anhang) parsebar sein."""
+    import email as _email
+
+    import src.chat_tools as chat_tools
+
+    raw, subject, to_addr = chat_tools._build_new_draft_mit_anhang(
+        "Anbei die Datei.",
+        "Ihre Unterlagen",
+        b"%PDF-1.4 fake-bytes",
+        "unterlagen.pdf",
+        "application/pdf",
+        an="kunde@example.com",
+    )
+
+    parsed = _email.message_from_bytes(raw)
+    assert parsed.is_multipart() is True
+    payload = parsed.get_payload()
+    assert len(payload) == 2
+    assert subject == "Ihre Unterlagen"
+    assert to_addr == "kunde@example.com"
+
+    attachment_part = payload[1]
+    assert attachment_part.get_content_disposition() == "attachment"
+    assert attachment_part.get_filename() == "unterlagen.pdf"
+    assert attachment_part.get_payload(decode=True) == b"%PDF-1.4 fake-bytes"
+
+
+def test_entwurf_mit_anhang_appends_draft_with_attachment(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "upload.pdf"
+    upload_path.write_bytes(b"%PDF-1.4 echter-inhalt")
+    chat_tools.register_pending_upload(
+        "info", "sess-anhang", upload_path, "rechnung.pdf", upload_path.stat().st_size, "application/pdf"
+    )
+
+    result = chat_tools.entwurf_mit_anhang(
+        "info",
+        text="Anbei die gewünschten Unterlagen.",
+        betreff="Ihre Anfrage",
+        an="kunde@example.com",
+        session_id="sess-anhang",
+    )
+
+    assert "fehler" not in result and result["ok"] is True
+    assert result["ordner"] == "Entwürfe"
+    assert result["anhang_dateiname"] == "rechnung.pdf"
+    mock_mailbox.append.assert_called_once()
+
+    appended = mock_mailbox.append.call_args.args[0]
+    import email as _email
+
+    parsed = _email.message_from_bytes(appended)
+    assert parsed.is_multipart() is True
+    attachment_part = parsed.get_payload()[1]
+    assert attachment_part.get_payload(decode=True) == b"%PDF-1.4 echter-inhalt"
+    assert attachment_part.get_filename() == "rechnung.pdf"
+
+    # tmp-Datei wurde nach erfolgreichem APPEND geloescht (D-95).
+    assert not upload_path.exists()
+    # Kein Sende-Pfad: nur APPEND.
+    mock_mailbox.expunge.assert_not_called()
+
+
+def test_entwurf_mit_anhang_reply_preserves_threading(mocker, tmp_path, monkeypatch):
+    """must_haves-Truth: Threading-Header (In-Reply-To/References) bleiben bei
+    Antwort-Entwürfen mit Anhang erhalten."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    original = _msg(
+        uid="5",
+        subject="Frage zu Öffnungszeiten",
+        from_="kunde@example.com",
+        headers={
+            "message-id": ("<orig-5@example.com>",),
+            "references": ("<thread-a@example.com>",),
+        },
+    )
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "anhang.pdf"
+    upload_path.write_bytes(b"anhang-inhalt")
+    chat_tools.register_pending_upload(
+        "info", "sess-reply", upload_path, "anhang.pdf", upload_path.stat().st_size, "application/pdf"
+    )
+
+    result = chat_tools.entwurf_mit_anhang(
+        "info", text="Anbei die Unterlagen.", in_reply_to_uid="5", session_id="sess-reply"
+    )
+
+    assert "fehler" not in result and result["ok"] is True
+    assert result["antwort_auf_uid"] == "5"
+    assert result["betreff"] == "Re: Frage zu Öffnungszeiten"
+    assert result["an"] == "kunde@example.com"
+
+    appended = mock_mailbox.append.call_args.args[0]
+    import email as _email
+
+    parsed = _email.message_from_bytes(appended)
+    assert parsed["In-Reply-To"] == "<orig-5@example.com>"
+    assert parsed["References"] == "<thread-a@example.com> <orig-5@example.com>"
+
+
+def test_entwurf_mit_anhang_no_pending_upload_returns_error_no_imap_connect(mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox_ctor = mocker.patch("src.chat_tools.MailBox")
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_mit_anhang(
+        "info", text="Text ohne Anhang-Session", session_id="sess-keine-datei"
+    )
+
+    assert "fehler" in result
+    mock_mailbox_ctor.assert_not_called()
+
+
+def test_entwurf_mit_anhang_cleans_up_tmp_file_on_append_failure(mocker, tmp_path, monkeypatch):
+    """12-RESEARCH.md Pitfall 5 (D-95): der finally-Block muss die tmp-Datei
+    AUCH bei einem IMAP-APPEND-Fehler loeschen, nicht nur bei Erfolg."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mock_mailbox.append.side_effect = RuntimeError("IMAP APPEND fehlgeschlagen")
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "upload.pdf"
+    upload_path.write_bytes(b"inhalt")
+    chat_tools.register_pending_upload(
+        "info", "sess-fail", upload_path, "upload.pdf", upload_path.stat().st_size, "application/pdf"
+    )
+
+    result = chat_tools.entwurf_mit_anhang("info", text="Text", session_id="sess-fail")
+
+    assert "fehler" in result
+    assert not upload_path.exists()  # tmp-Cleanup auch im Fehlerfall (D-95)
+
+
+def test_entwurf_mit_anhang_cleans_up_tmp_file_when_size_exceeds_limit(tmp_path, monkeypatch):
+    """Defense-in-Depth-Größenprüfung (T-12-05, Pitfall 4): auch bei
+    Überschreitung des Limits wird die tmp-Datei gelöscht, nicht nur beim
+    IMAP-Fehlerfall."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+    monkeypatch.setenv("MAX_ATTACHMENT_MB", "1")
+
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "riesig.bin"
+    upload_path.write_bytes(b"x")
+    too_large_bytes = 2 * 1024 * 1024
+    chat_tools.register_pending_upload(
+        "info", "sess-riesig", upload_path, "riesig.bin", too_large_bytes, "application/octet-stream"
+    )
+
+    result = chat_tools.entwurf_mit_anhang("info", text="Text", session_id="sess-riesig")
+
+    assert "fehler" in result
+    assert not upload_path.exists()
+
+
+def test_entwurf_mit_anhang_result_never_contains_raw_content(mocker, tmp_path, monkeypatch):
+    """ATT-05/D-96/T-12-02: das Tool-Result darf NIE den Base64-/Roh-Inhalt der
+    Datei enthalten -- nur Metadaten (Dateiname/Ordner/Betreff/Empfänger)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+
+    mock_mailbox = _fake_mailbox([])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Entwürfe", flags=("\\Drafts",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    secret_marker = b"GEHEIMER-DATEIINHALT-1234567890"
+    upload_path = tmp_path / "geheim.bin"
+    upload_path.write_bytes(secret_marker)
+    chat_tools.register_pending_upload(
+        "info", "sess-geheim", upload_path, "geheim.bin", len(secret_marker), "application/octet-stream"
+    )
+
+    result = chat_tools.entwurf_mit_anhang(
+        "info", text="Anbei.", an="kunde@example.com", session_id="sess-geheim"
+    )
+
+    assert "fehler" not in result and result["ok"] is True
+    assert set(result.keys()) <= {"ok", "ordner", "betreff", "an", "anhang_dateiname", "antwort_auf_uid"}
+    import json
+
+    serialized = json.dumps(result, default=str)
+    assert "GEHEIMER-DATEIINHALT" not in serialized
+    import base64
+
+    assert base64.b64encode(secret_marker).decode("ascii") not in serialized
+
+
+def test_entwurf_mit_anhang_missing_text_returns_error_without_consuming_upload(tmp_path, monkeypatch):
+    """Text-Validierung laeuft VOR dem Pending-Upload-Konsum -- ein leerer Text
+    darf den registrierten Upload nicht verbrauchen (der naechste echte Versuch
+    soll ihn noch vorfinden)."""
+    _setup_env(tmp_path, monkeypatch)
+    import src.chat_tools as chat_tools
+
+    upload_path = tmp_path / "upload.pdf"
+    upload_path.write_bytes(b"inhalt")
+    chat_tools.register_pending_upload(
+        "info", "sess-leer", upload_path, "upload.pdf", upload_path.stat().st_size, "application/pdf"
+    )
+
+    result = chat_tools.entwurf_mit_anhang("info", text="   ", session_id="sess-leer")
+
+    assert "fehler" in result
+    # Upload wurde NICHT konsumiert -- noch abrufbar.
+    assert chat_tools._consume_pending_upload("info", "sess-leer") is not None
 
 
 # --- Phase 10 Plan 03 Task 1: anonymizer-fähige Read-Handler (ANON-03) -------------
