@@ -27,7 +27,7 @@
 <section class="agent-picker">
   <h2>Agent</h2>
   <label for="agent-select">Agent wählen</label>
-  <select id="agent-select" onchange="window.location = this.value ? ('/?agent_id=' + this.value) : '/';">
+  <select id="agent-select" onchange="window.location = this.value ? ('/?agent_id=' + encodeURIComponent(this.value)) : '/?new=1';">
     <option value="" {% if not agent_id %}selected{% endif %}>-- Neuen Agent anlegen --</option>
     {% for a in agents %}
     <option value="{{ a }}" {% if a == agent_id %}selected{% endif %}>{{ a }}</option>
@@ -148,9 +148,9 @@
     <input type="password" id="llm_api_key" name="llm_api_key" value="" placeholder="**** (leer lassen = unverändert)" oninput="updateProviderHint(this.value)">
 
     <p class="hint" id="provider-detected">
-      {% if env.LLM_PROVIDER == 'anthropic' %}Erkannter Provider: Anthropic
-      {% elif env.LLM_PROVIDER == 'openai' %}Erkannter Provider: OpenAI
-      {% elif env.LLM_PROVIDER == 'google' %}Erkannter Provider: Google
+      {% if env.LLM_PROVIDER == 'anthropic' %}Erkannter LLM-Provider: Anthropic
+      {% elif env.LLM_PROVIDER == 'openai' %}Erkannter LLM-Provider: OpenAI
+      {% elif env.LLM_PROVIDER == 'google' %}Erkannter LLM-Provider: Google
       {% else %}Noch kein Key gespeichert{% endif %}
     </p>
 
@@ -256,7 +256,7 @@ function updateProviderHint(value) {
   } else if (provider === 'unknown') {
     hintEl.textContent = 'Format nicht erkannt';
   } else {
-    hintEl.textContent = 'Erkannter Provider: ' + labels[provider];
+    hintEl.textContent = 'Erkannter LLM-Provider: ' + labels[provider];
   }
   ['anthropic', 'openai', 'google'].forEach(function (p) {
     const el = document.getElementById('avv-' + p);

@@ -2,12 +2,25 @@
 id: addin-chat-contrast-unreadable
 title: Outlook-Add-in Chat — Buttons weiß-auf-weiß, Eingabefeld kaum sichtbar
 created: "2026-07-21"
-status: pending
+status: resolved
 area: outlook-addin
 severity: warning
-defer: true
+defer: false
 found_during: phase-8-live-abnahme
+resolved: "2026-07-21"
 ---
+
+## Fix (2026-07-21)
+
+`ChatView.cs` erzwingt jetzt ein festes helles Farbschema unabhängig vom
+Office-Theme: `this.BackColor`, RichTextBox-Log, Eingabe-`TextBox`
+(BackColor weiß / ForeColor dunkelgrau, `FixedSingle`-Rand) und alle Panels
+explizit gesetzt; Buttons über eine `MakeButton`-Helfermethode
+(`FlatStyle.Flat`, `UseVisualStyleBackColor=false`, hellgrauer Hintergrund,
+dunkle Schrift, sichtbarer Rahmen) — kein weiß-auf-weiß mehr. Solution baut
+(`msbuild` exit 0), 23/23 Tests grün, Kein-Auto-Send-Wächter grün. **Live erst
+nach Add-in-Rebuild + Re-Sideload.**
+
 
 ## Problem
 

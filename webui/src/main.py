@@ -221,12 +221,20 @@ def index(
     request: Request,
     user: str = Depends(auth.require_auth),
     agent_id: str = "",
+    new: int = 0,
     saved: int = 0,
     reset: int = 0,
     error: str = "",
 ):
     agents = agents_io.list_agent_ids()
-    active_id = agent_id or (agents[0] if agents else "")
+    # `new=1` (Dropdown „-- Neuen Agent anlegen --") erzwingt die Anlege-Maske
+    # statt automatisch agents[0] auszuwählen — sonst ist das Anlegen eines
+    # zweiten Agenten unerreichbar, weil `/` ohne agent_id immer den ersten
+    # Agenten selektiert.
+    if new:
+        active_id = ""
+    else:
+        active_id = agent_id or (agents[0] if agents else "")
     agent_statuses = _build_agent_statuses()
     root_env_raw = config_io.read_env_raw()
     privacy_consent_accepted = (root_env_raw.get("PRIVACY_CONSENT_ACCEPTED") or "").strip().lower() == "true"
@@ -881,7 +889,7 @@ def save(
 
         if "LLM_PROVIDER" in updates:
             provider_label = PROVIDER_LABELS.get(updates["LLM_PROVIDER"], updates["LLM_PROVIDER"])
-            return _save_response(request, is_htmx, True, f"Gespeichert — Provider erkannt: {provider_label}", "saved")
+            return _save_response(request, is_htmx, True, f"Gespeichert — LLM-Provider erkannt: {provider_label}", "saved")
 
     return _save_response(request, is_htmx, True, "Gespeichert", "saved")
 

@@ -57,20 +57,49 @@ namespace VizpatchAddin.TaskPane
             ShowConfigHintIfNeeded();
         }
 
+        // Explizite, theme-unabhaengige Farben: In der VSTO-CustomTaskPane erben
+        // WinForms-Controls sonst die Outlook-Ambient-Farben — je nach Office-Theme
+        // (u. a. Dark/High-Contrast) ergibt das weiss-auf-weiss und ein kaum
+        // sichtbares Eingabefeld. Wir erzwingen deshalb ein festes helles Schema.
+        private static readonly Color UiBg = Color.White;
+        private static readonly Color UiFg = Color.FromArgb(0x20, 0x20, 0x20);
+        private static readonly Color BtnBg = Color.FromArgb(0xEF, 0xEF, 0xEF);
+        private static readonly Color BtnBorder = Color.FromArgb(0xAD, 0xAD, 0xAD);
+
+        private static Button MakeButton(string text)
+        {
+            var b = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                FlatStyle = FlatStyle.Flat,
+                UseVisualStyleBackColor = false,
+                BackColor = BtnBg,
+                ForeColor = UiFg,
+                Margin = new Padding(4, 0, 0, 0),
+                Padding = new Padding(6, 2, 6, 2),
+            };
+            b.FlatAppearance.BorderColor = BtnBorder;
+            b.FlatAppearance.BorderSize = 1;
+            return b;
+        }
+
         private void BuildUi()
         {
             this.Dock = DockStyle.Fill;
+            this.BackColor = UiBg;
 
             _log = new RichTextBox
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
-                BackColor = Color.White,
+                BackColor = UiBg,
+                ForeColor = UiFg,
                 BorderStyle = BorderStyle.None,
                 Font = new Font("Segoe UI", 9.5f),
             };
 
-            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 124, Padding = new Padding(6) };
+            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 124, Padding = new Padding(6), BackColor = UiBg };
 
             _input = new TextBox
             {
@@ -78,6 +107,9 @@ namespace VizpatchAddin.TaskPane
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 Font = new Font("Segoe UI", 9.5f),
+                BackColor = UiBg,
+                ForeColor = UiFg,
+                BorderStyle = BorderStyle.FixedSingle,
             };
             _input.KeyDown += Input_KeyDown;
 
@@ -87,15 +119,16 @@ namespace VizpatchAddin.TaskPane
                 FlowDirection = FlowDirection.RightToLeft,
                 Height = 32,
                 Padding = new Padding(0, 4, 0, 0),
+                BackColor = UiBg,
             };
 
-            _sendButton = new Button { Text = "Senden", AutoSize = true };
+            _sendButton = MakeButton("Senden");
             _sendButton.Click += SendButton_Click;
 
-            _resetButton = new Button { Text = "Zuruecksetzen", AutoSize = true };
+            _resetButton = MakeButton("Zuruecksetzen");
             _resetButton.Click += ResetButton_Click;
 
-            _settingsButton = new Button { Text = "Einstellungen", AutoSize = true };
+            _settingsButton = MakeButton("Einstellungen");
             _settingsButton.Click += SettingsButton_Click;
 
             buttonBar.Controls.Add(_sendButton);
@@ -110,6 +143,7 @@ namespace VizpatchAddin.TaskPane
                 FlowDirection = FlowDirection.LeftToRight,
                 Height = 26,
                 Padding = new Padding(0, 2, 0, 0),
+                BackColor = UiBg,
             };
             _includeMailCheck = new CheckBox
             {
@@ -117,6 +151,8 @@ namespace VizpatchAddin.TaskPane
                 AutoSize = true,
                 Checked = false,
                 Font = new Font("Segoe UI", 9f),
+                ForeColor = UiFg,
+                BackColor = UiBg,
             };
             optionsBar.Controls.Add(_includeMailCheck);
 

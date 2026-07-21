@@ -2,12 +2,23 @@
 id: webui-cannot-create-second-agent
 title: WebUI — zweiter Agent nicht anlegbar (Dropdown springt auf agents[0] zurück)
 created: "2026-07-21"
-status: pending
+status: resolved
 area: webui
 severity: warning
-defer: true
+defer: false
 found_during: phase-8-live-abnahme
+resolved: "2026-07-21"
 ---
+
+## Fix (2026-07-21)
+
+Index-Route (`webui/src/main.py`) nimmt jetzt einen `new`-Query-Parameter: bei
+`/?new=1` wird `active_id=""` erzwungen (statt `agents[0]`), sodass die
+Anlege-Maske erscheint. Das Dropdown-Item „-- Neuen Agent anlegen --"
+navigiert in `index.html` nun auf `/?new=1` statt `/`. Damit ist das Anlegen
+eines zweiten Agenten wieder möglich. **Live erst nach WebUI-Image-Rebuild +
+Redeploy** (Container läuft aus gebautem Image, nicht aus Bind-Mount).
+
 
 ## Problem
 
