@@ -1161,6 +1161,53 @@ def test_mail_in_papierkorb_confirmed_true_with_valid_token_moves_once_and_logs(
         assert value != "kunde@example.com"
 
 
+def test_mail_in_papierkorb_flag_disabled_moves_without_confirmation(mocker, tmp_path, monkeypatch):
+    """Betreiber-Flag `ENABLE_TRASH_CONFIRMATION=false`: die Verschiebung läuft OHNE
+    jede Bestätigung/Token direkt durch — kein `bestaetigung_erforderlich`, kein
+    Session-Autorisierungs-Zwischenschritt (Betreiber-Entscheidung, reversibel)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+    monkeypatch.setenv("ENABLE_TRASH_CONFIRMATION", "false")
+
+    original = _msg(uid="42", subject="Rechnung", from_="kunde@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [_fake_folder_info("Papierkorb", flags=("\\Trash",))]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    # weder confirmed noch confirmation_token — das Gate ist per Flag komplett aus
+    result = chat_tools.mail_in_papierkorb("info", uid="42")
+
+    mock_mailbox.move.assert_called_once_with(["42"], "Papierkorb")
+    assert result == {"verschoben": True, "papierkorb": "Papierkorb"}
+    assert "bestaetigung_erforderlich" not in result
+
+
+def test_entwurf_in_papierkorb_flag_disabled_moves_without_confirmation(mocker, tmp_path, monkeypatch):
+    """Gegenstück für Entwürfe: `ENABLE_TRASH_CONFIRMATION=false` schaltet auch das
+    Gate von `entwurf_in_papierkorb` ab (identischer Mechanismus)."""
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info")
+    monkeypatch.setenv("ENABLE_TRASH_CONFIRMATION", "false")
+
+    original = _msg(uid="42", subject="Entwurf", from_="ich@example.com")
+    mock_mailbox = _fake_mailbox([original])
+    mock_mailbox.folder.list.return_value = [
+        _fake_folder_info("Entwürfe", flags=("\\Drafts",)),
+        _fake_folder_info("Papierkorb", flags=("\\Trash",)),
+    ]
+    mocker.patch("src.chat_tools.MailBox", return_value=mock_mailbox)
+
+    import src.chat_tools as chat_tools
+
+    result = chat_tools.entwurf_in_papierkorb("info", uid="42")
+
+    mock_mailbox.move.assert_called_once()
+    assert result.get("verschoben") is True
+    assert "bestaetigung_erforderlich" not in result
+
+
 def test_mail_in_papierkorb_confirmed_true_no_trash_folder_returns_error_no_crash(mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _write_agent_env("info")

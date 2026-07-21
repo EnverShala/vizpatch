@@ -1586,6 +1586,22 @@ def _authorize_session(agent_id: str, session_id: str) -> None:
     _authorized_move_sessions[_session_key(agent_id, session_id)] = now
 
 
+def _trash_confirmation_required(agent_id: str) -> bool:
+    """Betreiber-Flag `ENABLE_TRASH_CONFIRMATION` (Default `true`). Steht es auf
+    `false`, entfällt das Bestätigungs-/Session-Autorisierungs-Gate für
+    Papierkorb-Verschiebungen (`mail_in_papierkorb`/`entwurf_in_papierkorb`) —
+    der Move läuft ohne Rückfrage. Bewusste Betreiber-Entscheidung: das
+    Verschieben ist reversibel (Papierkorb, kein Expunge dort). Wird zuerst
+    per-Agent (`read_env_raw`, konsistent mit `ENABLE_PII_REDACTION`) und sonst
+    global (`os.getenv`, konsistent mit `ENABLE_CHAT_TOOLS`) gelesen — so kann der
+    Betreiber es je Agent ODER instanzweit setzen. Nur der exakte Wert `false`
+    (case-insensitiv) schaltet ab; jeder andere/fehlende Wert -> Gate bleibt an."""
+    per_agent = (read_env_raw(agent_id).get("ENABLE_TRASH_CONFIRMATION") or "").strip().lower()
+    if per_agent:
+        return per_agent != "false"
+    return (os.getenv("ENABLE_TRASH_CONFIRMATION") or "true").strip().lower() != "false"
+
+
 def mail_in_papierkorb(
     agent_id: str,
     uid: str,
@@ -1626,7 +1642,11 @@ def mail_in_papierkorb(
     if not _UID_RE.match(uid_str):
         return _invalid_uid_error(uid_str)
     target_folder = (folder or "INBOX").strip() or "INBOX"
-    session_already_authorized = _session_authorized(agent_id, session_id)
+    # ENABLE_TRASH_CONFIRMATION=false -> Gate komplett aus (Betreiber-Entscheidung):
+    # eine ausgeschaltete Bestätigung gilt wie eine bereits autorisierte Sitzung.
+    session_already_authorized = (not _trash_confirmation_required(agent_id)) or _session_authorized(
+        agent_id, session_id
+    )
     expected_tokens = _expected_confirmation_tokens(agent_id, "mail_in_papierkorb", uid_str, target_folder)
     token_gate_open = _confirmation_ok(expected_tokens, confirmed, confirmation_token)
     gate_open = session_already_authorized or token_gate_open
@@ -1751,7 +1771,11 @@ def entwurf_in_papierkorb(
     if not _UID_RE.match(uid_str):
         return _invalid_uid_error(uid_str)
 
-    session_already_authorized = _session_authorized(agent_id, session_id)
+    # ENABLE_TRASH_CONFIRMATION=false -> Gate komplett aus (Betreiber-Entscheidung):
+    # eine ausgeschaltete Bestätigung gilt wie eine bereits autorisierte Sitzung.
+    session_already_authorized = (not _trash_confirmation_required(agent_id)) or _session_authorized(
+        agent_id, session_id
+    )
 
     drafts_folder = None
     try:
