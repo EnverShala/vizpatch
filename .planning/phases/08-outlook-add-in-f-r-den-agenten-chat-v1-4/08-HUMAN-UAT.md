@@ -29,7 +29,7 @@ result: passed (2026-07-21 — Roundtrip live über http://10.200.4.32:8080, Age
 
 ### 3. SC3 — Agentische Werkzeuge + Bestätigungs-Gate + Draft via IMAP-Sync end-to-end
 expected: `mails_suchen` liefert Treffer; bestätigungspflichtige Aktion (Papierkorb) zeigt Rückfrage und wird erst NACH Bestätigung ausgeführt (session_id-HMAC-Gate greift über den nativen Client); erzeugter Draft erscheint via IMAP-Sync in Outlooks Drafts-Ordner.
-result: [pending]
+result: passed (2026-07-21 — Werkzeuge laufen, Entwurf erscheint via IMAP-Sync, Bestätigungs-Gate greift. Betreiber-Feedback: Gate fragt zu oft → Reduktion/Abschaltung als Todo erfasst, da Aktionen reversibel/kein Senden)
 
 ### 4. SC4 — Realer mail_context aus geöffneter/markierter Mail + Nicht-Mail-Robustheit
 expected: Mail öffnen/markieren, Checkbox „Aktuelle Mail einbeziehen" aktiv, Frage „Fasse diese Mail zusammen" → Antwort bezieht sich auf die konkrete Mail; danach Termin/Kontakt markieren → kein Absturz, Hinweiszeile „Keine Mail als Kontext gefunden".
@@ -42,9 +42,9 @@ result: [pending]
 ## Summary
 
 total: 5
-passed: 3
+passed: 4
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 

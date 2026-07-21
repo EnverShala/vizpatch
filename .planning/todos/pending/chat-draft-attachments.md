@@ -45,6 +45,21 @@ Grundprinzip-Bruch und bräuchte eine explizite Betreiber-/DSB-Entscheidung.
 - Werkzeug prüft Rohgröße, lehnt Überschreitung ab; konfigurierbares
   `MAX_ATTACHMENT_MB` (konservativer Default, z. B. 15).
 
+## Entscheidung (2026-07-21, Betreiber)
+
+**Variante C — Ad-hoc-Upload, ALLE Dateitypen.** Begründung: Der Agent wird
+ausschließlich von der **Stationsleitung** genutzt (macht auch das gesamte Büro),
+also ein einzelner vertrauenswürdiger Nutzer. Der Anhang kommt damit direkt vom
+Betreiber (Upload), nicht aus Mail-Inhalt → das Prompt-Injection-Risiko der
+Quelle entfällt weitgehend.
+
+Umsetzungsfolgen für C:
+- Upload-Endpoint im WebUI (und Weiterreichen aus dem Add-in), Datei landet
+  temporär serverseitig, wird als MIME-Part in den Entwurf gebaut (IMAP APPEND).
+- Keine Dateityp-Whitelist gewünscht („alle möglichen Dateien") — trotzdem
+  Größenlimit `MAX_ATTACHMENT_MB` (~15, Base64 +33 %) und temporäre Dateien nach
+  dem APPEND wieder löschen. Kein-Auto-Send bleibt (Anhang nur am Entwurf).
+
 ## Nicht jetzt
 
-Eigenes Feature (eigene Phase/Plan) nach Phase-8-Abschluss.
+Eigenes Feature (eigene Phase/Plan) nach Phase-8-Abschluss. Quelle = C ist entschieden.
