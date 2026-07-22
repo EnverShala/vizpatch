@@ -115,7 +115,7 @@ def test_save_agent_fields_with_consent_persists_and_saves(
     _mock_docker_running(mocker)
     import src.agents_io as agents_io
     import src.config_io as config_io
-    agents_io.write_env("info", {})
+    agents_io.write_env("info", {"LLM_PROVIDER": "anthropic"})
     response = authed_client.post(
         "/save",
         auth=("admin", "pw"),
@@ -144,7 +144,7 @@ def test_save_agent_fields_with_already_persisted_consent_does_not_need_checkbox
     _mock_docker_running(mocker)
     import src.agents_io as agents_io
     import src.config_io as config_io
-    agents_io.write_env("info", {})
+    agents_io.write_env("info", {"LLM_PROVIDER": "anthropic"})
     config_io.write_env({
         "PRIVACY_CONSENT_ACCEPTED": "true",
         "PRIVACY_CONSENT_AT": "2026-07-01T09:00:00+00:00",

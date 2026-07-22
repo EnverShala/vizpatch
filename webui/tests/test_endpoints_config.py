@@ -268,7 +268,7 @@ def test_save_updates_imap_fields_for_agent(authed_client, mocker, tmp_path, mon
     _setup_env(tmp_path, monkeypatch)
     _mock_docker_running(mocker)
     import src.agents_io as agents_io
-    agents_io.write_env("info", {"IMAP_USER": "old@x.de", "IMAP_PASSWORD": "oldpw"})
+    agents_io.write_env("info", {"IMAP_USER": "old@x.de", "IMAP_PASSWORD": "oldpw", "LLM_PROVIDER": "anthropic"})
     response = authed_client.post(
         "/save",
         auth=("admin", "pw"),
@@ -299,6 +299,7 @@ def test_save_preserves_custom_own_email_address(authed_client, mocker, tmp_path
     agents_io.write_env("info", {
         "IMAP_USER": "login@x.de",
         "OWN_EMAIL_ADDRESS": "alias@x.de",  # bewusst abweichend
+        "LLM_PROVIDER": "anthropic",
     })
     response = authed_client.post(
         "/save",
@@ -321,6 +322,7 @@ def test_save_keeps_own_email_coupled_when_previously_equal_to_imap_user(authed_
     agents_io.write_env("info", {
         "IMAP_USER": "old@x.de",
         "OWN_EMAIL_ADDRESS": "old@x.de",  # gekoppelt (Auto-Default)
+        "LLM_PROVIDER": "anthropic",
     })
     response = authed_client.post(
         "/save",
@@ -338,7 +340,7 @@ def test_save_context_md_for_active_agent(authed_client, mocker, tmp_path, monke
     _setup_env(tmp_path, monkeypatch)
     _mock_docker_running(mocker)
     import src.agents_io as agents_io
-    agents_io.write_env("info", {"IMAP_USER": "u@x.de"})
+    agents_io.write_env("info", {"IMAP_USER": "u@x.de", "LLM_PROVIDER": "anthropic"})
     authed_client.post(
         "/save",
         auth=("admin", "pw"),

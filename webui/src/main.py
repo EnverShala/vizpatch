@@ -1212,6 +1212,20 @@ def save(
             updates["LLM_API_KEY"] = llm_api_key
             updates["LLM_PROVIDER"] = provider
 
+        # API-Key-Pflicht (beide Popup-Modi, Bearbeiten UND Erstellen): der Agent
+        # MUSS am Ende einen erkannten Provider haben. Ein in DIESEM Request neu
+        # gesetzter Key wurde oben validiert (provider != None). Wird KEIN neuer Key
+        # geschickt (Feld leer/maskiert), muss bereits ein erkannter Provider
+        # vorliegen — sonst (z. B. „Neuer Agent" ohne/mit unerkanntem Key) Fehler.
+        effective_provider = updates.get("LLM_PROVIDER") or (existing_agent_env.get("LLM_PROVIDER") or "").strip()
+        if effective_provider not in ("anthropic", "openai", "google"):
+            return _save_response(
+                request, is_htmx, False,
+                "Bitte einen gültigen API-Key hinterlegen — erwartet sk-ant-… (Anthropic), "
+                "sk-… (OpenAI) oder AIza… (Google).",
+                "error",
+            )
+
         try:
             if updates:
                 agents_io.write_env(agent_id, updates)
