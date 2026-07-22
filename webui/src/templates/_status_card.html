@@ -16,12 +16,10 @@
       <tr>
         <td>{{ agent.id }}</td>
         <td>
-          {% if agent.running %}
-          <span class="state-running">Läuft</span>
-          {% elif agent.enabled %}
-          <span class="state-pending">Wartet auf nächsten Zyklus</span>
+          {% if agent.enabled %}
+          <span class="state-running">Aktiv</span>
           {% else %}
-          <span class="state-exited">Gestoppt</span>
+          <span class="state-exited">Inaktiv</span>
           {% endif %}
         </td>
         <td>{% if agent.last_poll %}{{ agent.last_poll }}{% else %}keine Daten{% endif %}</td>
@@ -48,24 +46,4 @@
   {% if action_result is defined %}
   <pre class="action-result">{{ action_result }}</pre>
   {% endif %}
-
-  <div class="admin-tile">
-    <h4>Admin: Agent-Dienst</h4>
-    {% if service_status.state == "running" %}
-    <p class="state-running">Container-Status: <strong>{{ service_status.state }}</strong></p>
-    {% elif service_status.state == "not_created" %}
-    <p class="state-exited">Container-Status: <strong>{{ service_status.state }}</strong> (noch nicht gestartet)</p>
-    {% elif service_status.state == "error" %}
-    <p class="state-error">Container-Status: <strong>Fehler</strong>{% if service_status.error %} — {{ service_status.error }}{% endif %}</p>
-    {% else %}
-    <p class="state-exited">Container-Status: <strong>{{ service_status.state }}</strong></p>
-    {% endif %}
-    {% if service_status.started_at and service_status.state == "running" %}
-    <p>Gestartet: {{ service_status.started_at }}</p>
-    {% endif %}
-    <div class="agent-buttons">
-      <button hx-post="/agent/start" hx-target="#status-card" hx-swap="outerHTML">Start</button>
-      <button hx-post="/agent/stop" hx-target="#status-card" hx-swap="outerHTML">Stop</button>
-    </div>
-  </div>
 </div>
