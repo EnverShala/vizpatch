@@ -213,3 +213,118 @@ def test_global_agent_invalid_action_returns_400(authed_client, mocker, tmp_path
     _mock_running_docker(mocker)
     response = authed_client.post("/agent/foo", auth=("admin", "pw"))
     assert response.status_code == 400
+
+
+# --- GET /agents/{agent_id}/edit (Popup-Partial, UMBAU-D3) -------------------
+
+
+def test_agent_edit_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"IMAP_USER": "u@x.de"})
+    response = authed_client.get("/agents/info/edit")
+    assert response.status_code == 401
+
+
+def test_agent_edit_unknown_agent_returns_404(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/agents/ghost/edit", auth=("admin", "pw"))
+    assert response.status_code == 404
+
+
+def test_agent_edit_returns_masked_prefilled_fieldset_fragment(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"IMAP_USER": "test@x.de", "IMAP_PASSWORD": "secret", "LLM_API_KEY": "sk-ant-real"})
+    agents_io.write_context_md_atomic("info", "# About\nTest")
+    response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
+    assert response.status_code == 200
+    html = response.text
+    # Fragment, kein base.html-Erbe
+    assert "<html" not in html.lower()
+    assert 'name="imap_user"' in html
+    assert 'value="test@x.de"' in html
+    assert 'name="context_md"' in html
+    assert "# About" in html
+    assert 'name="llm_api_key"' in html
+    # Secrets bleiben maskiert — der Klartext-Wert darf NIE ins DOM
+    assert "secret" not in html
+    assert "sk-ant-real" not in html
+    # Edit-Modus zeigt Umbenennen/Löschen + KI-Helfer
+    assert 'action="/agents/info/rename"' in html
+    assert 'action="/agents/info/delete"' in html
+    assert "generateContext(this)" in html
+
+
+def test_agent_edit_invalid_agent_id_returns_404(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/agents/../evil/edit", auth=("admin", "pw"))
+    assert response.status_code == 404
+
+
+# --- GET /agents/new (Anlege-Popup-Partial, UMBAU-D5) ------------------------
+
+
+def test_agent_new_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/agents/new")
+    assert response.status_code == 401
+
+
+def test_agent_new_returns_empty_form_with_name_field(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/agents/new", auth=("admin", "pw"))
+    assert response.status_code == 200
+    html = response.text
+    assert 'name="new_agent_name"' in html
+    assert 'name="imap_user" value=""' in html
+    # Anlege-Modus zeigt KEINE Bearbeiten-nur-Elemente (kein bestehender Agent)
+    assert "Agent umbenennen" not in html
+    assert "Agent löschen" not in html
+    assert "generateContext(this)" not in html
+    assert "relearnStyle(this)" not in html
+
+
+# --- POST /save: Anlege-Zweig ueber new_agent_name (UMBAU-D5) ----------------
+
+
+def test_save_with_new_agent_name_creates_agent(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
+    _mock_running_docker(mocker)
+    import src.agents_io as agents_io
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        follow_redirects=False,
+        data={
+            "agent_id": "",
+            "new_agent_name": "Esso Leonberg",
+            "imap_user": "info@esso-leonberg.de",
+            "imap_password": "geheim",
+            "llm_api_key": "sk-ant-real-key",
+            "context_md": "# Esso Leonberg",
+            "privacy_consent": "on",
+        },
+    )
+    assert response.status_code == 303
+    assert "esso-leonberg" in agents_io.list_agent_ids()
+    raw = agents_io.read_env_raw("esso-leonberg")
+    assert raw["IMAP_USER"] == "info@esso-leonberg.de"
+    assert raw["AGENT_ENABLED"] == "false"
+    assert agents_io.read_context_md("esso-leonberg") == "# Esso Leonberg"
+
+
+def test_save_without_agent_id_and_without_new_agent_name_still_errors(authed_client, mocker, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
+    _mock_running_docker(mocker)
+    response = authed_client.post(
+        "/save",
+        auth=("admin", "pw"),
+        headers={"HX-Request": "true"},
+        data={"agent_id": "", "new_agent_name": "", "imap_user": "u@x.de", "privacy_consent": "on"},
+    )
+    assert response.status_code == 200
+    assert "save-err" in response.text
+    assert "Kein Agent ausgewählt" in response.text

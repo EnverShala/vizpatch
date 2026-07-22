@@ -1,0 +1,11 @@
+{# ==========================================================================
+   Chat-Swap-Partial (UMBAU-D2): wird per hx-get in #chat-panel geladen, wenn
+   der Betreiber das Radio einer anderen Agenten-Zeile klickt. Enthaelt
+   dieselbe _chat.html-Markup-Quelle wie /chat/{id}/embed und die initiale
+   Chat-Section auf der Hauptseite (KEIN Duplikat), gefolgt von einem
+   Inline-Aufruf von `initVizpatchChat` — HTMX fuehrt Inline-<script> in
+   frisch eingefuegtem Inhalt aus (CSP 'unsafe-inline' erlaubt es, kein
+   externes Skript hier noetig, chat.js ist bereits von der Hauptseite geladen).
+   ========================================================================== #}
+{% include "_chat.html" %}
+<script>window.initVizpatchChat && window.initVizpatchChat();</script>

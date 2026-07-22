@@ -1,0 +1,156 @@
+{# ==========================================================================
+   Popup-Formular-Partial (UMBAU-D3): Bearbeiten- UND Anlege-Modus desselben
+   Formulars. Wird lazy per hx-get in #agent-dialog-body geladen (T-h9e-01 —
+   kein Vorab-Rendern aller Agenten-Formulare, Secrets bleiben maskiert).
+
+   `mode` ist entweder "edit" (agent_id gesetzt, Felder vorbefuellt) oder
+   "create" (agent_id leer, Felder leer + Namensfeld). KEIN {% extends %} —
+   dieses Partial hat kein eigenes base.html-Erbe.
+   ========================================================================== #}
+<form action="/save" method="post" id="agent-config-form">
+  <input type="hidden" name="agent_id" id="active-agent-id" value="{{ agent_id }}">
+
+  {% if mode == 'create' %}
+  <label for="new_agent_name">Name des neuen Agenten</label>
+  <input type="text" id="new_agent_name" name="new_agent_name" required placeholder="z. B. Esso Leonberg oder info@esso-leonberg.de">
+  <p class="hint">Wird beim Speichern zu einem eindeutigen internen Kennzeichen (Slug) umgewandelt.</p>
+  {% endif %}
+
+  <fieldset id="sec-imap">
+    <legend>IMAP-Zugang</legend>
+
+    <label for="imap_user">E-Mail-Adresse (IMAP_USER)</label>
+    <input type="email" id="imap_user" name="imap_user" value="{{ env.IMAP_USER or '' }}" {% if mode == 'edit' %}required{% endif %}>
+    <p class="hint">Wird gleichzeitig als Own-Sender-Filter genutzt (verhindert dass der Agent auf eigene Ausgangs-Mails antwortet).</p>
+
+    <p class="password-hint">&#9432; Passwort- und API-Key-Felder: leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
+
+    <label for="imap_password">IMAP-Passwort (IMAP_PASSWORD)</label>
+    <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
+
+    {% set drafts_source = drafts_status.detection_source if drafts_status else None %}
+    {% if drafts_source == 'unresolved' %}
+    <div class="banner-error">
+      &#9888; Kein Drafts-Ordner gefunden — Server hat keinen \Drafts-markierten Ordner announciert und die Provider-Tabelle deckt diese Domain nicht ab. Bitte manuell setzen:
+    </div>
+    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER)</label>
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or '' }}" placeholder="z. B. Drafts, Entwürfe, INBOX.Drafts">
+    {% elif drafts_source in ('special-use', 'provider') %}
+    <p class="hint">
+      &#10003; <strong>Drafts-Ordner automatisch erkannt:</strong> <code>{{ drafts_status.drafts_folder }}</code>
+      {% if drafts_source == 'special-use' %}(via IMAP SPECIAL-USE-Flag){% else %}(Provider-Default){% endif %}
+    </p>
+    {% elif drafts_source == 'explicit' or env.IMAP_DRAFTS_FOLDER %}
+    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER, manuell gesetzt)</label>
+    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or drafts_status.drafts_folder or '' }}">
+    <p class="hint">Leer lassen um Auto-Discovery wieder zu aktivieren.</p>
+    {% else %}
+    <p class="hint">Drafts-Ordner wird beim ersten Poll automatisch erkannt (IMAP SPECIAL-USE oder Provider-Tabelle).</p>
+    {% endif %}
+  </fieldset>
+
+  <fieldset id="sec-llm">
+    <legend>LLM-API-Key</legend>
+    <p class="password-hint">&#9432; API-Key leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
+    <label for="llm_api_key">API-Key (Anthropic / OpenAI / Google)</label>
+    <input type="password" id="llm_api_key" name="llm_api_key" value="" placeholder="**** (leer lassen = unverändert)" oninput="updateProviderHint(this.value)">
+
+    <p class="hint" id="provider-detected">
+      {% if env.LLM_PROVIDER == 'anthropic' %}Erkannter LLM-Provider: Anthropic
+      {% elif env.LLM_PROVIDER == 'openai' %}Erkannter LLM-Provider: OpenAI
+      {% elif env.LLM_PROVIDER == 'google' %}Erkannter LLM-Provider: Google
+      {% else %}Noch kein Key gespeichert{% endif %}
+    </p>
+
+    <p class="hint avv-hint" id="avv-anthropic" {% if env.LLM_PROVIDER != 'anthropic' %}style="display:none"{% endif %}>
+      AVV-Hinweis (Anthropic): Anthropic bietet einen Auftragsverarbeitungsvertrag (AVV/DPA) inkl. Zero-Data-Retention-Option für die API an — vor produktivem Einsatz abschließen.
+    </p>
+    <p class="hint avv-hint" id="avv-openai" {% if env.LLM_PROVIDER != 'openai' %}style="display:none"{% endif %}>
+      AVV-Hinweis (OpenAI): OpenAI bietet ebenfalls einen AVV/DPA für die API an — vor produktivem Einsatz abschließen und Data-Retention-Einstellungen prüfen.
+    </p>
+    <p class="hint avv-hint" id="avv-google" {% if env.LLM_PROVIDER != 'google' %}style="display:none"{% endif %}>
+      AVV-Hinweis (Google): Google bietet für die Gemini-API einen AVV/DPA an — vor produktivem Einsatz abschließen und Data-Retention-Einstellungen prüfen.
+    </p>
+  </fieldset>
+
+  <fieldset id="sec-context">
+    <legend>context.md — Firmen-Kontext für den KI-Agenten</legend>
+    <p class="hint">Wird bei jeder E-Mail-Klassifikation und -Beantwortung in den Prompt injiziert. Öffnungszeiten, Angebote, Ton, FAQ.</p>
+
+    {% if mode == 'edit' %}
+    <details class="ki-helper">
+      <summary>Vorschlag von KI generieren lassen (optional)</summary>
+      <label for="firma_input">Kurzbeschreibung der Firma</label>
+      <textarea id="firma_input" rows="4" maxlength="5000" placeholder="z. B.: Esso-Tankstelle Leonberg, verkauft Kraftstoffe und Snacks, Öffnungszeiten Mo–So 06–22 Uhr, freundlich-professioneller Ton"></textarea>
+      <button type="button" id="ki-gen-btn" onclick="generateContext(this)">KI-Vorschlag generieren und unten einfügen</button>
+      <p class="banner-warning" id="ki-hint" style="display:none">&#9888; KI-Draft — bitte Öffnungszeiten und Preise manuell prüfen!</p>
+    </details>
+    {% endif %}
+
+    <label for="context_md">context.md-Inhalt (wird gespeichert)</label>
+    <textarea id="context_md" name="context_md" rows="20">{{ context_md }}</textarea>
+  </fieldset>
+
+  <fieldset id="sec-style">
+    <legend>Schreibstil (style.md)</legend>
+    <p class="hint">
+      Wird bei jedem Draft zusätzlich zu context.md injiziert — bestimmt nur WIE geschrieben wird
+      (Anrede, Du/Sie, Grußformel, Satzlänge, Formalität, typische Wendungen), niemals WAS fachlich
+      gesagt wird. Entsteht automatisch beim ersten Speichern gültiger Zugangsdaten oder per Klick
+      auf „Schreibstil neu lernen" unten.
+    </p>
+
+    <label>
+      <input type="checkbox" name="enable_style_adaption" value="true" {% if env.ENABLE_STYLE_ADAPTION != 'false' %}checked{% endif %}>
+      Schreibstil-Adaption aktiv (Default an)
+    </label>
+
+    <label for="style_note">Stil-Beschreibung (optional)</label>
+    <textarea id="style_note" name="style_note" rows="3" maxlength="5000" placeholder="Optional: Schreibstil kurz beschreiben oder Beispiel einfügen — vor allem für neue/leere Postfächer">{{ style_note }}</textarea>
+
+    <label for="style_md">style.md-Inhalt (wird gespeichert)</label>
+    <textarea id="style_md" name="style_md" rows="16">{{ style_md }}</textarea>
+
+    {% if mode == 'edit' %}
+    <button type="button" id="style-relearn-btn" onclick="relearnStyle(this)">Schreibstil neu lernen</button>
+    <p class="hint" id="style-relearn-hint" style="display:none">&#9888; Analysiert die letzten gesendeten Mails + die Stil-Beschreibung neu und überschreibt style.md oben.</p>
+    {% endif %}
+  </fieldset>
+
+  <fieldset id="sec-datenschutz">
+    <legend>Datenschutz</legend>
+    <details id="privacy-details">
+      <summary>Datenschutzbestimmungen</summary>
+      {% include "_datenschutz.html" %}
+    </details>
+
+    <label>
+      <input type="checkbox" name="privacy_consent" value="on" required {% if privacy_consent_accepted %}checked{% endif %}>
+      Ich stimme den <a href="/datenschutz" target="_blank" rel="noopener">Datenschutzbestimmungen</a> zu
+    </label>
+    {% if privacy_consent_accepted %}
+    <p class="hint">&#10003; Zugestimmt am {{ privacy_consent_at }}</p>
+    {% endif %}
+  </fieldset>
+
+  <button type="submit" class="btn-save-all">Speichern</button>
+</form>
+
+{% if mode == 'edit' %}
+<details>
+  <summary>Agent umbenennen</summary>
+  <form action="/agents/{{ agent_id }}/rename" method="post">
+    <label for="new_name">Neuer Name</label>
+    <input type="text" id="new_name" name="new_name" required>
+    <button type="submit">Umbenennen</button>
+  </form>
+</details>
+<details>
+  <summary>Agent löschen</summary>
+  <form action="/agents/{{ agent_id }}/delete" method="post" onsubmit="return confirm('Diesen Agent wirklich löschen? Dies kann nicht rückgängig gemacht werden.');">
+    <label for="agent_delete_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
+    <input type="text" name="confirmation" id="agent_delete_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
+    <button type="submit" class="btn-danger">Diesen Agent löschen</button>
+  </form>
+</details>
+{% endif %}

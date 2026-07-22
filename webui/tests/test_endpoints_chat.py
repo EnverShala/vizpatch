@@ -727,6 +727,38 @@ def test_chat_send_without_attachment_metadata_still_works_backward_compat(authe
     assert mock_run.call_args.kwargs["attachment_meta"] is None
 
 
+# --- GET /chat/{agent_id}/panel (Chat-Swap-Partial, UMBAU-D2) ---------------
+
+
+def test_chat_panel_requires_auth(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    response = authed_client.get("/chat/info/panel")
+    assert response.status_code == 401
+
+
+def test_chat_panel_returns_chat_root_and_reinit_call(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent("info")
+    response = authed_client.get("/chat/info/panel", auth=("admin", "pw"))
+    assert response.status_code == 200
+    body = response.text
+    assert 'id="chat-root" data-agent-id="info"' in body
+    assert "window.initVizpatchChat" in body
+
+
+def test_chat_panel_unknown_agent_returns_404(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/chat/ghost/panel", auth=("admin", "pw"))
+    assert response.status_code == 404
+
+
+def test_chat_panel_invalid_agent_id_returns_404(authed_client, tmp_path, monkeypatch):
+    _setup_env(tmp_path, monkeypatch)
+    response = authed_client.get("/chat/../evil/panel", auth=("admin", "pw"))
+    assert response.status_code == 404
+
+
 def test_chat_send_with_broken_attachment_metadata_json_falls_back_to_none(authed_client, mocker, tmp_path, monkeypatch):
     """Kaputtes JSON im attachment_meta-Formfeld -> None statt Crash (analog
     _parse_mail_context bei kaputtem mail_context)."""

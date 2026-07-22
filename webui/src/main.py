@@ -233,6 +233,31 @@ def _build_agent_statuses() -> list[dict]:
     return result
 
 
+def _privacy_consent_state() -> tuple[bool, str]:
+    """Datenschutz-Zustimmung (D-68) lebt GLOBAL im Root-.env, nicht per Agent —
+    wird sowohl von index() als auch von den neuen Popup-Partial-Routen
+    (agent_edit/agent_new) benoetigt."""
+    root_env_raw = config_io.read_env_raw()
+    accepted = (root_env_raw.get("PRIVACY_CONSENT_ACCEPTED") or "").strip().lower() == "true"
+    at = root_env_raw.get("PRIVACY_CONSENT_AT") or ""
+    return accepted, at
+
+
+def _agent_form_ctx(agent_id: str) -> dict:
+    """Baut den per-Agent-Kontext fuers Config-Formular (Task 1, UMBAU-Plan
+    260722-h9e): aus `index()` extrahiert, damit die neue `agent_edit`-Route
+    (Popup-Partial) dieselbe Zusammenstellung wiederverwenden kann statt sie zu
+    duplizieren. Secrets bleiben maskiert (`agents_io.read_env_masked`)."""
+    return {
+        "env": agents_io.read_env_masked(agent_id),
+        "context_md": agents_io.read_context_md(agent_id),
+        "style_md": agents_io.read_style_md(agent_id),
+        "style_note": agents_io.read_style_note(agent_id),
+        "drafts_status": state_reader.get_agent_status_json(agent_id),
+        "missing": agents_io.get_missing_config(agent_id),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
@@ -253,17 +278,16 @@ def index(
     else:
         active_id = agent_id or (agents[0] if agents else "")
     agent_statuses = _build_agent_statuses()
-    root_env_raw = config_io.read_env_raw()
-    privacy_consent_accepted = (root_env_raw.get("PRIVACY_CONSENT_ACCEPTED") or "").strip().lower() == "true"
-    privacy_consent_at = root_env_raw.get("PRIVACY_CONSENT_AT") or ""
+    privacy_consent_accepted, privacy_consent_at = _privacy_consent_state()
 
     if active_id and active_id in agents:
-        env_vals = agents_io.read_env_masked(active_id)
-        context_md = agents_io.read_context_md(active_id)
-        style_md = agents_io.read_style_md(active_id)
-        style_note = agents_io.read_style_note(active_id)
-        drafts_status = state_reader.get_agent_status_json(active_id)
-        missing = agents_io.get_missing_config(active_id)
+        form_ctx = _agent_form_ctx(active_id)
+        env_vals = form_ctx["env"]
+        context_md = form_ctx["context_md"]
+        style_md = form_ctx["style_md"]
+        style_note = form_ctx["style_note"]
+        drafts_status = form_ctx["drafts_status"]
+        missing = form_ctx["missing"]
     else:
         active_id = ""
         env_vals = {}
@@ -293,7 +317,7 @@ def index(
             "configured": not missing,
             "missing": missing,
             "auth_enabled": auth.is_auth_enabled(),
-            "password_configured": bool((root_env_raw.get("WEBUI_PASSWORD") or "").strip()),
+            "password_configured": bool((config_io.read_env_raw().get("WEBUI_PASSWORD") or "").strip()),
             "privacy_consent_accepted": privacy_consent_accepted,
             "privacy_consent_at": privacy_consent_at,
         },
@@ -314,6 +338,51 @@ def agents_status(request: Request, user: str = Depends(auth.require_auth)):
         request,
         "_status_card.html",
         {"agent_statuses": _build_agent_statuses(), "service_status": docker_ctrl.get_agent_status()},
+    )
+
+
+@app.get("/agents/{agent_id}/edit", response_class=HTMLResponse)
+def agent_edit(request: Request, agent_id: str, user: str = Depends(auth.require_auth)):
+    """Bearbeiten-Popup-Partial (UMBAU-D3): lazy per hx-get geladen, NUR fuer den
+    angeklickten Agenten (kein Vorab-Rendern aller Agenten-Formulare — T-h9e-01).
+    Secrets bleiben maskiert (`_agent_form_ctx` -> `read_env_masked`)."""
+    if agent_id not in agents_io.list_agent_ids():
+        raise HTTPException(status_code=404, detail="agent not found")
+    privacy_consent_accepted, privacy_consent_at = _privacy_consent_state()
+    return templates.TemplateResponse(
+        request,
+        "_agent_form.html",
+        {
+            "mode": "edit",
+            "agent_id": agent_id,
+            **_agent_form_ctx(agent_id),
+            "privacy_consent_accepted": privacy_consent_accepted,
+            "privacy_consent_at": privacy_consent_at,
+        },
+    )
+
+
+@app.get("/agents/new", response_class=HTMLResponse)
+def agent_new(request: Request, user: str = Depends(auth.require_auth)):
+    """Anlege-Popup-Partial (UMBAU-D5): dasselbe Formular wie `agent_edit`, aber
+    leer + mit Namensfeld — der eigentliche Agent wird erst beim Speichern
+    (POST /save mit new_agent_name) angelegt."""
+    privacy_consent_accepted, privacy_consent_at = _privacy_consent_state()
+    return templates.TemplateResponse(
+        request,
+        "_agent_form.html",
+        {
+            "mode": "create",
+            "agent_id": "",
+            "env": {},
+            "context_md": "",
+            "style_md": "",
+            "style_note": "",
+            "drafts_status": {},
+            "missing": [],
+            "privacy_consent_accepted": privacy_consent_accepted,
+            "privacy_consent_at": privacy_consent_at,
+        },
     )
 
 
@@ -511,6 +580,16 @@ def chat_embed(request: Request, agent_id: str, user: str = Depends(auth.require
     if agent_id not in agents_io.list_agent_ids():
         raise HTTPException(status_code=404, detail="agent not found")
     return templates.TemplateResponse(request, "chat.html", {"agent_id": agent_id})
+
+
+@app.get("/chat/{agent_id}/panel", response_class=HTMLResponse)
+def chat_panel(request: Request, agent_id: str, user: str = Depends(auth.require_auth)):
+    """Chat-Swap-Partial (UMBAU-D2): wird per hx-get in #chat-panel geladen, wenn
+    der Betreiber das Radio einer anderen Agenten-Zeile klickt — derselbe
+    404-Guard wie `chat_embed`."""
+    if agent_id not in agents_io.list_agent_ids():
+        raise HTTPException(status_code=404, detail="agent not found")
+    return templates.TemplateResponse(request, "_chat_panel.html", {"agent_id": agent_id})
 
 
 @app.get("/addin/taskpane.html", response_class=HTMLResponse)
@@ -818,9 +897,20 @@ def save(
     webui_password_current: str | None = Form(None),
     webui_password_new: str | None = Form(None),
     privacy_consent: str | None = Form(None),
+    new_agent_name: str | None = Form(None),
     user: str = Depends(auth.require_auth),
 ):
     is_htmx = request.headers.get("HX-Request") == "true"
+
+    # UMBAU-D5: „Neuer Agent"-Popup schickt beim ersten Speichern KEINE agent_id
+    # mit (der Agent existiert ja noch nicht) — stattdessen new_agent_name. VOR
+    # jeglicher weiteren Verarbeitung (Consent-Gate, agent-spezifische Updates)
+    # wird der Agent hier angelegt und agent_id gesetzt, damit der restliche
+    # Handler unveraendert mit einem echten agent_id weiterlaeuft (fuehlt sich fuer
+    # den Nutzer wie EIN Submit an — die Zweistufigkeit des Backends bleibt intern).
+    if not agent_id and (new_agent_name or "").strip():
+        agent_id = agents_io.slugify(new_agent_name)
+        agents_io.write_env(agent_id, {"AGENT_ENABLED": "false"})
 
     # Review IN-04: context_md/style_md serverseitig auf 64 KB begrenzen
     # (Disk-DoS + spaeter voller Inhalt in jedem Prompt). VOR jeglichem Write
