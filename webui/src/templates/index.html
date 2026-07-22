@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block content %}
+
+{% block header_nav %}
 <nav class="section-nav" aria-label="Bereichsnavigation">
   <a href="#sec-webui">WebUI</a>
   <a href="#sec-autostart">Autostart</a>
@@ -12,7 +13,9 @@
   <a href="#sec-chat">Chat</a>
   {% endif %}
 </nav>
+{% endblock %}
 
+{% block content %}
 {% if saved %}
 <div class="banner-success">&#10003; Änderungen gespeichert.</div>
 {% endif %}
