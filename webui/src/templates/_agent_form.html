@@ -145,12 +145,18 @@
     <button type="submit">Umbenennen</button>
   </form>
 </details>
-<details>
+<details class="agent-delete-details">
   <summary>Agent löschen</summary>
-  <form action="/agents/{{ agent_id }}/delete" method="post" onsubmit="return confirm('Diesen Agent wirklich löschen? Dies kann nicht rückgängig gemacht werden.');">
-    <label for="agent_delete_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
-    <input type="text" name="confirmation" id="agent_delete_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
-    <button type="submit" class="btn-danger">Diesen Agent löschen</button>
+  <form action="/agents/{{ agent_id }}/delete" method="post">
+    {# confirmation bleibt serverseitig Pflicht (delete_agent_endpoint prüft == 'LÖSCHEN');
+       das früher nötige Eintippen ist durch die Ja/Nein-Bestätigung darunter ersetzt. #}
+    <input type="hidden" name="confirmation" value="LÖSCHEN">
+    <p class="delete-confirm-frage">Sind Sie sich sicher, dass Sie diesen Agenten löschen möchten?</p>
+    <p class="hint">Dies kann nicht rückgängig gemacht werden.</p>
+    <div class="delete-confirm-actions">
+      <button type="submit" class="btn-danger">Ja, löschen</button>
+      <button type="button" class="btn-cancel" onclick="this.closest('details').removeAttribute('open');">Nein</button>
+    </div>
   </form>
 </details>
 {% endif %}
