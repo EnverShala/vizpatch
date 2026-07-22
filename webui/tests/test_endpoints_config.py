@@ -29,20 +29,27 @@ def test_get_index_requires_auth(authed_client):
     assert response.status_code == 401
 
 
-def test_get_index_shows_agent_dropdown_and_create_form_when_no_agents(authed_client, mocker, tmp_path, monkeypatch):
+def test_get_index_shows_agent_table_and_new_agent_button_when_no_agents(authed_client, mocker, tmp_path, monkeypatch):
+    """UMBAU (Task 2): das alte Dropdown + Inline-Anlege-Formular sind weg —
+    stattdessen das <dialog>-Geruest + der „+ Neuer Agent"-Button (Anlegen laeuft
+    jetzt ueber GET /agents/new im Popup)."""
     _setup_env(tmp_path, monkeypatch)
     _mock_docker_running(mocker)
     response = authed_client.get("/", auth=("admin", "pw"))
     assert response.status_code == 200
     html = response.text
-    assert 'id="agent-select"' in html
-    assert 'name="name_or_email"' in html
-    assert 'action="/agents"' in html
-    # kein Agent-Config-Formular im Anlege-Modus
+    assert 'id="agent-dialog"' in html
+    assert 'id="btn-new-agent"' in html
+    assert 'id="agent-select"' not in html
+    assert 'action="/agents"' not in html
+    # kein Agent-Config-Formular direkt auf der Seite (lebt nur im Popup-Partial)
     assert 'name="llm_api_key"' not in html
 
 
-def test_get_index_shows_agent_config_form_for_active_agent(authed_client, mocker, tmp_path, monkeypatch):
+def test_get_index_shows_agent_table_with_radio_and_edit_link_for_active_agent(authed_client, mocker, tmp_path, monkeypatch):
+    """UMBAU (Task 2): pro Agent eine Radio-Zelle (Chat-Auswahl) + ein
+    Bearbeiten-Trigger auf dem Agentennamen — das Config-Formular selbst lebt
+    nicht mehr auf `/`, sondern nur noch im per-HTMX geladenen Popup-Partial."""
     _setup_env(tmp_path, monkeypatch)
     _mock_docker_running(mocker)
     import src.agents_io as agents_io
@@ -51,52 +58,55 @@ def test_get_index_shows_agent_config_form_for_active_agent(authed_client, mocke
     response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
     assert response.status_code == 200
     html = response.text
-    assert 'name="imap_user"' in html
-    assert 'name="context_md"' in html
-    assert 'name="llm_api_key"' in html
+    assert 'type="radio" name="chat-agent"' in html
+    assert 'hx-get="/agents/info/edit"' in html
     assert 'name="autostart_enabled"' in html
-    assert 'type="password"' in html
-    assert 'placeholder="**** (leer lassen = unverändert)"' in html
-    assert '# About' in html
+    # Popup-Inhalt (IMAP/LLM/context.md) lebt NICHT mehr direkt auf der Seite
+    assert 'name="imap_user"' not in html
+    assert 'name="context_md"' not in html
+    assert 'name="llm_api_key"' not in html
+    assert "# About" not in html
 
 
-def test_index_no_llm_provider_dropdown_field(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_edit_partial_no_llm_provider_dropdown_field(authed_client, tmp_path, monkeypatch):
+    """Nachfolger von test_index_no_llm_provider_dropdown_field (UMBAU): die
+    Provider-Erkennung lebt jetzt im Popup-Partial (GET /agents/{id}/edit)."""
     _setup_env(tmp_path, monkeypatch)
-    _mock_docker_running(mocker)
     import src.agents_io as agents_io
     agents_io.write_env("info", {"IMAP_USER": "test@x.de"})
-    response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
     assert response.text.count('name="llm_provider"') == 0
     assert 'name="llm_api_key"' in response.text
     assert "API-Key (Anthropic / OpenAI / Google)" in response.text
     assert 'name="anthropic_api_key"' not in response.text
 
 
-def test_index_shows_avv_blocks_for_all_three_providers(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_edit_partial_shows_avv_blocks_for_all_three_providers(authed_client, tmp_path, monkeypatch):
+    """Nachfolger von test_index_shows_avv_blocks_for_all_three_providers (UMBAU)."""
     _setup_env(tmp_path, monkeypatch)
-    _mock_docker_running(mocker)
     import src.agents_io as agents_io
     agents_io.write_env("info", {"IMAP_USER": "test@x.de"})
-    response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
     assert 'id="avv-anthropic"' in response.text
     assert 'id="avv-openai"' in response.text
     assert 'id="avv-google"' in response.text
 
 
-def test_index_shows_two_agents_with_different_context(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_edit_partial_shows_two_agents_with_different_context(authed_client, tmp_path, monkeypatch):
+    """Nachfolger von test_index_shows_two_agents_with_different_context (UMBAU):
+    context.md lebt nicht mehr auf `/`, sondern im per-Agent-Popup-Partial."""
     _setup_env(tmp_path, monkeypatch)
-    _mock_docker_running(mocker)
     import src.agents_io as agents_io
     agents_io.write_env("agent-a", {"IMAP_USER": "a@x.de"})
     agents_io.write_context_md_atomic("agent-a", "Firma A Inhalt")
     agents_io.write_env("agent-b", {"IMAP_USER": "b@x.de"})
     agents_io.write_context_md_atomic("agent-b", "Firma B Inhalt")
 
-    response_a = authed_client.get("/?agent_id=agent-a", auth=("admin", "pw"))
+    response_a = authed_client.get("/agents/agent-a/edit", auth=("admin", "pw"))
     assert "Firma A Inhalt" in response_a.text
     assert "Firma B Inhalt" not in response_a.text
 
-    response_b = authed_client.get("/?agent_id=agent-b", auth=("admin", "pw"))
+    response_b = authed_client.get("/agents/agent-b/edit", auth=("admin", "pw"))
     assert "Firma B Inhalt" in response_b.text
     assert "Firma A Inhalt" not in response_b.text
 

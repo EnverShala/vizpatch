@@ -46,12 +46,13 @@ def test_datenschutz_page_contains_core_dsgvo_sections(authed_client, tmp_path, 
 # --- index.html: Pflicht-Checkbox -------------------------------------------
 
 
-def test_index_has_required_privacy_consent_checkbox(authed_client, mocker, tmp_path, monkeypatch):
+def test_agent_edit_partial_has_required_privacy_consent_checkbox(authed_client, tmp_path, monkeypatch):
+    """UMBAU (Task 2): die Datenschutz-Checkbox lebt nicht mehr auf `/`, sondern
+    im per-Agent-Popup-Partial (GET /agents/{id}/edit)."""
     _setup_env(tmp_path, monkeypatch)
-    _mock_docker_running(mocker)
     import src.agents_io as agents_io
     agents_io.write_env("info", {"IMAP_USER": "test@x.de"})
-    response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
     assert response.status_code == 200
     html = response.text
     assert 'name="privacy_consent"' in html
@@ -62,11 +63,10 @@ def test_index_has_required_privacy_consent_checkbox(authed_client, mocker, tmp_
     assert "required" in surrounding
 
 
-def test_index_shows_consent_timestamp_and_prechecked_when_already_accepted(
-    authed_client, mocker, tmp_path, monkeypatch
+def test_agent_edit_partial_shows_consent_timestamp_and_prechecked_when_already_accepted(
+    authed_client, tmp_path, monkeypatch
 ):
     _setup_env(tmp_path, monkeypatch)
-    _mock_docker_running(mocker)
     import src.agents_io as agents_io
     import src.config_io as config_io
     agents_io.write_env("info", {"IMAP_USER": "test@x.de"})
@@ -75,7 +75,7 @@ def test_index_shows_consent_timestamp_and_prechecked_when_already_accepted(
         "PRIVACY_CONSENT_AT": "2026-07-17T10:00:00+00:00",
         "PRIVACY_CONSENT_VERSION": "2026-07-17",
     })
-    response = authed_client.get("/?agent_id=info", auth=("admin", "pw"))
+    response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
     html = response.text
     assert "Zugestimmt am 2026-07-17T10:00:00+00:00" in html
     checkbox_start = html.index('name="privacy_consent"')

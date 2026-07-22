@@ -8,10 +8,14 @@
     <span class="state-exited">Inaktiv</span>
     {% endif %}
   </p>
+
+  <button type="button" id="btn-new-agent" hx-get="/agents/new" hx-target="#agent-dialog-body" hx-swap="innerHTML">+ Neuer Agent</button>
+
   {% if agent_statuses %}
   <table class="agent-status-table">
     <thead>
       <tr>
+        <th>Chat</th>
         <th>Agent</th>
         <th>Status</th>
         <th>Letzter Poll</th>
@@ -22,7 +26,13 @@
     <tbody>
       {% for agent in agent_statuses %}
       <tr>
-        <td>{{ agent.id }}</td>
+        <td>
+          <input type="radio" name="chat-agent" value="{{ agent.id }}"
+                 hx-get="/chat/{{ agent.id }}/panel" hx-target="#chat-panel" hx-swap="innerHTML" hx-trigger="change">
+        </td>
+        <td>
+          <button type="button" class="agent-edit-link" hx-get="/agents/{{ agent.id }}/edit" hx-target="#agent-dialog-body" hx-swap="innerHTML">{{ agent.id }}</button>
+        </td>
         <td>
           {% if agent.enabled %}
           <span class="state-running">Aktiv</span>

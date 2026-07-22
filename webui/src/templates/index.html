@@ -5,11 +5,6 @@
   <a href="#sec-webui">WebUI</a>
   <a href="#sec-autostart">Autostart</a>
   {% if agent_id %}
-  <a href="#sec-imap">IMAP</a>
-  <a href="#sec-llm">LLM-API-Key</a>
-  <a href="#sec-context">Context</a>
-  <a href="#sec-style">Schreibstil</a>
-  <a href="#sec-datenschutz">Datenschutz</a>
   <a href="#sec-chat">Chat</a>
   {% endif %}
 </nav>
@@ -40,41 +35,10 @@
 
 {% include "_status_card.html" %}
 
-<section class="agent-picker">
-  <h2>Agent</h2>
-  <label for="agent-select">Agent wählen</label>
-  <select id="agent-select" onchange="window.location = this.value ? ('/?agent_id=' + encodeURIComponent(this.value)) : '/?new=1';">
-    <option value="" {% if not agent_id %}selected{% endif %}>-- Neuen Agent anlegen --</option>
-    {% for a in agents %}
-    <option value="{{ a }}" {% if a == agent_id %}selected{% endif %}>{{ a }}</option>
-    {% endfor %}
-  </select>
-
-  {% if not agent_id %}
-  <form action="/agents" method="post">
-    <label for="name_or_email">Name oder E-Mail-Adresse des neuen Agenten</label>
-    <input type="text" id="name_or_email" name="name_or_email" required placeholder="z. B. Esso Leonberg oder info@esso-leonberg.de">
-    <button type="submit">Agent anlegen</button>
-  </form>
-  {% else %}
-  <details>
-    <summary>Agent umbenennen</summary>
-    <form action="/agents/{{ agent_id }}/rename" method="post">
-      <label for="new_name">Neuer Name</label>
-      <input type="text" id="new_name" name="new_name" required>
-      <button type="submit">Umbenennen</button>
-    </form>
-  </details>
-  <details>
-    <summary>Agent löschen</summary>
-    <form action="/agents/{{ agent_id }}/delete" method="post" onsubmit="return confirm('Diesen Agent wirklich löschen? Dies kann nicht rückgängig gemacht werden.');">
-      <label for="agent_delete_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
-      <input type="text" name="confirmation" id="agent_delete_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
-      <button type="submit" class="btn-danger">Diesen Agent löschen</button>
-    </form>
-  </details>
-  {% endif %}
-</section>
+<dialog id="agent-dialog">
+  <button type="button" id="agent-dialog-close">Schließen</button>
+  <div id="agent-dialog-body"></div>
+</dialog>
 
 <form action="/save" method="post" id="global-settings-form">
   <input type="hidden" name="agent_id" value="{{ agent_id }}">
@@ -116,145 +80,21 @@
 </form>
 
 {% if agent_id %}
-<form action="/save" method="post" id="agent-config-form">
-  <input type="hidden" name="agent_id" id="active-agent-id" value="{{ agent_id }}">
-
-  <fieldset id="sec-imap">
-    <legend>IMAP-Zugang</legend>
-
-    <label for="imap_user">E-Mail-Adresse (IMAP_USER)</label>
-    <input type="email" id="imap_user" name="imap_user" value="{{ env.IMAP_USER or '' }}" required>
-    <p class="hint">Wird gleichzeitig als Own-Sender-Filter genutzt (verhindert dass der Agent auf eigene Ausgangs-Mails antwortet).</p>
-
-    <p class="password-hint">&#9432; Passwort- und API-Key-Felder: leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
-
-    <label for="imap_password">IMAP-Passwort (IMAP_PASSWORD)</label>
-    <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
-
-    {% set drafts_source = drafts_status.detection_source if drafts_status else None %}
-    {% if drafts_source == 'unresolved' %}
-    <div class="banner-error">
-      &#9888; Kein Drafts-Ordner gefunden — Server hat keinen \Drafts-markierten Ordner announciert und die Provider-Tabelle deckt diese Domain nicht ab. Bitte manuell setzen:
-    </div>
-    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER)</label>
-    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or '' }}" placeholder="z. B. Drafts, Entwürfe, INBOX.Drafts">
-    {% elif drafts_source in ('special-use', 'provider') %}
-    <p class="hint">
-      &#10003; <strong>Drafts-Ordner automatisch erkannt:</strong> <code>{{ drafts_status.drafts_folder }}</code>
-      {% if drafts_source == 'special-use' %}(via IMAP SPECIAL-USE-Flag){% else %}(Provider-Default){% endif %}
-    </p>
-    {% elif drafts_source == 'explicit' or env.IMAP_DRAFTS_FOLDER %}
-    <label for="imap_drafts_folder">Drafts-Ordner (IMAP_DRAFTS_FOLDER, manuell gesetzt)</label>
-    <input type="text" id="imap_drafts_folder" name="imap_drafts_folder" value="{{ env.IMAP_DRAFTS_FOLDER or drafts_status.drafts_folder or '' }}">
-    <p class="hint">Leer lassen um Auto-Discovery wieder zu aktivieren.</p>
-    {% else %}
-    <p class="hint">Drafts-Ordner wird beim ersten Poll automatisch erkannt (IMAP SPECIAL-USE oder Provider-Tabelle).</p>
-    {% endif %}
-
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, #active-agent-id" hx-target="#save-msg-imap" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-imap" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-
-  <fieldset id="sec-llm">
-    <legend>LLM-API-Key</legend>
-    <p class="password-hint">&#9432; API-Key leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
-    <label for="llm_api_key">API-Key (Anthropic / OpenAI / Google)</label>
-    <input type="password" id="llm_api_key" name="llm_api_key" value="" placeholder="**** (leer lassen = unverändert)" oninput="updateProviderHint(this.value)">
-
-    <p class="hint" id="provider-detected">
-      {% if env.LLM_PROVIDER == 'anthropic' %}Erkannter LLM-Provider: Anthropic
-      {% elif env.LLM_PROVIDER == 'openai' %}Erkannter LLM-Provider: OpenAI
-      {% elif env.LLM_PROVIDER == 'google' %}Erkannter LLM-Provider: Google
-      {% else %}Noch kein Key gespeichert{% endif %}
-    </p>
-
-    <p class="hint avv-hint" id="avv-anthropic" {% if env.LLM_PROVIDER != 'anthropic' %}style="display:none"{% endif %}>
-      AVV-Hinweis (Anthropic): Anthropic bietet einen Auftragsverarbeitungsvertrag (AVV/DPA) inkl. Zero-Data-Retention-Option für die API an — vor produktivem Einsatz abschließen.
-    </p>
-    <p class="hint avv-hint" id="avv-openai" {% if env.LLM_PROVIDER != 'openai' %}style="display:none"{% endif %}>
-      AVV-Hinweis (OpenAI): OpenAI bietet ebenfalls einen AVV/DPA für die API an — vor produktivem Einsatz abschließen und Data-Retention-Einstellungen prüfen.
-    </p>
-    <p class="hint avv-hint" id="avv-google" {% if env.LLM_PROVIDER != 'google' %}style="display:none"{% endif %}>
-      AVV-Hinweis (Google): Google bietet für die Gemini-API einen AVV/DPA an — vor produktivem Einsatz abschließen und Data-Retention-Einstellungen prüfen.
-    </p>
-
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, #active-agent-id" hx-target="#save-msg-llm" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-llm" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-
-  <fieldset id="sec-context">
-    <legend>context.md — Firmen-Kontext für den KI-Agenten</legend>
-    <p class="hint">Wird bei jeder E-Mail-Klassifikation und -Beantwortung in den Prompt injiziert. Öffnungszeiten, Angebote, Ton, FAQ.</p>
-
-    <details class="ki-helper">
-      <summary>Vorschlag von KI generieren lassen (optional)</summary>
-      <label for="firma_input">Kurzbeschreibung der Firma</label>
-      <textarea id="firma_input" rows="4" maxlength="5000" placeholder="z. B.: Esso-Tankstelle Leonberg, verkauft Kraftstoffe und Snacks, Öffnungszeiten Mo–So 06–22 Uhr, freundlich-professioneller Ton"></textarea>
-      <button type="button" id="ki-gen-btn" onclick="generateContext(this)">KI-Vorschlag generieren und unten einfügen</button>
-      <p class="banner-warning" id="ki-hint" style="display:none">&#9888; KI-Draft — bitte Öffnungszeiten und Preise manuell prüfen!</p>
-    </details>
-
-    <label for="context_md">context.md-Inhalt (wird gespeichert)</label>
-    <textarea id="context_md" name="context_md" rows="20">{{ context_md }}</textarea>
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, #active-agent-id" hx-target="#save-msg-context" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-context" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-
-  <fieldset id="sec-style">
-    <legend>Schreibstil (style.md)</legend>
-    <p class="hint">
-      Wird bei jedem Draft zusätzlich zu context.md injiziert — bestimmt nur WIE geschrieben wird
-      (Anrede, Du/Sie, Grußformel, Satzlänge, Formalität, typische Wendungen), niemals WAS fachlich
-      gesagt wird. Entsteht automatisch beim ersten Speichern gültiger Zugangsdaten oder per Klick
-      auf „Schreibstil neu lernen" unten.
-    </p>
-
-    <label>
-      <input type="checkbox" name="enable_style_adaption" value="true" {% if env.ENABLE_STYLE_ADAPTION != 'false' %}checked{% endif %}>
-      Schreibstil-Adaption aktiv (Default an)
-    </label>
-
-    <label for="style_note">Stil-Beschreibung (optional)</label>
-    <textarea id="style_note" name="style_note" rows="3" maxlength="5000" placeholder="Optional: Schreibstil kurz beschreiben oder Beispiel einfügen — vor allem für neue/leere Postfächer">{{ style_note }}</textarea>
-
-    <label for="style_md">style.md-Inhalt (wird gespeichert)</label>
-    <textarea id="style_md" name="style_md" rows="16">{{ style_md }}</textarea>
-
-    <button type="button" id="style-relearn-btn" onclick="relearnStyle(this)">Schreibstil neu lernen</button>
-    <p class="hint" id="style-relearn-hint" style="display:none">&#9888; Analysiert die letzten gesendeten Mails + die Stil-Beschreibung neu und überschreibt style.md oben.</p>
-
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, #active-agent-id" hx-target="#save-msg-style" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-style" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-
-  <fieldset id="sec-datenschutz">
-    <legend>Datenschutz</legend>
-    <details id="privacy-details">
-      <summary>Datenschutzbestimmungen</summary>
-      {% include "_datenschutz.html" %}
-    </details>
-
-    <label>
-      <input type="checkbox" name="privacy_consent" value="on" required {% if privacy_consent_accepted %}checked{% endif %}>
-      Ich stimme den <a href="/datenschutz" target="_blank" rel="noopener">Datenschutzbestimmungen</a> zu
-    </label>
-    {% if privacy_consent_accepted %}
-    <p class="hint">&#10003; Zugestimmt am {{ privacy_consent_at }}</p>
-    {% endif %}
-  </fieldset>
-
-  <button type="submit" class="btn-save-all">Alles speichern</button>
-</form>
+<link rel="stylesheet" href="/static/chat.css">
+<section class="chat-section" id="sec-chat">
+  <h2>Agenten-Chat</h2>
+  <p class="hint">Chatte mit dem KI-Assistenten dieses Agenten — kennt context.md, style.md und den Agent-Status. Kann auf deine Anweisung dein Postfach durchsuchen, Entwürfe anlegen/bearbeiten und Mails in den Papierkorb verschieben (nie senden, nie endgültig löschen).</p>
+  {% include "_chat.html" %}
+</section>
+<script src="/static/chat.js"></script>
+{% endif %}
 
 <script>
+/* Seitenweite Helfer fuer das Popup-Formular (_agent_form.html, per HTMX lazy
+ * geladen — UMBAU-D3). agent_id wird NICHT mehr per Jinja interpoliert (das
+ * Formular kann jederzeit fuer einen ANDEREN Agenten neu geladen werden, ohne
+ * dass die Seite neu rendert) — stattdessen zur Laufzeit aus dem im Dialog
+ * liegenden versteckten Feld #active-agent-id gelesen. */
 function detectProvider(key) {
   const k = (key || '').trim();
   if (!k) return null;
@@ -293,7 +133,7 @@ async function generateContext(btn) {
   try {
     const fd = new FormData();
     fd.append('firma_input', desc);
-    fd.append('agent_id', '{{ agent_id }}');
+    fd.append('agent_id', document.getElementById('active-agent-id').value);
     const res = await fetch('/context/generate', {method: 'POST', body: fd});
     if (!res.ok) {
       const err = await res.text();
@@ -320,7 +160,7 @@ async function relearnStyle(btn) {
   btn.textContent = '⏳ Lerne Stil (~30–60s)…';
   try {
     const fd = new FormData();
-    fd.append('agent_id', '{{ agent_id }}');
+    fd.append('agent_id', document.getElementById('active-agent-id').value);
     fd.append('style_note', noteField.value);
     const res = await fetch('/style/relearn', {method: 'POST', body: fd});
     if (!res.ok) {
@@ -337,16 +177,20 @@ async function relearnStyle(btn) {
     btn.textContent = original;
   }
 }
-</script>
 
-<link rel="stylesheet" href="/static/chat.css">
-<section class="chat-section" id="sec-chat">
-  <h2>Agenten-Chat</h2>
-  <p class="hint">Chatte mit dem KI-Assistenten dieses Agenten — kennt context.md, style.md und den Agent-Status. Kann auf deine Anweisung dein Postfach durchsuchen, Entwürfe anlegen/bearbeiten und Mails in den Papierkorb verschieben (nie senden, nie endgültig löschen).</p>
-  {% include "_chat.html" %}
-</section>
-<script src="/static/chat.js"></script>
-{% endif %}
+/* Modal-Steuerung (UMBAU-D3): ein einziger htmx:afterSwap-Listener oeffnet den
+ * Dialog, sobald das Popup-Partial (Bearbeiten ODER Neuer Agent) in
+ * #agent-dialog-body eingefuegt wurde. #agent-dialog-close schliesst ihn
+ * wieder (natives <dialog>, kein eigener Overlay-Klick-Handler noetig). */
+document.body.addEventListener('htmx:afterSwap', function (evt) {
+  if (evt.detail.target && evt.detail.target.id === 'agent-dialog-body') {
+    document.getElementById('agent-dialog').showModal();
+  }
+});
+document.getElementById('agent-dialog-close').addEventListener('click', function () {
+  document.getElementById('agent-dialog').close();
+});
+</script>
 
 <section class="danger-zone">
   <h2>&#9888; Danger Zone — Zero-Reset</h2>
