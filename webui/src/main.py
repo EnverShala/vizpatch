@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract
+from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract, validate_conn
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -1225,6 +1225,44 @@ def save(
                 "sk-… (OpenAI) oder AIza… (Google).",
                 "error",
             )
+
+        # --- Live-Verbindungsprüfung VOR dem Persistieren (Betreiber-Wunsch: kein
+        # kaputter Agent). Geprüft wird NUR, was DIESES Request tatsächlich
+        # ändert; bei Fehlschlag wird hart geblockt (nichts geschrieben). Die
+        # effektive Konfig = bestehende (entschlüsselte) Agent-.env + Request-Delta.
+        imap_changed = imap_user is not None or (imap_password is not None and imap_password.strip() != "")
+        llm_key_changed = (
+            llm_api_key is not None and llm_api_key.strip() != "" and llm_api_key != agents_io.MASKED
+        )
+        if imap_changed:
+            enc_existing_pw = existing_agent_env.get("IMAP_PASSWORD", "") or ""
+            try:
+                existing_pw_plain = crypto.decrypt_value(enc_existing_pw) if enc_existing_pw else ""
+            except Exception:
+                existing_pw_plain = ""
+            probe_env = {
+                "IMAP_HOST": existing_agent_env.get("IMAP_HOST", ""),
+                "IMAP_PORT": existing_agent_env.get("IMAP_PORT", ""),
+                "IMAP_USE_SSL": existing_agent_env.get("IMAP_USE_SSL", ""),
+                "IMAP_USER": updates.get("IMAP_USER") or (existing_agent_env.get("IMAP_USER") or ""),
+                "IMAP_PASSWORD": (
+                    imap_password
+                    if (imap_password is not None and imap_password.strip() != "")
+                    else existing_pw_plain
+                ),
+            }
+            try:
+                validate_conn.check_imap(probe_env)
+            except validate_conn.ConnectionCheckError as e:
+                return _save_response(request, is_htmx, False, f"Nicht gespeichert — {e}", "error")
+        if llm_key_changed:
+            effective_provider_for_check = updates.get("LLM_PROVIDER") or (
+                existing_agent_env.get("LLM_PROVIDER") or ""
+            )
+            try:
+                validate_conn.check_llm(effective_provider_for_check, llm_api_key)
+            except validate_conn.ConnectionCheckError as e:
+                return _save_response(request, is_htmx, False, f"Nicht gespeichert — {e}", "error")
 
         try:
             if updates:

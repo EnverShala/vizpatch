@@ -51,6 +51,22 @@ def pw_set_client(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_connection_checks(request, monkeypatch):
+    """Die Live-Verbindungsprüfung (IMAP-Login + LLM-models.list) beim POST /save
+    wird in Tests standardmäßig zu No-Ops gemacht: Endpoint-Tests prüfen die
+    Formular-/Speicherlogik, nicht die echte Konnektivität, und dürfen kein
+    Netzwerk anfassen. Tests, die die Prüfung selbst testen wollen, setzen den
+    Marker `@pytest.mark.real_conn_check` — dann bleibt die echte Implementierung
+    aktiv (und mockt bei Bedarf MailBox/Anthropic gezielt selbst)."""
+    if request.node.get_closest_marker("real_conn_check"):
+        return
+    import src.validate_conn as validate_conn
+
+    monkeypatch.setattr(validate_conn, "check_imap", lambda *a, **k: None)
+    monkeypatch.setattr(validate_conn, "check_llm", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
 def reset_docker_client_cache():
     import src.docker_ctrl as docker_ctrl
     docker_ctrl._client = None
