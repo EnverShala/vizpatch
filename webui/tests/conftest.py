@@ -20,8 +20,31 @@ def client():
 
 @pytest.fixture
 def authed_client(monkeypatch):
-    monkeypatch.setenv("WEBUI_USER", "admin")
-    monkeypatch.setenv("WEBUI_PASSWORD", "pw")
+    """Session-Login (260722-jrq): WEBUI_PASSWORD wird bcrypt-gehasht gesetzt,
+    danach stellt EIN POST /login eine echte Session her — der TestClient
+    persistiert den `vizpatch_session`-Cookie ueber alle Folgerequests dieser
+    Instanz hinweg (kein Basic-Auth mehr, WEBUI_USER entfaellt). Ein zusaetzlich
+    mitgeschickter `auth=(...)`-Basic-Header in Bestandstests wird schlicht
+    ignoriert."""
+    from src import auth
+    monkeypatch.setenv("WEBUI_PASSWORD", auth.hash_password("pw"))
+    from src.main import app
+    with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
+        r = c.post("/login", data={"password": "pw"}, follow_redirects=False)
+        assert r.status_code == 303
+        yield c
+
+
+@pytest.fixture
+def pw_set_client(monkeypatch):
+    """WEBUI_PASSWORD ist gesetzt, aber es existiert KEINE Session (kein
+    POST /login) — fuer Tests, die pruefen, dass gesicherte Routen ohne
+    gueltige Session abgewiesen werden (401 bei POST, 303 bei vollem GET),
+    waehrend das Passwort bereits konfiguriert ist (sonst wuerde der
+    Setup-Zwang auf /setup umleiten, statt die Session-Durchsetzung zu
+    pruefen)."""
+    from src import auth
+    monkeypatch.setenv("WEBUI_PASSWORD", auth.hash_password("pw"))
     from src.main import app
     with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
         yield c
@@ -33,6 +56,17 @@ def reset_docker_client_cache():
     docker_ctrl._client = None
     yield
     docker_ctrl._client = None
+
+
+@pytest.fixture(autouse=True)
+def reset_sessions():
+    """Der Session-Store (`auth._sessions`) ist wie `_login_failures`/
+    `_login_lockouts` ein reiner In-Memory-Prozess-Zustand — ohne Reset
+    koennten sich Tests ueber den module-level `set` hinweg beeinflussen."""
+    from src import auth
+    auth._sessions.clear()
+    yield
+    auth._sessions.clear()
 
 
 @pytest.fixture(autouse=True)

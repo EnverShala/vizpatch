@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-page">
+  <h2>Anmelden</h2>
+
+  {% if error %}
+  <div class="banner-error">&#9888; {{ error }}</div>
+  {% endif %}
+
+  <form action="/login" method="post">
+    <label for="password">Passwort</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
+    <button type="submit">Anmelden</button>
+  </form>
+</section>
+{% endblock %}

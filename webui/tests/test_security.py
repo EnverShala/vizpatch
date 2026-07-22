@@ -34,11 +34,14 @@ def test_context_generate_rate_limited_after_10_calls(authed_client, mocker, tmp
 
 
 def test_login_lockout_after_5_failures(authed_client, mocker):
+    """260722-jrq: Login-Lockout jetzt ueber POST /login statt Basic-Auth —
+    5 Fehlversuche mit falschem Passwort sperren, danach schlaegt selbst der
+    korrekte Login-Versuch mit 429 + Retry-After fehl."""
     _mock_docker_running(mocker)
     for _ in range(5):
-        r = authed_client.get("/_auth_check", auth=("admin", "wrong"))
+        r = authed_client.post("/login", data={"password": "wrong"})
         assert r.status_code == 401
-    locked = authed_client.get("/_auth_check", auth=("admin", "pw"))
+    locked = authed_client.post("/login", data={"password": "pw"})
     assert locked.status_code == 429
     assert "Retry-After" in locked.headers
 
@@ -52,15 +55,6 @@ def test_security_headers_present(client):
     csp = response.headers.get("Content-Security-Policy", "")
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
-
-
-def test_login_failures_do_not_lock_on_missing_credentials(authed_client, mocker):
-    _mock_docker_running(mocker)
-    for _ in range(6):
-        r = authed_client.get("/_auth_check")
-        assert r.status_code == 401
-    ok = authed_client.get("/_auth_check", auth=("admin", "pw"))
-    assert ok.status_code == 200
 
 
 # --- Pfad-abhängige CSP für Add-in-/Embed-Pfade (Phase 8, Plan 08-01, T-08-01/T-08-02) ---
@@ -109,9 +103,22 @@ def test_addin_frame_ancestors_env_override(authed_client, tmp_path, monkeypatch
     assert "https://outlook.office.com" not in csp
 
 
-def test_addin_taskpane_without_auth_returns_401(authed_client):
-    response = authed_client.get("/addin/taskpane.html")
-    assert response.status_code == 401
+def test_addin_taskpane_reachable_without_session_when_password_set(pw_set_client):
+    """260722-jrq (T-jrq-06): /addin/taskpane.html ist Session-Gate-Ausnahme —
+    mit gesetztem Passwort (aber OHNE Session) weiterhin erreichbar (200), nicht
+    mehr 401 wie im alten Basic-Auth-Modell."""
+    response = pw_set_client.get("/addin/taskpane.html")
+    assert response.status_code == 200
+
+
+def test_addin_taskpane_blocked_without_password_at_all(client, tmp_path, monkeypatch):
+    """Ohne jegliches WEBUI_PASSWORD greift require_setup als Rest-Schutz (403) —
+    die Middleware selbst laesst /addin/* zwar durch (Session-Gate-Ausnahme),
+    aber die Route-Dependency require_setup bleibt bestehen."""
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
+    response = client.get("/addin/taskpane.html")
+    assert response.status_code == 403
 
 
 def test_healthz_strict_policy_unaffected_by_addin_changes(client):

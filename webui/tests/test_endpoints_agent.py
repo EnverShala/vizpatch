@@ -21,9 +21,11 @@ def _mock_running_docker(mocker):
 
 # --- POST /agents (create) ---
 
-def test_create_agent_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_create_agent_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: POST /agents ist kein Add-in-Pfad -> Session-Gate greift,
+    ohne gueltige Session (aber gesetztem Passwort) -> 401."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.post("/agents", data={"name_or_email": "x"})
+    response = pw_set_client.post("/agents", data={"name_or_email": "x"})
     assert response.status_code == 401
 
 
@@ -170,10 +172,13 @@ def test_rename_agent_collision_returns_error_response(authed_client, mocker, tm
 
 # --- GET /agents/status ---
 
-def test_agents_status_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_agents_status_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: voller GET ohne gueltige Session -> 303 auf /login (kein
+    HX-Request-Header bei diesem direkten TestClient-Aufruf)."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.get("/agents/status")
-    assert response.status_code == 401
+    response = pw_set_client.get("/agents/status", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_agents_status_lists_all_agents(authed_client, mocker, tmp_path, monkeypatch):
@@ -218,12 +223,13 @@ def test_global_agent_invalid_action_returns_400(authed_client, mocker, tmp_path
 # --- GET /agents/{agent_id}/edit (Popup-Partial, UMBAU-D3) -------------------
 
 
-def test_agent_edit_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_agent_edit_requires_auth(pw_set_client, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     import src.agents_io as agents_io
     agents_io.write_env("info", {"IMAP_USER": "u@x.de"})
-    response = authed_client.get("/agents/info/edit")
-    assert response.status_code == 401
+    response = pw_set_client.get("/agents/info/edit", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_agent_edit_unknown_agent_returns_404(authed_client, tmp_path, monkeypatch):
@@ -265,10 +271,11 @@ def test_agent_edit_invalid_agent_id_returns_404(authed_client, tmp_path, monkey
 # --- GET /agents/new (Anlege-Popup-Partial, UMBAU-D5) ------------------------
 
 
-def test_agent_new_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_agent_new_requires_auth(pw_set_client, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.get("/agents/new")
-    assert response.status_code == 401
+    response = pw_set_client.get("/agents/new", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_agent_new_returns_empty_form_with_name_field(authed_client, tmp_path, monkeypatch):

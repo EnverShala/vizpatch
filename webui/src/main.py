@@ -159,6 +159,52 @@ async def enforce_same_origin(request: Request, call_next):
     return await call_next(request)
 
 
+_PUBLIC_PATHS = {"/login", "/logout", "/setup", "/healthz"}
+
+
+def _is_public_path(path: str) -> bool:
+    return path in _PUBLIC_PATHS or path.startswith("/static/")
+
+
+def _is_addin_session_exempt_path(path: str) -> bool:
+    """Add-in-Pfade (T-jrq-06, 260722-jrq): das VSTO-WebBrowser-Control kann per
+    Design keinen SameSite=Strict-Session-Cookie tragen (kein geteilter Cookie-Jar
+    mit dem Browser, in dem der Betreiber eingeloggt ist) -- deshalb vom
+    Session-Gate ausgenommen. Rest-Schutz bleibt ueber `require_setup` (Passwort
+    muss gesetzt sein, Route-Dependency) + `enforce_same_origin` (Office-Origin-
+    Allowlist fuer `/chat/*/send`)."""
+    return path.startswith("/addin/") or bool(_ADDIN_CHAT_PATH_RE.match(path))
+
+
+@app.middleware("http")
+async def enforce_auth(request: Request, call_next):
+    """Session-Login-Gate (D-03, 260722-jrq): ersetzt die vormalige
+    Basic-Auth-Durchsetzung in `auth.require_auth`. Oeffentliche Pfade sowie die
+    Add-in-Session-Ausnahme laufen ungegatet durch die Middleware (dort greift
+    `require_setup` als Route-Dependency); alle uebrigen Pfade brauchen ein
+    gesetztes WEBUI_PASSWORD UND eine gueltige Session (Cookie
+    `auth.SESSION_COOKIE_NAME`). Ohne Passwort: Redirect auf `/setup` (Erststart-
+    Zwang). Mit Passwort, aber ohne gueltige Session: volle Seiten-GETs (kein
+    `HX-Request`-Header) werden auf `/login` umgeleitet, alle uebrigen
+    (HTMX/POST/API) erhalten 401 -- das bestehende
+    `hx-on::response-error 401 -> location.reload()` in base.html fuehrt
+    HTMX-Polls dann sauber zum Login."""
+    path = request.url.path
+    if _is_public_path(path) or _is_addin_session_exempt_path(path):
+        return await call_next(request)
+
+    if not auth.password_is_set():
+        return RedirectResponse("/setup", status_code=303)
+
+    token = request.cookies.get(auth.SESSION_COOKIE_NAME)
+    if auth.session_valid(token):
+        return await call_next(request)
+
+    if request.method == "GET" and request.headers.get("HX-Request") != "true":
+        return RedirectResponse("/login", status_code=303)
+    return PlainTextResponse("Unauthorized", status_code=401)
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -212,6 +258,114 @@ def healthz() -> dict:
 @app.get("/_auth_check", dependencies=[Depends(auth.require_auth)])
 def auth_check() -> dict:
     return {"ok": True}
+
+
+# --- Session-Login: /setup /login /logout /password (260722-jrq) -----------
+
+
+def _validate_new_password(password: str, password_confirm: str) -> str:
+    """Gemeinsame Validierung fuer /setup und /password (neues Passwort): min. 8
+    Zeichen UND beide Felder identisch. Gibt eine deutsche Fehlermeldung zurueck
+    (leer = gueltig)."""
+    errors: list[str] = []
+    if len(password) < 8:
+        errors.append("Das Passwort muss mindestens 8 Zeichen lang sein.")
+    if password != password_confirm:
+        errors.append("Die beiden Passwörter stimmen nicht überein.")
+    return " ".join(errors)
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def setup_get(request: Request):
+    if auth.password_is_set():
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(request, "setup.html", {"error": ""})
+
+
+@app.post("/setup", response_class=HTMLResponse)
+def setup_post(
+    request: Request,
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+):
+    if auth.password_is_set():
+        return RedirectResponse("/login", status_code=303)
+    error = _validate_new_password(password, password_confirm)
+    if error:
+        return templates.TemplateResponse(
+            request, "setup.html", {"error": error}, status_code=400
+        )
+    config_io.write_env({"WEBUI_PASSWORD": auth.hash_password(password)})
+    token = auth.create_session()
+    resp = RedirectResponse("/", status_code=303)
+    auth.set_session_cookie(resp, token)
+    return resp
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_get(request: Request):
+    if not auth.password_is_set():
+        return RedirectResponse("/setup", status_code=303)
+    return templates.TemplateResponse(request, "login.html", {"error": ""})
+
+
+@app.post("/login", response_class=HTMLResponse)
+def login_post(request: Request, password: str = Form(...)):
+    if not auth.password_is_set():
+        return RedirectResponse("/setup", status_code=303)
+    auth._check_login_lockout(request)
+    if auth.verify_password(password):
+        token = auth.create_session()
+        resp = RedirectResponse("/", status_code=303)
+        auth.set_session_cookie(resp, token)
+        return resp
+    auth._record_login_failure(request)
+    return templates.TemplateResponse(
+        request, "login.html", {"error": "Falsches Passwort."}, status_code=401
+    )
+
+
+@app.post("/logout")
+def logout_post(request: Request):
+    token = request.cookies.get(auth.SESSION_COOKIE_NAME)
+    auth.destroy_session(token)
+    resp = RedirectResponse("/login", status_code=303)
+    auth.clear_session_cookie(resp)
+    return resp
+
+
+@app.get("/password", response_class=HTMLResponse)
+def password_get(request: Request):
+    """Passwort-aendern-Popup-Partial (fuer #agent-dialog-body) -- die Middleware
+    verlangt hierfuer bereits eine gueltige Session (kein Public-Pfad)."""
+    return templates.TemplateResponse(request, "_password_form.html", {})
+
+
+def _password_response(ok: bool, message: str) -> HTMLResponse:
+    """Kleines Ergebnis-Fragment fuer #password-change-result (analog
+    `_save_response`). Bei Erfolg traegt die Antwort `HX-Trigger:
+    vizpatch-password-changed`, auf den ein globaler Listener (index.html)
+    reagiert und den #agent-dialog schliesst."""
+    css = "save-ok" if ok else "save-err"
+    icon = "&#10003;" if ok else "&#9888;"
+    headers = {"HX-Trigger": "vizpatch-password-changed"} if ok else None
+    return HTMLResponse(f'<span class="{css}">{icon} {message}</span>', headers=headers)
+
+
+@app.post("/password", response_class=HTMLResponse)
+def password_post(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+):
+    if not auth.verify_password(current_password):
+        return _password_response(False, "Aktuelles Passwort ist falsch.")
+    error = _validate_new_password(new_password, new_password_confirm)
+    if error:
+        return _password_response(False, error)
+    config_io.write_env({"WEBUI_PASSWORD": auth.hash_password(new_password)})
+    return _password_response(True, "Passwort geändert.")
 
 
 def _build_agent_statuses() -> list[dict]:
@@ -324,8 +478,6 @@ def index(
             "drafts_status": drafts_status,
             "configured": not missing,
             "missing": missing,
-            "auth_enabled": auth.is_auth_enabled(),
-            "password_configured": bool((config_io.read_env_raw().get("WEBUI_PASSWORD") or "").strip()),
             "privacy_consent_accepted": privacy_consent_accepted,
             "privacy_consent_at": privacy_consent_at,
         },
@@ -587,10 +739,16 @@ def style_relearn(
     return PlainTextResponse(style_md)
 
 
-@app.get("/chat/{agent_id}/embed", response_class=HTMLResponse)
+@app.get(
+    "/chat/{agent_id}/embed",
+    response_class=HTMLResponse,
+    dependencies=[Depends(auth.require_setup)],
+)
 def chat_embed(request: Request, agent_id: str, user: str = Depends(auth.require_auth)):
     """Chrome-loses, einbettbares Chat-Partial (D-61/CHAT-05) — eigener Rahmen,
-    KEIN base.html-Erbe. Phase 8 (Outlook-Add-in) bindet dieselbe Route ein."""
+    KEIN base.html-Erbe. Phase 8 (Outlook-Add-in) bindet dieselbe Route ein.
+    T-jrq-06 (260722-jrq): Session-Gate-Ausnahme (Add-in-Pfad) — `require_setup`
+    bleibt hier als Rest-Schutz (Passwort muss trotzdem gesetzt sein)."""
     if agent_id not in agents_io.list_agent_ids():
         raise HTTPException(status_code=404, detail="agent not found")
     return templates.TemplateResponse(request, "chat.html", {"agent_id": agent_id})
@@ -606,11 +764,17 @@ def chat_panel(request: Request, agent_id: str, user: str = Depends(auth.require
     return templates.TemplateResponse(request, "_chat_panel.html", {"agent_id": agent_id})
 
 
-@app.get("/addin/taskpane.html", response_class=HTMLResponse)
+@app.get(
+    "/addin/taskpane.html",
+    response_class=HTMLResponse,
+    dependencies=[Depends(auth.require_setup)],
+)
 def addin_taskpane(request: Request, user: str = Depends(auth.require_auth)):
     """Outlook-Office.js-Taskpane (D-66/OUT-02): same-origin ausgeliefert, iframed
     das bestehende Chat-Embed. Kein 404-Guard nötig — die Seite listet nur die
-    Agenten fürs Dropdown, der Existenz-Guard sitzt bereits in chat_embed()."""
+    Agenten fürs Dropdown, der Existenz-Guard sitzt bereits in chat_embed().
+    T-jrq-06 (260722-jrq): Session-Gate-Ausnahme (/addin/*) — `require_setup`
+    bleibt hier als Rest-Schutz (Passwort muss trotzdem gesetzt sein)."""
     agents = agents_io.list_agent_ids()
     initial_agent = agents[0] if agents else ""
     return templates.TemplateResponse(
@@ -620,7 +784,7 @@ def addin_taskpane(request: Request, user: str = Depends(auth.require_auth)):
     )
 
 
-@app.get("/addin/manifest.xml")
+@app.get("/addin/manifest.xml", dependencies=[Depends(auth.require_setup)])
 def addin_manifest(user: str = Depends(auth.require_auth)):
     """Klassisches XML-Add-in-Manifest (D-67/OUT-01), pro Installation über
     ADDIN_BASE_URL templatisiert. Wird als reine Textdatei geladen und per
@@ -628,7 +792,9 @@ def addin_manifest(user: str = Depends(auth.require_auth)):
     Autoescape-Konflikt mit XML. ADDIN_BASE_URL wird VOR dem Einsetzen
     validiert (T-08-06): muss mit https:// beginnen und darf keine
     XML-Sonderzeichen enthalten, sonst 400 statt eines kaputten/injizierbaren
-    Manifests."""
+    Manifests.
+    T-jrq-06 (260722-jrq): Session-Gate-Ausnahme (/addin/*) — `require_setup`
+    bleibt hier als Rest-Schutz (Passwort muss trotzdem gesetzt sein)."""
     base_url = os.getenv("ADDIN_BASE_URL", DEFAULT_ADDIN_BASE_URL).strip()
     if not base_url.startswith("https://") or _XML_SPECIAL_CHARS_RE.search(base_url):
         raise HTTPException(
@@ -907,9 +1073,6 @@ def save(
     style_md: str | None = Form(None),
     style_note: str | None = Form(None),
     enable_style_adaption: str | None = Form(None),
-    webui_user: str | None = Form(None),
-    webui_password_current: str | None = Form(None),
-    webui_password_new: str | None = Form(None),
     privacy_consent: str | None = Form(None),
     new_agent_name: str | None = Form(None),
     user: str = Depends(auth.require_auth),
@@ -979,45 +1142,12 @@ def save(
         (existing_agent_env.get(k) or "").strip() for k in ("IMAP_USER", "IMAP_PASSWORD", "LLM_API_KEY")
     )
 
-    # --- WebUI-Login-Passwort-Change-Logik (global, Root-.env) ---
-    hashed_new_pw: str | None = None
-    webui_user_new = (webui_user or "").strip() if webui_user is not None else None
-    pw_current = webui_password_current or ""
-    pw_new = webui_password_new or ""
-    existing_pw = existing.get("WEBUI_PASSWORD", "").strip()
-
-    webui_section_submitted = (
-        webui_user is not None
-        or webui_password_current is not None
-        or webui_password_new is not None
-    )
-    if webui_section_submitted:
-        if existing_pw:
-            if pw_new and not pw_current:
-                return _save_response(request, is_htmx, False,
-                    "Zum Ändern des Passworts bitte das aktuelle Passwort eintragen.", "error")
-            if pw_current and not pw_new:
-                return _save_response(request, is_htmx, False,
-                    "Aktuelles Passwort eingegeben, aber kein neues — bitte auch ‚Neues Passwort‘ ausfüllen.", "error")
-            if pw_new and pw_current:
-                if not auth._verify_password(pw_current, existing_pw):
-                    return _save_response(request, is_htmx, False,
-                        "Aktuelles Passwort ist falsch.", "error")
-                hashed_new_pw = auth.hash_password(pw_new)
-        else:
-            if webui_user_new and not pw_new:
-                return _save_response(request, is_htmx, False,
-                    "Beim ersten Setzen von WEBUI_USER muss auch ‚Neues Passwort‘ ausgefüllt sein.", "error")
-            if pw_new:
-                hashed_new_pw = auth.hash_password(pw_new)
-
+    # WebUI-Login-Passwort lebt seit 260722-jrq exklusiv in POST /setup bzw.
+    # POST /password — /save entschlackt (D-09), kein WEBUI_USER/WEBUI_PASSWORD
+    # mehr in dieser Route.
     global_updates: dict[str, str] = {}
     if autostart_enabled is not None:
         global_updates["AUTOSTART_ENABLED"] = "true" if autostart_enabled in ("true", "on", "1") else "false"
-    if webui_user_new:
-        global_updates["WEBUI_USER"] = webui_user_new
-    if hashed_new_pw is not None:
-        global_updates["WEBUI_PASSWORD"] = hashed_new_pw
     if global_updates:
         config_io.write_env(global_updates)
 

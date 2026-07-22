@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-page">
+  <h2>Erst-Setup — WebUI-Passwort festlegen</h2>
+  <p class="hint">Diese WebUI hat Root-Zugriff auf den Host (Docker-Socket). Bitte jetzt ein Passwort setzen, bevor die Oberfläche nutzbar wird.</p>
+
+  {% if error %}
+  <div class="banner-error">&#9888; {{ error }}</div>
+  {% endif %}
+
+  <form action="/setup" method="post" id="setup-form">
+    <label for="password">Passwort <span class="hint-inline">(mindestens 8 Zeichen)</span></label>
+    <input type="password" id="password" name="password" autocomplete="new-password" autofocus required minlength="8">
+
+    <label for="password_confirm">Passwort wiederholen</label>
+    <input type="password" id="password_confirm" name="password_confirm" autocomplete="new-password" required minlength="8">
+
+    <p id="setup-mismatch-hint" class="banner-error" style="display:none;">Die beiden Passwörter stimmen nicht überein.</p>
+
+    <button type="submit">Passwort setzen</button>
+  </form>
+</section>
+<script>
+(function () {
+  var form = document.getElementById('setup-form');
+  var pw = document.getElementById('password');
+  var pwConfirm = document.getElementById('password_confirm');
+  var hint = document.getElementById('setup-mismatch-hint');
+  function checkMatch() {
+    var mismatch = pwConfirm.value.length > 0 && pw.value !== pwConfirm.value;
+    hint.style.display = mismatch ? 'block' : 'none';
+  }
+  pw.addEventListener('input', checkMatch);
+  pwConfirm.addEventListener('input', checkMatch);
+  form.addEventListener('submit', function (evt) {
+    if (pw.value !== pwConfirm.value) {
+      evt.preventDefault();
+      hint.style.display = 'block';
+    }
+  });
+})();
+</script>
+{% endblock %}

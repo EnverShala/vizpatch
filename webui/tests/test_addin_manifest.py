@@ -1,8 +1,9 @@
 """Tests für das XML-Add-in-Manifest (Phase 8, Plan 08-02, OUT-01/D-67).
 
 Deckt ab:
-(a) GET /addin/manifest.xml ohne Auth -> 401 (bei gesetzten WebUI-Credentials)
-(b) mit Auth + gültiger ADDIN_BASE_URL -> 200, media_type application/xml,
+(a) GET /addin/manifest.xml ohne Passwort ueberhaupt -> 403 (require_setup);
+    mit Passwort aber ohne Session -> 200 (Session-Gate-Ausnahme, T-jrq-06)
+(b) mit Session + gültiger ADDIN_BASE_URL -> 200, media_type application/xml,
     wohlgeformt (xml.etree.ElementTree.fromstring), SourceLocation mit der
     eingesetzten Basis-URL, KEIN verbleibendes {ADDIN_BASE_URL}-Platzhalter
 (c) genau ReadItem als Permission, KEIN ReadWriteItem/ReadWriteMailbox
@@ -20,10 +21,21 @@ def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
 
 
-def test_addin_manifest_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_addin_manifest_reachable_without_session_when_password_set(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq (T-jrq-06): /addin/manifest.xml ist Session-Gate-Ausnahme —
+    mit gesetztem Passwort (aber OHNE Session) weiterhin erreichbar (200)."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.get("/addin/manifest.xml")
-    assert response.status_code == 401
+    response = pw_set_client.get("/addin/manifest.xml")
+    assert response.status_code == 200
+
+
+def test_addin_manifest_blocked_without_password_at_all(client, tmp_path, monkeypatch):
+    """Ohne jegliches WEBUI_PASSWORD greift require_setup als Rest-Schutz (403)."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
+    response = client.get("/addin/manifest.xml")
+    assert response.status_code == 403
 
 
 def test_addin_manifest_authed_wellformed_and_templated(authed_client, tmp_path, monkeypatch):

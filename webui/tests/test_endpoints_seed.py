@@ -7,9 +7,11 @@ def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
 
 
-def test_context_generate_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_context_generate_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: POST /context/generate ist kein Add-in-Pfad -> ohne gueltige
+    Session (aber gesetztem Passwort) -> 401."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.post("/context/generate", data={"agent_id": "info", "firma_input": "test"})
+    response = pw_set_client.post("/context/generate", data={"agent_id": "info", "firma_input": "test"})
     assert response.status_code == 401
 
 

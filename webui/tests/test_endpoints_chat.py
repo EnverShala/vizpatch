@@ -1,8 +1,9 @@
 """Tests für die Chat-Routen (Phase 7, Plan 07-01, CHAT-01/03/05).
 
 Deckt ab:
-(a) /chat/{id}/embed ohne Auth -> 401
-(b) /chat/{id}/embed mit Auth -> 200, chrome-loses Partial (kein base.html-Erbe),
+(a) /chat/{id}/embed ohne Passwort ueberhaupt -> 403 (require_setup); mit
+    Passwort aber ohne Session -> 200 (Session-Gate-Ausnahme, T-jrq-06)
+(b) /chat/{id}/embed mit Session -> 200, chrome-loses Partial (kein base.html-Erbe),
     referenziert /static/chat.js
 (c) /chat/{id}/send streamt SSE (mockt chat.stream_chat)
 (d) unbekannter agent_id: /embed -> 404 (list_agent_ids-Check); /send -> 400
@@ -60,11 +61,24 @@ def _mock_docker_running(mocker):
     return mock_client
 
 
-def test_chat_embed_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_chat_embed_reachable_without_session_when_password_set(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq (T-jrq-06): /chat/{id}/embed ist Session-Gate-Ausnahme
+    (Add-in-Pfad) — mit gesetztem Passwort (aber OHNE Session) weiterhin
+    erreichbar (200), nicht mehr 401 wie im alten Basic-Auth-Modell."""
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info")
-    response = authed_client.get("/chat/info/embed")
-    assert response.status_code == 401
+    response = pw_set_client.get("/chat/info/embed")
+    assert response.status_code == 200
+
+
+def test_chat_embed_blocked_without_password_at_all(client, tmp_path, monkeypatch):
+    """Ohne jegliches WEBUI_PASSWORD greift require_setup als Rest-Schutz (403)."""
+    _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
+    _write_agent("info")
+    response = client.get("/chat/info/embed")
+    assert response.status_code == 403
 
 
 def test_chat_embed_authed_returns_chromeless_partial(authed_client, tmp_path, monkeypatch):
@@ -573,11 +587,13 @@ def test_embed_test_fixture_has_no_external_urls():
 # --- Chat-Datei-Upload (Plan 12-02, ATT-01) -----------------------------------
 
 
-def test_chat_upload_requires_auth(authed_client, tmp_path, monkeypatch):
-    """Analog test_chat_embed_requires_auth: ohne Basic-Auth -> 401."""
+def test_chat_upload_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: /chat/{id}/upload ist KEINE Add-in-Session-Ausnahme (nur
+    send|embed matchen _ADDIN_CHAT_PATH_RE) -> volles Session-Gate, ohne
+    gueltige Session -> 401 (POST, keine HTMX-Redirect-Sonderbehandlung)."""
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info")
-    response = authed_client.post(
+    response = pw_set_client.post(
         "/chat/info/upload",
         files={"file": ("anhang.txt", b"hallo welt", "text/plain")},
         data={"session_id": "sess-1"},
@@ -730,11 +746,14 @@ def test_chat_send_without_attachment_metadata_still_works_backward_compat(authe
 # --- GET /chat/{agent_id}/panel (Chat-Swap-Partial, UMBAU-D2) ---------------
 
 
-def test_chat_panel_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_chat_panel_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: /chat/{id}/panel ist KEIN Add-in-Pfad -> volles Session-Gate;
+    ohne gueltige Session (voller GET, kein HX-Request-Header) -> 303 auf /login."""
     _setup_env(tmp_path, monkeypatch)
     _write_agent("info")
-    response = authed_client.get("/chat/info/panel")
-    assert response.status_code == 401
+    response = pw_set_client.get("/chat/info/panel", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_chat_panel_returns_chat_root_and_reinit_call(authed_client, tmp_path, monkeypatch):

@@ -31,9 +31,11 @@ def _complete_creds() -> dict:
 # --- /style/relearn ---------------------------------------------------------
 
 
-def test_style_relearn_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_style_relearn_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: POST /style/relearn ist kein Add-in-Pfad -> ohne gueltige
+    Session (aber gesetztem Passwort) -> 401."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.post("/style/relearn", data={"agent_id": "info", "style_note": ""})
+    response = pw_set_client.post("/style/relearn", data={"agent_id": "info", "style_note": ""})
     assert response.status_code == 401
 
 

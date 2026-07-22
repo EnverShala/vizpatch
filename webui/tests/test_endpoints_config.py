@@ -24,9 +24,12 @@ def _mock_docker_running(mocker):
     return mock_client
 
 
-def test_get_index_requires_auth(authed_client):
-    response = authed_client.get("/")
-    assert response.status_code == 401
+def test_get_index_requires_auth(pw_set_client):
+    """260722-jrq: ohne gueltige Session (aber gesetztem Passwort) wird ein
+    voller Seiten-GET auf /login umgeleitet (303), nicht mehr 401."""
+    response = pw_set_client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_get_index_shows_agent_table_and_new_agent_button_when_no_agents(authed_client, mocker, tmp_path, monkeypatch):

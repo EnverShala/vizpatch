@@ -1,7 +1,7 @@
-"""Review WR-07: Setup-Zwang bei fehlendem WebUI-Passwort.
-
-Gefaehrliche state-aendernde Routen sind gesperrt, solange kein Passwort gesetzt
-ist und VIZPATCH_ALLOW_NO_AUTH != true. /save bleibt fuer den Bootstrap offen.
+"""Session-Login + Setup-Zwang (Umbau 260722-jrq): gefaehrliche state-aendernde
+Routen sind gesperrt, solange kein Passwort gesetzt ist (Redirect auf /setup)
+bzw. solange keine gueltige Session vorliegt (401). Das Passwort-Bootstrap lebt
+jetzt exklusiv in POST /setup — /save ist dafuer nicht mehr zustaendig.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -11,10 +11,8 @@ TEST_ORIGIN = "http://testserver"
 
 @pytest.fixture
 def noauth_client(tmp_path, monkeypatch):
-    # KEIN WEBUI_USER/WEBUI_PASSWORD -> Auth aus.
-    monkeypatch.delenv("WEBUI_USER", raising=False)
+    # KEIN WEBUI_PASSWORD -> Setup-Zwang.
     monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
-    monkeypatch.delenv("VIZPATCH_ALLOW_NO_AUTH", raising=False)
     monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
     monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
     monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
@@ -24,59 +22,82 @@ def noauth_client(tmp_path, monkeypatch):
         yield c
 
 
-def test_dangerous_route_blocked_without_password(noauth_client):
-    r = noauth_client.post("/agents", data={"name_or_email": "info"})
+def test_dangerous_route_redirects_to_setup_without_password(noauth_client):
+    """(a): die enforce_auth-Middleware greift VOR require_setup -> 303 auf
+    /setup, nicht mehr 403."""
+    r = noauth_client.post("/agents", data={"name_or_email": "info"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup"
+
+
+def test_reset_redirects_to_setup_without_password(noauth_client):
+    r = noauth_client.post("/reset", data={"confirmation": "LÖSCHEN"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup"
+
+
+def test_chat_send_blocked_without_password(noauth_client):
+    """/chat/{id}/send ist Session-Gate-Ausnahme (Add-in-Pfad, T-jrq-06) — der
+    Schutz kommt hier ausschließlich aus der require_setup-Route-Dependency,
+    daher weiterhin 403 (kein Redirect, da die Middleware den Pfad ungegatet
+    durchlässt)."""
+    r = noauth_client.post("/chat/info/send", data={"message": "Hi"})
     assert r.status_code == 403
     assert "Passwort" in r.text
 
 
-def test_reset_blocked_without_password(noauth_client):
-    r = noauth_client.post("/reset", data={"confirmation": "LÖSCHEN"})
-    assert r.status_code == 403
+def test_dangerous_route_returns_401_with_password_but_no_session(pw_set_client):
+    """(b): Passwort gesetzt, aber keine Session -> 401 (POST -> keine
+    HTMX-Redirect-Sonderbehandlung)."""
+    r = pw_set_client.post("/agents", data={"name_or_email": "info"})
+    assert r.status_code == 401
 
 
-def test_chat_send_blocked_without_password(noauth_client):
-    r = noauth_client.post("/chat/info/send", data={"message": "Hi"})
-    assert r.status_code == 403
+def test_dangerous_route_works_with_valid_session(authed_client):
+    """(c): gueltige Session -> Route laeuft normal durch."""
+    r = authed_client.post("/agents", data={"name_or_email": "info"}, follow_redirects=False)
+    assert r.status_code in (200, 303)
 
 
-def test_save_allowed_without_password_for_bootstrap(noauth_client):
-    """/save MUSS offen bleiben — sonst kann man das Passwort nie setzen."""
+def test_require_setup_raises_403_without_password_unit(monkeypatch, tmp_path):
+    """(d) Unit-Test, Defense-in-Depth: require_setup() wirft weiterhin 403,
+    unabhaengig von der Middleware — kein VIZPATCH_ALLOW_NO_AUTH-Bypass mehr."""
+    from fastapi import HTTPException
+    from src import auth
+    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "does-not-exist.env"))
+    monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
+    try:
+        auth.require_setup()
+        assert False, "sollte 403 werfen"
+    except HTTPException as e:
+        assert e.status_code == 403
+
+
+def test_setup_bootstrap_sets_password_and_session(noauth_client):
+    """(e): Bootstrap laeuft jetzt ueber POST /setup (nicht mehr /save) — min.
+    8 Zeichen, beide Felder identisch, schreibt WEBUI_PASSWORD + legt sofort
+    eine Session an."""
     r = noauth_client.post(
-        "/save",
-        data={"webui_user": "admin", "webui_password_new": "secret"},
+        "/setup",
+        data={"password": "neuespasswort", "password_confirm": "neuespasswort"},
         follow_redirects=False,
     )
-    # 303 Redirect oder 200 HTMX-Fragment — NICHT 403 (Bootstrap darf nie brechen).
-    assert r.status_code in (200, 303)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/"
+    assert "vizpatch_session" in r.cookies
+    r2 = noauth_client.post("/agents", data={"name_or_email": "info"}, follow_redirects=False)
+    assert r2.status_code in (200, 303)
 
 
-def test_allow_no_auth_bypasses_gate(tmp_path, monkeypatch):
-    monkeypatch.delenv("WEBUI_USER", raising=False)
-    monkeypatch.delenv("WEBUI_PASSWORD", raising=False)
-    monkeypatch.setenv("VIZPATCH_ALLOW_NO_AUTH", "true")
-    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
-    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
-    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
-    monkeypatch.setenv("WEBUI_ENV_PATH", str(tmp_path / "root.env"))
-    from src.main import app
-    with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
-        r = c.post("/agents", data={"name_or_email": "info"})
-    assert r.status_code in (200, 303)
+def test_setup_bootstrap_rejects_short_password(noauth_client):
+    r = noauth_client.post("/setup", data={"password": "kurz1", "password_confirm": "kurz1"})
+    assert r.status_code == 400
+    assert "8 Zeichen" in r.text
 
 
-def test_normal_auth_applies_after_password_set(tmp_path, monkeypatch):
-    """Ist ein Passwort gesetzt, greift wieder die normale Basic-Auth (nicht der Gate)."""
-    monkeypatch.setenv("WEBUI_USER", "admin")
-    monkeypatch.setenv("WEBUI_PASSWORD", "pw")
-    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
-    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
-    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
-    from src.main import app
-    with TestClient(app, headers={"Origin": TEST_ORIGIN}) as c:
-        # Ohne Credentials -> 401 (Basic-Auth), NICHT der 403-Setup-Gate.
-        r = c.post("/agents", data={"name_or_email": "info"})
-        assert r.status_code == 401
-        # Mit Credentials -> Route laeuft.
-        ok = c.post("/agents", auth=("admin", "pw"), data={"name_or_email": "info"})
-        assert ok.status_code in (200, 303)
+def test_setup_bootstrap_rejects_mismatched_passwords(noauth_client):
+    r = noauth_client.post(
+        "/setup",
+        data={"password": "erstespasswort", "password_confirm": "andrespasswort"},
+    )
+    assert r.status_code == 400

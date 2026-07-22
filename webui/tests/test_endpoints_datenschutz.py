@@ -27,10 +27,12 @@ def _mock_docker_running(mocker):
 # --- GET /datenschutz --------------------------------------------------------
 
 
-def test_datenschutz_requires_auth(authed_client, tmp_path, monkeypatch):
+def test_datenschutz_requires_auth(pw_set_client, tmp_path, monkeypatch):
+    """260722-jrq: voller GET ohne gueltige Session -> 303 auf /login."""
     _setup_env(tmp_path, monkeypatch)
-    response = authed_client.get("/datenschutz")
-    assert response.status_code == 401
+    response = pw_set_client.get("/datenschutz", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_datenschutz_page_contains_core_dsgvo_sections(authed_client, tmp_path, monkeypatch):

@@ -49,13 +49,14 @@ def test_cross_origin_post_reset_rejected(authed_client, cfg):
     assert r.status_code == 403
 
 
-def test_missing_origin_and_referer_rejected(client, cfg):
-    """Kein Origin UND kein Referer auf einer unsicheren Methode -> 403."""
-    from src.main import app
-    from fastapi.testclient import TestClient
+def test_missing_origin_and_referer_rejected(authed_client, cfg):
+    """Kein Origin UND kein Referer auf einer unsicheren Methode -> 403.
 
-    with TestClient(app) as bare:  # KEIN Default-Origin
-        r = bare.post("/save", data={"agent_id": "info"})
+    260722-jrq: braucht jetzt eine gueltige Session (authed_client), sonst
+    greift die enforce_auth-Middleware bereits VOR der CSRF-Pruefung (401) --
+    Origin wird hier explizit auf leer ueberschrieben (analog
+    test_referer_same_host_allowed), um gezielt NUR die CSRF-Schicht zu testen."""
+    r = authed_client.post("/save", headers={"Origin": ""}, data={"agent_id": "info"})
     assert r.status_code == 403
 
 
