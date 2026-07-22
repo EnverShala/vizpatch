@@ -87,6 +87,7 @@ stopped_at: Milestone complete (Phase 12 was final phase)
 | 260722-h9e | WebUI-Umbau: Agenten-Tabelle mit Edit-Popup + Chat-Auswahl-Radio | 2026-07-22 | 1b20850 | [260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop](./quick/260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop/) |
 | 260722-jrq | WebUI Session-Login: admin-fix, Passwort-Pflicht, Login pro Sitzung, Passwort-Popup | 2026-07-22 | 8bfb81e | [260722-jrq-webui-session-login-admin-fix-passwort-p](./quick/260722-jrq-webui-session-login-admin-fix-passwort-p/) |
 | 260722-llm | Konkrete LLM-Fehlerdiagnose im Agenten-Chat (describe_llm_error) statt Sammelmeldung „nicht erreichbar" | 2026-07-22 | f0b1701 | [260722-llm-chat-fehler-diagnose](./quick/260722-llm-chat-fehler-diagnose/) |
+| 260722-val | Live-Verbindungsprüfung beim Agent-Speichern (IMAP+LLM, hart blockierend) + Add-in-Einstellungen durch WebUI-Passwort geschützt | 2026-07-22 | f2c40ee, 9c97a19 | [260722-save-validation-und-addin-lock](./quick/260722-save-validation-und-addin-lock/) |
 
 ## Blockers / Open Preflight (Kundenseite)
 
