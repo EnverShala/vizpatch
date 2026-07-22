@@ -90,9 +90,35 @@ def read_env_raw(agent_id: str) -> dict[str, str]:
     return {k: (v or "") for k, v in dotenv_values(env_path).items()}
 
 
+# Der webui-Container läuft als root, der agent-Container als non-root
+# (`vizpatch`, UID 1000 — siehe agent/Dockerfile `useradd --uid 1000`). Beide
+# teilen den Bind-Mount /config. Schreibt die root-WebUI die .env mit 0o600, kann
+# der Agent sie NICHT lesen und crasht beim Boot mit PermissionError
+# (Restart-Schleife, Exit 1). Deshalb wird das Eigentum an den vom Agent gelesenen
+# Dateien auf den Agent-User übertragen — 0o600 (nur Owner/root) bleibt gewahrt,
+# root (webui) liest ohnehin. UID/GID via Env überschreibbar (Default 1000).
+_AGENT_UID = int(os.getenv("AGENT_UID", "1000"))
+_AGENT_GID = int(os.getenv("AGENT_GID", "1000"))
+
+
+def _grant_agent_access(path: Path) -> None:
+    """Best-effort: überträgt `path` an den Agent-User, damit der non-root
+    Agent-Container die von der root-WebUI geschriebene Datei lesen kann. `os.chown`
+    fehlt auf Windows (lokale Tests) -> übersprungen; schlägt der chown fehl (WebUI
+    nicht als root) -> nur geloggt, kein Abbruch."""
+    chown = getattr(os, "chown", None)
+    if chown is None:
+        return
+    try:
+        chown(path, _AGENT_UID, _AGENT_GID)
+    except (PermissionError, OSError) as e:
+        logger.warning("chown_failed", extra={"path": str(path), "error": str(e)})
+
+
 def write_env(agent_id: str, updates: dict[str, str]) -> None:
     env_path = _env_path(agent_id)
     env_path.parent.mkdir(parents=True, exist_ok=True)
+    _grant_agent_access(env_path.parent)
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
     else:
@@ -133,6 +159,9 @@ def write_env(agent_id: str, updates: dict[str, str]) -> None:
         os.chmod(env_path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
     except PermissionError as e:
         logger.warning("chmod_failed", extra={"path": str(env_path), "error": str(e)})
+    # .env dem Agent-User übereignen, sonst kann der non-root agent-Container die
+    # 0o600-Datei nicht lesen (PermissionError -> Restart-Schleife).
+    _grant_agent_access(env_path)
 
 
 def read_context_md(agent_id: str) -> str:

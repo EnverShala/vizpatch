@@ -21,6 +21,20 @@ def test_write_env_encrypts_secret_key(tmp_path, monkeypatch):
     assert "LLM_API_KEY=sk-x" not in content
 
 
+def test_write_env_grants_agent_ownership(tmp_path, monkeypatch, mocker):
+    """Regression: die root-WebUI muss die .env dem Agent-User (UID 1000)
+    übereignen, sonst kann der non-root agent-Container sie nicht lesen
+    (PermissionError -> Restart-Schleife, Exit 1)."""
+    _setup_env(tmp_path, monkeypatch)
+    # os.chown fehlt auf Windows -> create=True, damit der Mock unabhängig greift
+    chown_mock = mocker.patch("src.agents_io.os.chown", create=True)
+    import src.agents_io as agents_io
+    agents_io.write_env("info", {"IMAP_USER": "u@x.de"})
+    env_path = agents_io._env_path("info")
+    # .env selbst wurde dem Agent-User (1000:1000) übereignet
+    chown_mock.assert_any_call(env_path, 1000, 1000)
+
+
 def test_read_env_masked_masks_secrets_no_decrypt(tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     import src.agents_io as agents_io
