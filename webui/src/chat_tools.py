@@ -1602,54 +1602,6 @@ def _authorize_session(agent_id: str, session_id: str) -> None:
     _authorized_move_sessions[_session_key(agent_id, session_id)] = now
 
 
-# --- Session-persistenter Anonymizer (Problem 1: Pseudonyme über Turns konsistent) ---
-#
-# Phase 10 erzeugte pro /send-Request eine NEUE Anonymizer-Instanz -> das Mapping
-# Klartext<->Pseudonym ([EMAIL_1]->max@example.com) lebte nur EINEN Turn. Bat der
-# Betreiber den Agenten, in Turn 1 eine Adresse aus dem Postfach zu suchen und erst
-# in Turn 2 einen Entwurf an sie zu richten, war das Pseudonym in Turn 2 nicht mehr
-# stabil aufloesbar. Deshalb wird die Instanz jetzt je (agent_id, session_id) im
-# Speicher gehalten (dieselbe prozess-lokale, TTL-evictete Store-Mechanik wie die
-# Move-Autorisierung). Das LLM sieht weiterhin ausschliesslich Pseudonyme (D-06/D-08
-# unveraendert) — nur die Klartext-Zuordnung bleibt ueber die Sitzung stabil.
-#
-# Ein LEERES session_id wird NIE gecacht: sonst teilten unabhaengige Aufrufer ohne
-# Sitzungs-Identitaet dieselbe Instanz und damit ihre PII-Mappings (Cross-Talk).
-# Solche Aufrufe bekommen wie bisher eine frische Instanz pro Turn.
-_session_anonymizers: dict[str, "tuple[float, pii.Anonymizer]"] = {}
-_SESSION_ANONYMIZER_TTL_SECONDS = 12 * 3600
-
-
-def _get_session_anonymizer(
-    agent_id: str, session_id: str, enabled: bool
-) -> "pii.Anonymizer | None":
-    """Liefert die für (agent_id, session_id) persistente Anonymizer-Instanz (Problem
-    1: konsistente Pseudonyme über alle Turns einer Chat-Sitzung). `enabled=False`
-    (ENABLE_PII_REDACTION aus) -> None (unverändertes Alt-Verhalten). Leeres
-    `session_id` -> frische, NICHT gecachte Instanz (kein PII-Cross-Talk zwischen
-    identitätslosen Aufrufern). Abgelaufene Einträge verfallen (TTL) und werden beim
-    Zugriff evictet."""
-    if not enabled:
-        return None
-    if not session_id:
-        return pii.Anonymizer()
-    now = time.time()
-    expired = [
-        key
-        for key, (created_at, _anon) in _session_anonymizers.items()
-        if now - created_at > _SESSION_ANONYMIZER_TTL_SECONDS
-    ]
-    for key in expired:
-        _session_anonymizers.pop(key, None)
-    key = _session_key(agent_id, session_id)
-    entry = _session_anonymizers.get(key)
-    if entry is not None:
-        return entry[1]
-    anon = pii.Anonymizer()
-    _session_anonymizers[key] = (now, anon)
-    return anon
-
-
 def _trash_confirmation_required(agent_id: str) -> bool:
     """Betreiber-Flag `ENABLE_TRASH_CONFIRMATION` (Default `true`). Steht es auf
     `false`, entfällt das Bestätigungs-/Session-Autorisierungs-Gate für
@@ -2656,11 +2608,9 @@ def run_agentic_chat(
     tools_enabled = (os.getenv("ENABLE_CHAT_TOOLS") or "true").strip().lower() != "false"
 
     enable_pseudonym = (read_env_raw(agent_id).get("ENABLE_PII_REDACTION") or "true").strip().lower() != "false"
-    # Problem 1: EINE Anonymizer-Instanz je (agent_id, session_id) — Pseudonyme
-    # bleiben ueber alle Turns der Chat-Sitzung konsistent (z.B. in Turn 1 gesuchte
-    # Adresse in Turn 2 als Entwurfs-Empfaenger). Leeres session_id -> frische
-    # Instanz pro Turn (unveraendertes Alt-Verhalten, kein Cross-Talk).
-    anonymizer = _get_session_anonymizer(agent_id, session_id, enable_pseudonym)
+    # D-04: EINE frische Anonymizer-Instanz pro Request (kein Persistieren über
+    # Requests hinweg — minimale Retention des Klartext<->Pseudonym-Mappings).
+    anonymizer = pii.Anonymizer() if enable_pseudonym else None
 
     if provider != "anthropic" or not tools_enabled:
         yield from _run_fallback_chat(
