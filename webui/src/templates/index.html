@@ -3,7 +3,6 @@
 {% block header_nav %}
 <nav class="section-nav" aria-label="Bereichsnavigation">
   <a href="#sec-webui">WebUI</a>
-  <a href="#sec-autostart">Autostart</a>
   {% if agent_id %}
   <a href="#sec-chat">Chat</a>
   {% endif %}
@@ -62,19 +61,6 @@
     <div class="section-save">
       <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, [name='agent_id']" hx-target="#save-msg-webui" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
       <span id="save-msg-webui" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-
-  <fieldset id="sec-autostart">
-    <legend>Autostart</legend>
-    <label>
-      <input type="checkbox" name="autostart_enabled" value="true" {% if global_env.AUTOSTART_ENABLED == 'true' %}checked{% endif %}>
-      Autostart aktiviert (AUTOSTART_ENABLED)
-    </label>
-    <p class="hint">Erfordert einmaliges <code>sudo ./install-autostart.sh enable</code> auf dem Host (siehe RUNBOOK)</p>
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, [name='agent_id']" hx-target="#save-msg-autostart" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-autostart" class="save-inline-msg"></span>
     </div>
   </fieldset>
 </form>
@@ -175,6 +161,30 @@ async function relearnStyle(btn) {
   } finally {
     btn.disabled = false;
     btn.textContent = original;
+  }
+}
+
+/* Autostart-Umschalter in der Agenten-Uebersicht (_status_card.html). Speichert
+ * bei jeder Aenderung sofort per fetch an /save. Der Wert wird IMMER explizit
+ * mitgegeben ('true'/'false') — eine unchecked Checkbox wuerde sonst gar nichts
+ * senden, sodass sich Autostart nicht mehr ausschalten liesse. Bei Fehler wird
+ * der Haken visuell zurueckgesetzt, damit UI und persistierter Zustand nicht
+ * auseinanderlaufen. Die Funktion lebt hier (ausserhalb #status-card), damit sie
+ * den 30s-outerHTML-Swap ueberlebt; das onchange-Attribut selbst kommt mit dem
+ * frisch eingefuegten Card-Markup wieder mit. */
+async function saveAutostart(cb) {
+  const desired = cb.checked;
+  try {
+    const fd = new FormData();
+    fd.append('autostart_enabled', desired ? 'true' : 'false');
+    const res = await fetch('/save', {method: 'POST', body: fd});
+    if (!res.ok) {
+      alert('Autostart konnte nicht gespeichert werden (Fehler ' + res.status + ').');
+      cb.checked = !desired;
+    }
+  } catch (e) {
+    alert('Netzwerkfehler beim Speichern von Autostart: ' + e);
+    cb.checked = !desired;
   }
 }
 

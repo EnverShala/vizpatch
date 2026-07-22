@@ -98,6 +98,20 @@ html {
   font-weight: 500;
 }
 
+/* Autostart-Umschalter in der Agenten-Uebersicht (ehem. eigene Fieldset-Sektion).
+ * Zeigefinger auf Checkbox + Schriftzug; der Hinweis liegt als title-Tooltip an. */
+.autostart-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  cursor: pointer;
+}
+
+.autostart-toggle input {
+  cursor: pointer;
+}
+
 /* Agenten-Tabelle: randlos ("unsichtbar"), großzügiger Spalten-Gap über Zell-
  * Polsterung, bündig mit dem Container-Innenrand. */
 .agent-status-table {

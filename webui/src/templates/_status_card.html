@@ -1,5 +1,17 @@
 <div id="status-card" hx-get="/agents/status" hx-trigger="every 30s" hx-swap="outerHTML">
   <h3>Agenten-Übersicht</h3>
+
+  {# Autostart-Umschalter (ehem. eigene Fieldset-Sektion) — der Hinweistext
+     erscheint als Hover-Tooltip (title) auf Checkbox + Schriftzug. Speichert
+     bei jeder Änderung sofort per fetch an /save (saveAutostart in index.html);
+     unchecked sendet explizit 'false', damit Ausschalten zuverlässig greift. #}
+  <label class="autostart-toggle"
+         title="Erfordert einmaliges 'sudo ./install-autostart.sh enable' auf dem Host (siehe RUNBOOK)">
+    <input type="checkbox" name="autostart_enabled" value="true"
+           {% if autostart_enabled %}checked{% endif %} onchange="saveAutostart(this)">
+    Autostart aktiviert
+  </label>
+
   <p class="container-status">
     Container-Status:
     {% if service_status.state == "running" %}

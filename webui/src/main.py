@@ -243,6 +243,13 @@ def _privacy_consent_state() -> tuple[bool, str]:
     return accepted, at
 
 
+def _autostart_enabled() -> bool:
+    """Autostart-Flag (global, Root-.env). Wird in die Agenten-Uebersicht
+    (_status_card.html) gerendert — daher an allen Render-Stellen der Card
+    (index, /agents/status, Start/Stop, /agent/*) mitzugeben."""
+    return (config_io.read_env_raw().get("AUTOSTART_ENABLED") or "").strip().lower() == "true"
+
+
 def _agent_form_ctx(agent_id: str) -> dict:
     """Baut den per-Agent-Kontext fuers Config-Formular (Task 1, UMBAU-Plan
     260722-h9e): aus `index()` extrahiert, damit die neue `agent_edit`-Route
@@ -306,6 +313,7 @@ def index(
             "agent_statuses": agent_statuses,
             "env": env_vals,
             "global_env": config_io.read_env_masked(),
+            "autostart_enabled": _autostart_enabled(),
             "context_md": context_md,
             "style_md": style_md,
             "style_note": style_note,
@@ -337,7 +345,11 @@ def agents_status(request: Request, user: str = Depends(auth.require_auth)):
     return templates.TemplateResponse(
         request,
         "_status_card.html",
-        {"agent_statuses": _build_agent_statuses(), "service_status": docker_ctrl.get_agent_status()},
+        {
+            "agent_statuses": _build_agent_statuses(),
+            "service_status": docker_ctrl.get_agent_status(),
+            "autostart_enabled": _autostart_enabled(),
+        },
     )
 
 
@@ -459,6 +471,7 @@ def agent_flag_toggle(
         {
             "agent_statuses": _build_agent_statuses(),
             "service_status": docker_ctrl.get_agent_status(),
+            "autostart_enabled": _autostart_enabled(),
             "action_result": "wirkt ab dem nächsten Poll-Zyklus",
         },
     )
@@ -481,6 +494,7 @@ def agent_action(request: Request, action: str, user: str = Depends(auth.require
         {
             "agent_statuses": _build_agent_statuses(),
             "service_status": docker_ctrl.get_agent_status(),
+            "autostart_enabled": _autostart_enabled(),
             "action_result": result,
         },
     )
