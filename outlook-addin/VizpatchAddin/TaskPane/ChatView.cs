@@ -125,7 +125,7 @@ namespace VizpatchAddin.TaskPane
             // Bei Groessenaenderung der Pane die Blasen neu ausrichten (Breite/Seite).
             _log.Resize += (s, e) => RelayoutBubbles();
 
-            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 164, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
+            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 176, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
 
             // Eingabefeld in einem gerundeten Rahmen-Container (RoundedPanel) —
             // die TextBox selbst ist randlos, der weiche Rahmen kommt vom Panel und
@@ -179,8 +179,8 @@ namespace VizpatchAddin.TaskPane
             {
                 Dock = DockStyle.Bottom,
                 FlowDirection = FlowDirection.LeftToRight,
-                Height = 30,
-                Padding = new Padding(2, 4, 0, 0),
+                Height = 38,
+                Padding = new Padding(2, 6, 0, 6),
                 BackColor = UiBg,
             };
             _includeMailCheck = new ModernCheckBox
@@ -190,6 +190,7 @@ namespace VizpatchAddin.TaskPane
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(0x55, 0x5B, 0x66),
                 BackColor = UiBg,
+                Margin = new Padding(0, 2, 0, 2),
             };
             optionsBar.Controls.Add(_includeMailCheck);
 
