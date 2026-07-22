@@ -1,7 +1,35 @@
 {% extends "base.html" %}
 
 {% block header_nav %}
-<nav class="section-nav" aria-label="Bereichsnavigation"><!-- DE/EN-Schalter folgt --></nav>
+<div class="header-bar">
+  <div class="header-bar-left">
+    <form action="/logout" method="post" class="logout-form">
+      <button type="submit" class="btn-header">Abmelden</button>
+    </form>
+    <button type="button" class="btn-header" id="btn-change-password"
+            hx-get="/password" hx-target="#agent-dialog-body" hx-swap="innerHTML">Passwort ändern</button>
+  </div>
+
+  <div class="header-bar-center">
+    {# Autostart-Umschalter (ehem. Übersicht) — Hinweis als Hover-Tooltip.
+       Speichert sofort per fetch an /save (saveAutostart unten); unchecked sendet
+       explizit 'false', damit Ausschalten zuverlässig greift. #}
+    <label class="autostart-toggle"
+           title="Erfordert einmaliges 'sudo ./install-autostart.sh enable' auf dem Host (siehe RUNBOOK)">
+      <input type="checkbox" name="autostart_enabled" value="true"
+             {% if autostart_enabled %}checked{% endif %} onchange="saveAutostart(this)">
+      Autostart
+    </label>
+  </div>
+
+  <div class="header-bar-right">
+    {# DE/EN-Sprachschalter — vorerst nur platziert (Funktion folgt in eigenem Task). #}
+    <div class="lang-switch" role="group" aria-label="Sprache (Umschaltung folgt)">
+      <button type="button" class="lang-opt is-active" aria-pressed="true" disabled>DE</button>
+      <button type="button" class="lang-opt" aria-pressed="false" disabled title="Englisch folgt">EN</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block content %}

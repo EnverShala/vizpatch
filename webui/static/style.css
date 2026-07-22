@@ -40,7 +40,82 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Sprungnavigation unter dem Logo (im sticky Kopfbereich): zentrierte Pill-Links */
+/* Kopfleiste unter dem Logo (im sticky Kopfbereich): dreigeteilt —
+ * links Abmelden + Passwort ändern, mittig Autostart, rechts DE/EN-Schalter. */
+.header-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.header-bar-left {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.header-bar-center {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+}
+
+.header-bar-right {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.header-bar .logout-form {
+  margin: 0;
+}
+
+/* Abmelden + Passwort ändern: bewusst identische Optik ("beide gleich"). */
+.btn-header {
+  background: #fff;
+  border: 1px solid #d0d7e2;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  color: #1e3a5f;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-header:hover,
+.btn-header:focus {
+  background: #1e3a5f;
+  border-color: #1e3a5f;
+  color: #fff;
+}
+
+/* DE/EN-Sprachschalter — vorerst reiner Platzhalter (disabled, keine Funktion). */
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid #d0d7e2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.lang-opt {
+  background: #fff;
+  border: none;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: default;
+}
+
+.lang-opt.is-active {
+  background: #1e3a5f;
+  color: #fff;
+}
+
+/* Sprungnavigation (Alt-Rest, aktuell ungenutzt): zentrierte Pill-Links */
 .section-nav {
   display: flex;
   flex-wrap: wrap;
@@ -98,13 +173,14 @@ html {
   font-weight: 500;
 }
 
-/* Autostart-Umschalter in der Agenten-Uebersicht (ehem. eigene Fieldset-Sektion).
+/* Autostart-Umschalter (in der Kopfleiste unter dem Logo, mittig).
  * Zeigefinger auf Checkbox + Schriftzug; der Hinweis liegt als title-Tooltip an. */
 .autostart-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 0 0 0.75rem;
+  margin: 0;
+  font-size: 0.85rem;
   cursor: pointer;
 }
 
