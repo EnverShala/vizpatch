@@ -86,6 +86,41 @@ PIA auf der Build-Maschine installiert sein muss — nicht die Add-in-Logik
 ClickOnce ist der VSTO-native, selbstaktualisierende Per-User-Weg für eine
 Einzel-Maschine (D-88); versionierte Updates + Rollback bringt ClickOnce mit.
 
+### 2c. Fertiges Paket im Deployment-Bundle (v1.9.0)
+
+Für den Rollout ist bereits ein **fertig veröffentlichtes ClickOnce-Paket**
+beigelegt — im Deployment-Bundle unter **`addin-publish/`** (parallel zum
+Server-Paket auf dem USB-Stick). Es enthält:
+
+- `VizpatchAddin.vsto` — die Installationsdatei (Doppelklick installiert),
+- `Application Files/VizpatchAddin_1_9_0_0/` — die signierten `.deploy`-Dateien.
+
+**Installation ohne setup.exe:** Auf jeder Maschine mit Outlook classic sind die
+Voraussetzungen (.NET Framework 4.8 inbox + VSTO-2010-Runtime via Office) bereits
+vorhanden — daher genügt der **Doppelklick auf `VizpatchAddin.vsto`**; ein
+separater `setup.exe`-Bootstrapper ist nicht nötig. Er ist ausschließlich für
+„nackte" Rechner ohne diese Komponenten sinnvoll und wird dann über den
+VS-Publish-Wizard (Abschnitt 2a) mit aktivierten Prerequisites erzeugt.
+
+**Reproduktion des `.vsto`-Pakets per Kommandozeile** (Windows, VS-MSBuild):
+
+```powershell
+$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
+& $msbuild "outlook-addin\VizpatchAddin\VizpatchAddin.csproj" -t:Publish `
+  -p:Configuration=Release `
+  -p:PublishDir="outlook-addin\VizpatchAddin\publish\" `
+  -p:PublishUrl="outlook-addin\VizpatchAddin\publish\" `
+  -p:Install=true -p:UpdateEnabled=false -p:ApplicationVersion=1.9.0.0 `
+  -p:BootstrapperEnabled=false -p:GenerateBootstrapper=false
+```
+
+> Hinweis: `-t:Publish` mit **aktiviertem** Bootstrapper (`setup.exe`) ist bei
+> diesem Legacy-VSTO-Projekt über die reine Kommandozeile unzuverlässig
+> (Signatur-/Bootstrapper-Schritt). Für ein echtes `setup.exe` daher den
+> VS-Publish-Wizard (2a) nutzen. Die Bootstrapper-Prerequisites sind in der
+> `.csproj` bereits als `BootstrapperPackage`-Items hinterlegt (.NET 4.8 +
+> `Microsoft.VSTORuntime.4.0`), sodass der Wizard sie direkt anbietet.
+
 ### 2b. Code-Signing / „Herausgeber nicht verifiziert"
 
 Der Build signiert die ClickOnce-Manifeste mit einem **selbstsignierten

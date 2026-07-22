@@ -96,6 +96,21 @@ cp deployment/RUNBOOK-KUNDE.md "${DIST_DIR}/README.md"
 # Ausfuehrliche Server-/Sicherheitsdetails als Zusatzdokument im Paket.
 cp deployment/README.phase4.md "${DIST_DIR}/deployment/README.phase4.md"
 
+# Fertiges Outlook-Add-in-ClickOnce-Paket (Windows, separat gebaut) mit ins
+# Bundle legen, falls vorhanden — der Runbook (Teil B) verweist auf diesen
+# `addin-publish/`-Ordner. Wird NICHT hier gebaut (VSTO braucht Windows/VS);
+# Erwartung: `dist/addin-publish-${VERSION}/` wurde vorab per VS-MSBuild erzeugt
+# (siehe deployment/README.addin-outlook.md Kap. 2c).
+ADDIN_PUBLISH_SRC="dist/addin-publish-${VERSION}"
+if [ -d "${ADDIN_PUBLISH_SRC}" ]; then
+  echo "==> Add-in-ClickOnce-Paket beilegen: ${ADDIN_PUBLISH_SRC} -> addin-publish/"
+  mkdir -p "${DIST_DIR}/addin-publish"
+  cp -r "${ADDIN_PUBLISH_SRC}/." "${DIST_DIR}/addin-publish/"
+else
+  echo "==> HINWEIS: ${ADDIN_PUBLISH_SRC} nicht gefunden — Add-in-Paket NICHT beigelegt."
+  echo "    (Add-in vorab auf Windows veroeffentlichen, siehe README.addin-outlook.md Kap. 2c.)"
+fi
+
 echo "==> SHA256-Checksums berechnen"
 ( cd "${DIST_DIR}" && sha256sum "${AGENT_TAR}" > "${AGENT_TAR}.sha256" )
 ( cd "${DIST_DIR}" && sha256sum "${WEBUI_TAR}" > "${WEBUI_TAR}.sha256" )

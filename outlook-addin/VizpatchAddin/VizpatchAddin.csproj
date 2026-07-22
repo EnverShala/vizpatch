@@ -139,6 +139,24 @@
     <None Include="app.config" Condition="Exists('app.config')" />
   </ItemGroup>
 
+  <!-- ClickOnce-Prerequisites (Bootstrapper): erlaubt `msbuild -t:Publish` ein
+       setup.exe zu erzeugen, das .NET Framework 4.8 + die VSTO-2010-Runtime bei
+       Bedarf nachinstalliert (README.addin-outlook.md Kap. 2/3). Ohne diese
+       Items schlaegt die Bootstrapper-Erzeugung fehl (setup.exe wird nicht
+       signiert/gefunden). -->
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.8">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.8</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.VSTORuntime.4.0">
+      <Visible>False</Visible>
+      <ProductName>Microsoft Visual Studio 2010 Tools for Office Runtime</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 
   <!-- VSTO-Build-Targets. $(VSToolsPath) zeigt beim Aufruf ueber die volle

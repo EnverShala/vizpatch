@@ -87,27 +87,37 @@ und wird getrennt vom Server verteilt.
 
 ### So kommt das Add-in auf den Kunden-PC (die häufige Frage)
 
-Der Linux-Server liefert das Add-in **nicht** aus. Der Ablauf ist:
+Der Linux-Server liefert das Add-in **nicht** aus — es ist Windows-Software und wird
+separat auf den Kunden-PC kopiert. Ein **fertig veröffentlichtes ClickOnce-Paket liegt
+bereits bei**: im Ordner **`addin-publish/`** (neben diesem Server-Paket auf dem USB-Stick).
+Kein eigener Build nötig.
 
-1. **Einmalig auf einem Windows-Rechner mit Visual Studio veröffentlichen** (Vizionists-Seite):
-   - `outlook-addin/VizpatchOutlookAddin.sln` in Visual Studio öffnen.
-   - Projekt **VizpatchAddin** → Rechtsklick → **Veröffentlichen** (ClickOnce).
-   - Unter „Erforderliche Komponenten" **.NET Framework 4.8** + **VSTO 2010 Runtime** aktivieren.
-   - Ziel: ein Ordner, z. B. `publish/`. Ergebnis: **`setup.exe`** + `VizpatchAddin.vsto` +
-     Ordner `Application Files/`.
-2. **Diesen `publish/`-Ordner auf den Kunden-PC bringen** — zwei Wege, beide im selben Netzwerk problemlos:
-   - **Netzwerkfreigabe (bequem):** den `publish/`-Ordner auf einem im LAN erreichbaren
-     Share ablegen (Windows-Freigabe/SMB) und am Kunden-PC per `\\rechner\freigabe\publish\setup.exe`
-     starten. ClickOnce kann von dort auch spätere Updates automatisch ziehen.
-   - **USB-Stick (einfachster Weg):** `publish/`-Ordner rüberkopieren, `setup.exe` lokal starten.
-3. **Am Kunden-PC installieren:** `setup.exe` ausführen. Fehlt .NET/VSTO, installiert der
-   Assistent es nach (evtl. Adminrechte + Neustart). Meldung „Herausgeber nicht verifiziert"
-   (selbstsigniertes Dev-Zertifikat) bewusst mit **Installieren** bestätigen.
-4. **Outlook classic starten:** im Menüband erscheint die Gruppe **„Vizpatch"** mit dem
+Inhalt von `addin-publish/`:
+- **`VizpatchAddin.vsto`** — die Installationsdatei (Doppelklick installiert).
+- `Application Files/` — die zugehörigen Programmdateien (müssen im selben Ordner bleiben).
+
+**Installation am Kunden-PC:**
+
+1. **`addin-publish/` auf den Kunden-PC bringen** — beide Wege im selben Netz problemlos:
+   - **Netzwerkfreigabe (bequem):** Ordner auf einen im LAN erreichbaren Windows-Share legen
+     und am Kunden-PC `\\rechner\freigabe\addin-publish\VizpatchAddin.vsto` öffnen.
+   - **USB-Stick (einfachster Weg):** Ordner rüberkopieren, lokal `VizpatchAddin.vsto` öffnen.
+2. **`VizpatchAddin.vsto` per Doppelklick öffnen** → ClickOnce installiert das Add-in
+   (Per-User, keine Adminrechte). Meldung „Herausgeber nicht verifiziert" (selbstsigniertes
+   Dev-Zertifikat) bewusst mit **Installieren** bestätigen.
+3. **Outlook classic starten:** im Menüband erscheint die Gruppe **„Vizpatch"** mit dem
    Button **„Vizpatch"** → Chat-Bereich rechts einblenden.
 
+> **Voraussetzungen auf dem Kunden-PC:** .NET Framework 4.8 (auf Windows 10/11 bereits
+> vorhanden) und die VSTO-2010-Runtime (kommt mit jeder Outlook-classic-Installation mit).
+> Auf einem Rechner, der Outlook classic hat, sind beide also da — die `.vsto`-Installation
+> läuft direkt. Nur auf einem „nackten" Rechner ohne diese Komponenten wäre ein
+> `setup.exe`-Bootstrapper nötig; der wird bei Bedarf über den Visual-Studio-Publish-Assistenten
+> erzeugt (siehe `README.addin-outlook.md`, Kapitel 2/3).
+
 > Der Linux-Server (Docker) kann das Add-in **nicht** bauen — VSTO ist Windows-/
-> Visual-Studio-gebunden. Deshalb Build immer auf Windows, Server bleibt reiner Backend-Host.
+> Visual-Studio-gebunden. Der mitgelieferte `addin-publish/`-Ordner wurde auf einem
+> Windows-Rechner erzeugt; der Server bleibt reiner Backend-Host.
 
 ### Verbindung Add-in ↔ Server einrichten
 
