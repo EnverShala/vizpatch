@@ -1434,6 +1434,37 @@ _SESSION_AUTHORIZATION_TTL_SECONDS = 12 * 3600
 
 _SESSION_SCOPED_TOOLS: set[str] = {"mail_in_papierkorb", "entwurf_in_papierkorb", "entwurf_mit_anhang"}
 
+# Nutzerfreundliche Aktivitäts-Labels je Werkzeug (D-80): im Chat wird beim
+# Werkzeugaufruf NICHT der technische Funktionsname ("mails_suchen") gezeigt,
+# sondern ein sprechender Tätigkeits-Text ("Mails suchen…"). Fällt ein Name aus
+# der Tabelle (neues Werkzeug), greift der generische Fallback in
+# `_tool_activity_label`.
+_TOOL_ACTIVITY_LABELS: dict[str, str] = {
+    "ordner_auflisten": "Ordner auflisten…",
+    "mails_suchen": "Mails suchen…",
+    "mail_lesen": "Mail lesen…",
+    "entwuerfe_auflisten": "Entwürfe auflisten…",
+    "entwurf_lesen": "Entwurf lesen…",
+    "entwurf_bearbeiten": "Entwurf bearbeiten…",
+    "entwurf_erstellen": "Entwurf erstellen…",
+    "entwurf_mit_anhang": "Entwurf mit Anhang erstellen…",
+    "mail_in_papierkorb": "Mail in den Papierkorb verschieben…",
+    "entwurf_in_papierkorb": "Entwurf in den Papierkorb verschieben…",
+}
+
+
+def _tool_activity_label(name: str) -> str:
+    """Sprechendes Aktivitäts-Label für ein Werkzeug — nie der rohe Funktionsname.
+    Fallback für unbekannte Namen: Unterstriche zu Leerzeichen, erster Buchstabe
+    groß, mit „…" — ergibt z. B. „Neues werkzeug…"."""
+    label = _TOOL_ACTIVITY_LABELS.get(name)
+    if label:
+        return label
+    pretty = (name or "").replace("_", " ").strip()
+    if pretty:
+        pretty = pretty[0].upper() + pretty[1:]
+    return (pretty or "Arbeite") + "…"
+
 
 # --- Phase 12 (ATT-02, D-92/95/96): Pending-Upload-Store ---
 #
@@ -2501,7 +2532,7 @@ def _run_anthropic_tool_loop(
 
         tool_result_content = []
         for block in tool_blocks:
-            yield {"type": "tool", "label": f"\U0001F527 {block.name}…"}
+            yield {"type": "tool", "label": _tool_activity_label(block.name)}
             handler = TOOL_HANDLERS.get(block.name)
             if handler is None:
                 payload = {"fehler": f"Unbekanntes Werkzeug: {block.name}"}

@@ -221,9 +221,17 @@ window.initVizpatchChat = function () {
           } else if (parsed.eventType === 'done') {
             /* Stream-Ende — nichts anzuhängen. */
           } else if (parsed.eventType === 'tool') {
-            /* Tool-Aktivität wird bewusst NICHT angezeigt (Betreiber-Wunsch: keine
-             * "werkzeug_..."-Statuszeilen im Chat) — Event wird verworfen. Der
-             * Antworttext bleibt davon unberührt. */
+            /* Dezente Tätigkeits-Zeile (z. B. "Mails suchen…") — das Label kommt
+             * bereits sprechend vom Server (kein "[Werkzeug]"-Präfix, kein Emoji,
+             * kein Funktionsname). VOR der Antwort-Blase eingefügt, damit die
+             * natürliche Reihenfolge (erst Tätigkeit, dann Antwort) erhalten bleibt. */
+            if (parsed.data) {
+              const toolLine = document.createElement('div');
+              toolLine.className = 'chat-tool-activity';
+              toolLine.textContent = parsed.data;
+              log.insertBefore(toolLine, assistantBubble);
+              log.scrollTop = log.scrollHeight;
+            }
           } else {
             assistantText += parsed.data;
             assistantBubble.textContent += parsed.data;
