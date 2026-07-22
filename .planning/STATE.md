@@ -85,6 +85,7 @@ stopped_at: Milestone complete (Phase 12 was final phase)
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260722-h9e | WebUI-Umbau: Agenten-Tabelle mit Edit-Popup + Chat-Auswahl-Radio | 2026-07-22 | 1b20850 | [260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop](./quick/260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop/) |
+| 260722-jrq | WebUI Session-Login: admin-fix, Passwort-Pflicht, Login pro Sitzung, Passwort-Popup | 2026-07-22 | 8bfb81e | [260722-jrq-webui-session-login-admin-fix-passwort-p](./quick/260722-jrq-webui-session-login-admin-fix-passwort-p/) |
 
 ## Blockers / Open Preflight (Kundenseite)
 
