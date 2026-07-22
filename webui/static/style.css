@@ -12,15 +12,20 @@ body {
   padding: 0;
 }
 
-header {
-  background: #1e3a5f;
-  color: #fff;
-  padding: 1rem 2rem;
+/* Kopfbereich: statt blauer Navbar das Vizpatch-Logo, mittig und exakt so breit
+ * wie die weißen Content-Container (gleiche max-width + horizontale Polsterung
+ * wie .container, damit die Logo-Kante mit den fieldset-Kanten fluchtet). */
+.site-header {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 0;
 }
 
-header h1 {
-  margin: 0;
-  font-size: 1.4rem;
+.site-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
 }
 
 .container {

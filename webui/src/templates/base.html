@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body hx-on::response-error="if (event.detail.xhr.status === 401) location.reload();">
-  <header>
-    <h1>Vizpatch &mdash; Konfiguration</h1>
+  <header class="site-header">
+    <img src="/static/vizpatch_logo.png" alt="Vizpatch &mdash; E-Mail AI Agent" class="site-logo">
   </header>
   <main class="container">
     {% block content %}{% endblock %}
