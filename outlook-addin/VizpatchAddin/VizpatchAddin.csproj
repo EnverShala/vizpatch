@@ -132,7 +132,7 @@
        geladen (GetCustomUI bzw. ChatView.LoadEmblemSafe). -->
   <ItemGroup>
     <EmbeddedResource Include="Ribbon\ChatRibbon.xml" />
-    <EmbeddedResource Include="Resources\vizpatch_emblem.png" />
+    <EmbeddedResource Include="Resources\vizpatch_logo.png" />
   </ItemGroup>
 
   <ItemGroup>

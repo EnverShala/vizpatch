@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using VizpatchAddin.Core;
+using VizpatchAddin.TaskPane;
 
 namespace VizpatchAddin
 {
@@ -50,22 +51,46 @@ namespace VizpatchAddin
             }
         }
 
+        // Moderne Palette (identisch zur ChatView-Anmutung).
+        private static readonly Color DlgBg = Color.White;
+        private static readonly Color PrimaryBg = Color.FromArgb(0x25, 0x63, 0xEB);
+        private static readonly Color PrimaryHover = Color.FromArgb(0x1D, 0x4E, 0xD8);
+        private static readonly Color SecondaryBg = Color.FromArgb(0xEE, 0xF1, 0xF5);
+        private static readonly Color SecondaryHover = Color.FromArgb(0xDD, 0xE3, 0xEC);
+        private static readonly Color SecondaryFg = Color.FromArgb(0x1E, 0x3A, 0x5F);
+
         private void BuildUi()
         {
             Text = "Vizpatch — Einstellungen";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            // Sizable statt FixedDialog: der Betreiber kann das Fenster bei Bedarf
+            // vergroessern; der Inhalt scrollt ohnehin (AutoScroll unten), sodass
+            // nichts mehr abgeschnitten wird.
+            FormBorderStyle = FormBorderStyle.Sizable;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(500, 430);
-            Font = new Font("Segoe UI", 9f);
+            ClientSize = new Size(560, 620);
+            MinimumSize = new Size(480, 420);
+            Font = new Font("Segoe UI", 9.5f);
+            BackColor = DlgBg;
+
+            // Der Formularinhalt (Table) liegt in einem AutoScroll-Panel: reicht die
+            // Hoehe nicht, erscheint ein Scrollbalken statt abgeschnittener Zeilen.
+            var scrollHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BackColor = DlgBg,
+            };
 
             var layout = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(12),
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(16),
                 ColumnCount = 2,
-                AutoSize = false,
+                BackColor = DlgBg,
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -91,11 +116,11 @@ namespace VizpatchAddin
                 "Optional: TLS-Pinning gegen ein selbstsigniertes Backend-Zertifikat. "
                 + "Leer = normale System-Zertifikatskette.");
 
-            _trustAnyCertificate = new CheckBox
+            _trustAnyCertificate = new ModernCheckBox
             {
                 Text = "Jedes Zertifikat akzeptieren (TrustAnyCertificate)",
                 AutoSize = true,
-                Dock = DockStyle.Fill,
+                ForeColor = SecondaryFg,
             };
             AddRow(layout, "", _trustAnyCertificate);
 
@@ -105,9 +130,9 @@ namespace VizpatchAddin
                     + "Client vollstaendig (MITM-Risiko). Nur im vertrauenswuerdigen, "
                     + "isolierten LAN aktivieren — sonst Thumbprint-Pinning nutzen.",
                 ForeColor = Color.FromArgb(178, 34, 34),
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                Height = 46,
+                AutoSize = true,
+                MaximumSize = new Size(360, 0),
+                Margin = new Padding(0, 2, 0, 4),
             };
             AddRow(layout, "", warning);
 
@@ -115,17 +140,39 @@ namespace VizpatchAddin
             {
                 Dock = DockStyle.Bottom,
                 FlowDirection = FlowDirection.RightToLeft,
-                Height = 44,
-                Padding = new Padding(8),
+                Height = 52,
+                Padding = new Padding(12),
+                BackColor = DlgBg,
             };
-            var saveButton = new Button { Text = "Speichern", AutoSize = true, DialogResult = DialogResult.None };
+            var saveButton = new RoundButton(PrimaryBg, PrimaryHover, Color.White)
+            {
+                Text = "Speichern",
+                Height = 34,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(6, 0, 0, 0),
+                Font = new Font("Segoe UI Semibold", 9.5f),
+                DialogResult = DialogResult.None,
+            };
             saveButton.Click += SaveButton_Click;
-            var cancelButton = new Button { Text = "Abbrechen", AutoSize = true, DialogResult = DialogResult.Cancel };
+            var cancelButton = new RoundButton(SecondaryBg, SecondaryHover, SecondaryFg)
+            {
+                Text = "Abbrechen",
+                Height = 34,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(6, 0, 0, 0),
+                Font = new Font("Segoe UI Semibold", 9.5f),
+                DialogResult = DialogResult.Cancel,
+            };
 
             buttonBar.Controls.Add(saveButton);
             buttonBar.Controls.Add(cancelButton);
 
-            Controls.Add(layout);
+            scrollHost.Controls.Add(layout);
+            // Reihenfolge: Fill-Host zuerst, Bottom-Buttonleiste zuletzt — so dockt
+            // die Leiste unten und der scrollbare Inhalt fuellt den Rest darueber.
+            Controls.Add(scrollHost);
             Controls.Add(buttonBar);
             AcceptButton = saveButton;
             CancelButton = cancelButton;
@@ -141,8 +188,16 @@ namespace VizpatchAddin
                 Text = label,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Margin = new Padding(0, 6, 6, 6),
+                ForeColor = SecondaryFg,
+                Margin = new Padding(0, 7, 8, 7),
             }, 0, row);
+            // Flacher, moderner Feld-Look (WinForms-Default Fixed3D wirkt altmodisch).
+            if (field is TextBox tb)
+            {
+                tb.BorderStyle = BorderStyle.FixedSingle;
+                tb.BackColor = Color.White;
+                tb.Font = new Font("Segoe UI", 10f);
+            }
             field.Margin = new Padding(0, 4, 0, 4);
             layout.Controls.Add(field, 1, row);
             return field as TextBox;
@@ -158,8 +213,8 @@ namespace VizpatchAddin
                 Text = text,
                 ForeColor = Color.FromArgb(110, 110, 110),
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 6),
-                MaximumSize = new Size(320, 0),
+                Margin = new Padding(0, 0, 0, 8),
+                MaximumSize = new Size(360, 0),
             };
             layout.Controls.Add(hint, 1, row);
         }
