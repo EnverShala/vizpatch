@@ -1,5 +1,13 @@
 <div id="status-card" hx-get="/agents/status" hx-trigger="every 30s" hx-swap="outerHTML">
   <h3>Agenten-Übersicht</h3>
+  <p class="container-status">
+    Container-Status:
+    {% if service_status.state == "running" %}
+    <span class="state-running">Aktiv</span>
+    {% else %}
+    <span class="state-exited">Inaktiv</span>
+    {% endif %}
+  </p>
   {% if agent_statuses %}
   <table class="agent-status-table">
     <thead>
@@ -8,7 +16,7 @@
         <th>Status</th>
         <th>Letzter Poll</th>
         <th>Fehler</th>
-        <th></th>
+        <th>Aktion</th>
       </tr>
     </thead>
     <tbody>
