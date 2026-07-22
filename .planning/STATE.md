@@ -80,6 +80,12 @@ stopped_at: Milestone complete (Phase 12 was final phase)
 **Offener Punkt:** `IMAP_SENT_FOLDER=Gesendete Objekte` vor Kundentermin in .env.example eintragen.
 **Anleitung:** `.planning/phases/02-deployment-beim-kunden/PRE-DEPLOYMENT-TEST.md`
 
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260722-h9e | WebUI-Umbau: Agenten-Tabelle mit Edit-Popup + Chat-Auswahl-Radio | 2026-07-22 | 1b20850 | [260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop](./quick/260722-h9e-webui-umbau-agenten-tabelle-mit-edit-pop/) |
+
 ## Blockers / Open Preflight (Kundenseite)
 
 - **PRE-01** offen: Tankstelle bestätigt E-Mail-Provider (vereinfacht durch D-23: nur E-Mail + Passwort + Drafts-Ordner-Name)
