@@ -79,7 +79,10 @@ cp deployment/vizionists-test-env.example             "${DIST_DIR}/deployment/vi
 cp deployment/context.md.tankstelle-erstversion.md    "${DIST_DIR}/deployment/context.md.tankstelle-erstversion.md"
 cp deployment/context.md.vizionists-test.md           "${DIST_DIR}/deployment/context.md.vizionists-test.md"
 
-echo "==> Outlook-Add-in-Doku kopieren (Phase 8: HTTPS-Runbook + Reverse-Proxy)"
+echo "==> Outlook-Add-in-Doku kopieren (COM/VSTO-Runbook + Reverse-Proxy)"
+# README.addin-outlook.md ist der MASSGEBLICHE Add-in-Weg (COM/VSTO, Outlook
+# classic). README.addin.md (Office.js) bleibt als dormante Variante dabei.
+cp deployment/README.addin-outlook.md                 "${DIST_DIR}/deployment/README.addin-outlook.md"
 cp deployment/README.addin.md                         "${DIST_DIR}/deployment/README.addin.md"
 cp deployment/Caddyfile.example                        "${DIST_DIR}/deployment/Caddyfile.example"
 
@@ -87,8 +90,11 @@ echo "==> install-autostart.sh kopieren"
 cp scripts/install-autostart.sh "${DIST_DIR}/scripts/install-autostart.sh"
 chmod +x "${DIST_DIR}/scripts/install-autostart.sh"
 
-echo "==> README kopieren (Phase-4-Setup-Anleitung)"
-cp deployment/README.phase4.md "${DIST_DIR}/README.md"
+echo "==> Runbook kopieren (Kundenrunbook als Top-Level-README + Detail-Doku)"
+# Top-Level-README = knapper Kundenrunbook (aktueller Auth-/Add-in-Stand).
+cp deployment/RUNBOOK-KUNDE.md "${DIST_DIR}/README.md"
+# Ausfuehrliche Server-/Sicherheitsdetails als Zusatzdokument im Paket.
+cp deployment/README.phase4.md "${DIST_DIR}/deployment/README.phase4.md"
 
 echo "==> SHA256-Checksums berechnen"
 ( cd "${DIST_DIR}" && sha256sum "${AGENT_TAR}" > "${AGENT_TAR}.sha256" )
