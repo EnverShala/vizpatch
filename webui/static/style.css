@@ -28,6 +28,45 @@ body {
   border-radius: 6px;
 }
 
+/* Sanftes Scrollen für die Sprungnavigation */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Sprungnavigation unter dem Logo: zentrierte Pill-Links zu den Config-Bereichen */
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-nav a {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  background: #fff;
+  border: 1px solid #d0d7e2;
+  border-radius: 999px;
+  color: #1e3a5f;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.section-nav a:hover,
+.section-nav a:focus {
+  background: #1e3a5f;
+  border-color: #1e3a5f;
+  color: #fff;
+}
+
+/* Anker-Ziele beim Springen nicht direkt am oberen Viewport-Rand kleben lassen */
+[id^="sec-"] {
+  scroll-margin-top: 1rem;
+}
+
 .container {
   max-width: 720px;
   margin: 2rem auto;

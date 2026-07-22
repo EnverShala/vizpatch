@@ -1,5 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
+<nav class="section-nav" aria-label="Bereichsnavigation">
+  <a href="#sec-webui">WebUI</a>
+  <a href="#sec-autostart">Autostart</a>
+  {% if agent_id %}
+  <a href="#sec-imap">IMAP</a>
+  <a href="#sec-llm">LLM-API-Key</a>
+  <a href="#sec-context">Context</a>
+  <a href="#sec-style">Schreibstil</a>
+  <a href="#sec-datenschutz">Datenschutz</a>
+  <a href="#sec-chat">Chat</a>
+  {% endif %}
+</nav>
+
 {% if saved %}
 <div class="banner-success">&#10003; Änderungen gespeichert.</div>
 {% endif %}
@@ -62,7 +75,7 @@
 
 <form action="/save" method="post" id="global-settings-form">
   <input type="hidden" name="agent_id" value="{{ agent_id }}">
-  <fieldset>
+  <fieldset id="sec-webui">
     <legend>WebUI-Login (optional)</legend>
     <p class="password-hint">&#9432; Nur nötig wenn die WebUI außerhalb des vertrauenswürdigen LAN erreichbar ist. <strong>Alle Felder leer lassen = kein Login-Schutz.</strong> Passwort wird bcrypt-gehasht gespeichert (nie im Klartext).</p>
 
@@ -85,7 +98,7 @@
     </div>
   </fieldset>
 
-  <fieldset>
+  <fieldset id="sec-autostart">
     <legend>Autostart</legend>
     <label>
       <input type="checkbox" name="autostart_enabled" value="true" {% if global_env.AUTOSTART_ENABLED == 'true' %}checked{% endif %}>
@@ -103,7 +116,7 @@
 <form action="/save" method="post" id="agent-config-form">
   <input type="hidden" name="agent_id" id="active-agent-id" value="{{ agent_id }}">
 
-  <fieldset>
+  <fieldset id="sec-imap">
     <legend>IMAP-Zugang</legend>
 
     <label for="imap_user">E-Mail-Adresse (IMAP_USER)</label>
@@ -141,7 +154,7 @@
     </div>
   </fieldset>
 
-  <fieldset>
+  <fieldset id="sec-llm">
     <legend>LLM-API-Key</legend>
     <p class="password-hint">&#9432; API-Key leer lassen um bestehenden Wert zu behalten. Neuen Wert eintragen um zu überschreiben.</p>
     <label for="llm_api_key">API-Key (Anthropic / OpenAI / Google)</label>
@@ -170,7 +183,7 @@
     </div>
   </fieldset>
 
-  <fieldset>
+  <fieldset id="sec-context">
     <legend>context.md — Firmen-Kontext für den KI-Agenten</legend>
     <p class="hint">Wird bei jeder E-Mail-Klassifikation und -Beantwortung in den Prompt injiziert. Öffnungszeiten, Angebote, Ton, FAQ.</p>
 
@@ -190,7 +203,7 @@
     </div>
   </fieldset>
 
-  <fieldset>
+  <fieldset id="sec-style">
     <legend>Schreibstil (style.md)</legend>
     <p class="hint">
       Wird bei jedem Draft zusätzlich zu context.md injiziert — bestimmt nur WIE geschrieben wird
@@ -219,7 +232,7 @@
     </div>
   </fieldset>
 
-  <fieldset>
+  <fieldset id="sec-datenschutz">
     <legend>Datenschutz</legend>
     <details id="privacy-details">
       <summary>Datenschutzbestimmungen</summary>
@@ -324,7 +337,7 @@ async function relearnStyle(btn) {
 </script>
 
 <link rel="stylesheet" href="/static/chat.css">
-<section class="chat-section">
+<section class="chat-section" id="sec-chat">
   <h2>Agenten-Chat</h2>
   <p class="hint">Chatte mit dem KI-Assistenten dieses Agenten — kennt context.md, style.md und den Agent-Status. Kann auf deine Anweisung dein Postfach durchsuchen, Entwürfe anlegen/bearbeiten und Mails in den Papierkorb verschieben (nie senden, nie endgültig löschen).</p>
   {% include "_chat.html" %}
