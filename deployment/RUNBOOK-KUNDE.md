@@ -93,27 +93,28 @@ bereits bei**: im Ordner **`addin-publish/`** (neben diesem Server-Paket auf dem
 Kein eigener Build nötig.
 
 Inhalt von `addin-publish/`:
-- **`VizpatchAddin.vsto`** — die Installationsdatei (Doppelklick installiert).
+- **`setup.exe`** — der Installer (empfohlener Weg; prüft Voraussetzungen mit).
+- `VizpatchAddin.vsto` — alternative Installationsdatei (Doppelklick, wenn Voraussetzungen sicher vorhanden).
 - `Application Files/` — die zugehörigen Programmdateien (müssen im selben Ordner bleiben).
 
 **Installation am Kunden-PC:**
 
 1. **`addin-publish/` auf den Kunden-PC bringen** — beide Wege im selben Netz problemlos:
    - **Netzwerkfreigabe (bequem):** Ordner auf einen im LAN erreichbaren Windows-Share legen
-     und am Kunden-PC `\\rechner\freigabe\addin-publish\VizpatchAddin.vsto` öffnen.
-   - **USB-Stick (einfachster Weg):** Ordner rüberkopieren, lokal `VizpatchAddin.vsto` öffnen.
-2. **`VizpatchAddin.vsto` per Doppelklick öffnen** → ClickOnce installiert das Add-in
-   (Per-User, keine Adminrechte). Meldung „Herausgeber nicht verifiziert" (selbstsigniertes
-   Dev-Zertifikat) bewusst mit **Installieren** bestätigen.
+     und am Kunden-PC `\\rechner\freigabe\addin-publish\setup.exe` starten.
+   - **USB-Stick (einfachster Weg):** Ordner rüberkopieren, lokal `setup.exe` starten.
+2. **`setup.exe` ausführen** → installiert das Add-in (Per-User, keine Adminrechte). Fehlen
+   Voraussetzungen (.NET Framework 4.8 / VSTO-2010-Runtime), bietet der Installer sie an —
+   auf einem Rechner mit Outlook classic sind sie i.d.R. schon vorhanden. Meldung „Herausgeber
+   nicht verifiziert" (selbstsigniertes Dev-Zertifikat) bewusst mit **Installieren** bestätigen.
+   *(Alternativ, wenn die Voraussetzungen sicher vorhanden sind: `VizpatchAddin.vsto` per
+   Doppelklick öffnen.)*
 3. **Outlook classic starten:** im Menüband erscheint die Gruppe **„Vizpatch"** mit dem
    Button **„Vizpatch"** → Chat-Bereich rechts einblenden.
 
 > **Voraussetzungen auf dem Kunden-PC:** .NET Framework 4.8 (auf Windows 10/11 bereits
-> vorhanden) und die VSTO-2010-Runtime (kommt mit jeder Outlook-classic-Installation mit).
-> Auf einem Rechner, der Outlook classic hat, sind beide also da — die `.vsto`-Installation
-> läuft direkt. Nur auf einem „nackten" Rechner ohne diese Komponenten wäre ein
-> `setup.exe`-Bootstrapper nötig; der wird bei Bedarf über den Visual-Studio-Publish-Assistenten
-> erzeugt (siehe `README.addin-outlook.md`, Kapitel 2/3).
+> vorhanden) und die VSTO-2010-Runtime (kommt mit jeder Outlook-classic-Installation mit) —
+> auf einem Outlook-classic-Rechner also beide da.
 
 > Der Linux-Server (Docker) kann das Add-in **nicht** bauen — VSTO ist Windows-/
 > Visual-Studio-gebunden. Der mitgelieferte `addin-publish/`-Ordner wurde auf einem

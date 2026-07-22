@@ -88,38 +88,31 @@ Einzel-Maschine (D-88); versionierte Updates + Rollback bringt ClickOnce mit.
 
 ### 2c. Fertiges Paket im Deployment-Bundle (v1.9.0)
 
-Für den Rollout ist bereits ein **fertig veröffentlichtes ClickOnce-Paket**
-beigelegt — im Deployment-Bundle unter **`addin-publish/`** (parallel zum
-Server-Paket auf dem USB-Stick). Es enthält:
+Für den Rollout ist bereits ein **fertig veröffentlichtes ClickOnce-Paket inkl.
+`setup.exe`** beigelegt — im Deployment-Bundle unter **`addin-publish/`** (parallel
+zum Server-Paket auf dem USB-Stick). Es enthält:
 
-- `VizpatchAddin.vsto` — die Installationsdatei (Doppelklick installiert),
-- `Application Files/VizpatchAddin_1_9_0_0/` — die signierten `.deploy`-Dateien.
+- `setup.exe` — der Installer (empfohlen; prüft/installiert Voraussetzungen),
+- `VizpatchAddin.vsto` — alternative Installationsdatei (Doppelklick),
+- `Application Files/…` — die signierten `.deploy`-Dateien.
 
-**Installation ohne setup.exe:** Auf jeder Maschine mit Outlook classic sind die
-Voraussetzungen (.NET Framework 4.8 inbox + VSTO-2010-Runtime via Office) bereits
-vorhanden — daher genügt der **Doppelklick auf `VizpatchAddin.vsto`**; ein
-separater `setup.exe`-Bootstrapper ist nicht nötig. Er ist ausschließlich für
-„nackte" Rechner ohne diese Komponenten sinnvoll und wird dann über den
-VS-Publish-Wizard (Abschnitt 2a) mit aktivierten Prerequisites erzeugt.
+**Installation:** `setup.exe` ausführen. Auf jeder Maschine mit Outlook classic sind
+die Voraussetzungen (.NET Framework 4.8 inbox + VSTO-2010-Runtime via Office) bereits
+vorhanden — der Installer erkennt das und installiert direkt. Alternativ genügt der
+Doppelklick auf `VizpatchAddin.vsto`.
 
-**Reproduktion des `.vsto`-Pakets per Kommandozeile** (Windows, VS-MSBuild):
+**Reproduktion des Pakets (Windows, Visual Studio):** Die `setup.exe` wird über den
+**VS-Publish-Wizard** erzeugt (Abschnitt 2a): Projekt `VizpatchAddin` → Veröffentlichen
+→ Speicherort `publish/` → Installationspfad **„Von CD-ROM oder DVD-ROM"**
+(ortsunabhängig, ideal für USB) → keine automatische Update-Suche → Fertig stellen.
+Die Bootstrapper-Prerequisites sind in der `.csproj` als `BootstrapperPackage`-Items
+hinterlegt (.NET 4.8 + `Microsoft.VSTORuntime.4.0`).
 
-```powershell
-$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild "outlook-addin\VizpatchAddin\VizpatchAddin.csproj" -t:Publish `
-  -p:Configuration=Release `
-  -p:PublishDir="outlook-addin\VizpatchAddin\publish\" `
-  -p:PublishUrl="outlook-addin\VizpatchAddin\publish\" `
-  -p:Install=true -p:UpdateEnabled=false -p:ApplicationVersion=1.9.0.0 `
-  -p:BootstrapperEnabled=false -p:GenerateBootstrapper=false
-```
-
-> Hinweis: `-t:Publish` mit **aktiviertem** Bootstrapper (`setup.exe`) ist bei
-> diesem Legacy-VSTO-Projekt über die reine Kommandozeile unzuverlässig
-> (Signatur-/Bootstrapper-Schritt). Für ein echtes `setup.exe` daher den
-> VS-Publish-Wizard (2a) nutzen. Die Bootstrapper-Prerequisites sind in der
-> `.csproj` bereits als `BootstrapperPackage`-Items hinterlegt (.NET 4.8 +
-> `Microsoft.VSTORuntime.4.0`), sodass der Wizard sie direkt anbietet.
+> Hinweis: `msbuild -t:Publish` mit aktiviertem Bootstrapper erzeugt über die reine
+> Kommandozeile bei diesem Legacy-VSTO-Projekt **keine** `setup.exe` (der
+> GenerateBootstrapper-/Signatur-Schritt greift nur im VS-Wizard). Für ein `.vsto`-
+> Paket **ohne** setup.exe geht CLI hingegen (`-p:BootstrapperEnabled=false
+> -p:GenerateBootstrapper=false`); für die `setup.exe` immer den Wizard nutzen.
 
 ### 2b. Code-Signing / „Herausgeber nicht verifiziert"
 
