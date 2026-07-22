@@ -8,11 +8,19 @@ from typing import Optional
 
 import bcrypt
 from dotenv import dotenv_values
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import HTTPException, Request, status
 
-security = HTTPBasic(auto_error=False)
 logger = logging.getLogger(__name__)
+
+# Session-Login (D-01/D-02, 260722-jrq): fester Benutzername, kein WEBUI_USER
+# mehr. Einziges Credential ist WEBUI_PASSWORD (bcrypt-Hash).
+ADMIN_USER = "admin"
+SESSION_COOKIE_NAME = "vizpatch_session"
+
+# Prozess-lokaler Session-Store — analog `chat_tools._authorized_move_sessions`.
+# Container-Neustart leert den Store (gewollt = "Login pro Sitzung").
+_sessions: set[str] = set()
+_sessions_lock = threading.Lock()
 
 _LOGIN_MAX_FAILURES = 5
 _LOGIN_WINDOW_SEC = 900
@@ -89,41 +97,60 @@ def _reset_login_tracking() -> None:
         _login_lockouts.clear()
 
 
-def _read_credentials() -> tuple[str, str]:
+# --- Session-Store (D-01, 260722-jrq) ---
+
+
+def create_session() -> str:
+    """Legt eine neue Session an (opaker 32-Byte-Token) und gibt sie zurueck."""
+    token = secrets.token_urlsafe(32)
+    with _sessions_lock:
+        _sessions.add(token)
+    return token
+
+
+def destroy_session(token: Optional[str]) -> None:
+    """Verwirft eine Session. `None`/unbekannte Token werden toleriert."""
+    if not token:
+        return
+    with _sessions_lock:
+        _sessions.discard(token)
+
+
+def session_valid(token: Optional[str]) -> bool:
+    """Prueft, ob `token` eine aktuell gueltige Session referenziert."""
+    if not token:
+        return False
+    with _sessions_lock:
+        return token in _sessions
+
+
+def set_session_cookie(response, token: str) -> None:
+    """Setzt den Session-Cookie. KEIN `max_age`/`expires` (echter Session-Cookie,
+    endet beim Browser-Schliessen). Kein `secure`-Zwang (LAN-http-Betrieb, D-01)."""
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        httponly=True,
+        samesite="strict",
+        path="/",
+    )
+
+
+def clear_session_cookie(response) -> None:
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+
+
+# --- Passwort (WEBUI_PASSWORD, bcrypt) ---
+
+
+def _read_password() -> str:
     env_path = Path(os.getenv("WEBUI_ENV_PATH", "/config/.env"))
     values = dotenv_values(env_path) if env_path.exists() else {}
-    user = (values.get("WEBUI_USER") or os.environ.get("WEBUI_USER") or "").strip()
-    password = (values.get("WEBUI_PASSWORD") or os.environ.get("WEBUI_PASSWORD") or "").strip()
-    return user, password
+    return (values.get("WEBUI_PASSWORD") or os.environ.get("WEBUI_PASSWORD") or "").strip()
 
 
-def is_auth_enabled() -> bool:
-    user, password = _read_credentials()
-    return bool(user and password)
-
-
-def _allow_no_auth() -> bool:
-    return (os.getenv("VIZPATCH_ALLOW_NO_AUTH") or "").strip().lower() == "true"
-
-
-# WR-07: Meldung bewusst als Modul-Konstante — Tests pruefen darauf, ohne den
-# Text zu duplizieren.
-NO_AUTH_SETUP_HINT = (
-    "Bitte zuerst WebUI-Benutzer + Passwort setzen (oder VIZPATCH_ALLOW_NO_AUTH=true)."
-)
-
-
-def require_setup() -> None:
-    """WR-07 (Setup-Zwang, Docker-Socket = Host-Root): solange KEIN WebUI-Passwort
-    gesetzt ist UND VIZPATCH_ALLOW_NO_AUTH != true, werden gefaehrliche
-    state-aendernde Routen (/reset, /agents*, /agent/*, /context/generate,
-    /style/relearn, /chat/*/send) blockiert. `/save` haengt bewusst NICHT an dieser
-    Dependency, damit der Zero-Config-Bootstrap (Passwort erstmalig setzen) nie
-    bricht. Sobald ein Passwort gesetzt ist, greift die normale Basic-Auth;
-    `VIZPATCH_ALLOW_NO_AUTH=true` ist der explizite Bypass fuer isolierte Setups."""
-    if is_auth_enabled() or _allow_no_auth():
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NO_AUTH_SETUP_HINT)
+def password_is_set() -> bool:
+    return bool(_read_password())
 
 
 def hash_password(plaintext: str) -> str:
@@ -141,27 +168,37 @@ def _verify_password(candidate: str, stored: str) -> bool:
     return secrets.compare_digest(candidate.encode("utf-8"), stored.encode("utf-8"))
 
 
-def require_auth(
-    request: Request,
-    credentials: Optional[HTTPBasicCredentials] = Depends(security),
-) -> str:
-    webui_user, webui_password = _read_credentials()
-    if not webui_user or not webui_password:
-        return "anonymous"
-    _check_login_lockout(request)
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    user_ok = secrets.compare_digest(credentials.username.encode(), webui_user.encode())
-    pass_ok = _verify_password(credentials.password, webui_password)
-    if not (user_ok and pass_ok):
-        _record_login_failure(request)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
+def verify_password(candidate: str) -> bool:
+    """Prueft `candidate` gegen das gespeicherte WEBUI_PASSWORD (bcrypt oder
+    Legacy-Klartext)."""
+    stored = _read_password()
+    if not stored:
+        return False
+    return _verify_password(candidate, stored)
+
+
+# WR-07: Meldung bewusst als Modul-Konstante — Tests pruefen darauf, ohne den
+# Text zu duplizieren.
+NO_AUTH_SETUP_HINT = "Bitte zuerst ein WebUI-Passwort setzen."
+
+
+def require_setup() -> None:
+    """Defense-in-Depth (WR-07/T-jrq-02): solange KEIN WebUI-Passwort gesetzt ist,
+    werden gefaehrliche state-aendernde Routen (/reset, /agents*, /agent/*,
+    /context/generate, /style/relearn, /chat/*/send) blockiert. Kein Bypass mehr
+    (VIZPATCH_ALLOW_NO_AUTH ist entfernt) — durch die `enforce_auth`-Middleware in
+    `main.py` ohnehin unerreichbar ohne Passwort+Session, hier bewusst doppelt
+    abgesichert."""
+    if password_is_set():
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NO_AUTH_SETUP_HINT)
+
+
+def require_auth(request: Request) -> str:
+    """Schlanke Dependency fuer bestehende Routen-Signaturen — wirft selbst NICHTS
+    mehr. Die eigentliche Durchsetzung (Session-Gate) erfolgt in der
+    `enforce_auth`-Middleware (main.py); diese Funktion bleibt nur als
+    Kompatibilitaets-Anker fuer die bestehenden `Depends(auth.require_auth)`-
+    Aufrufe (inkl. Add-in-Routen) erhalten und liefert schlicht den festen
+    Benutzernamen zurueck."""
+    return ADMIN_USER
