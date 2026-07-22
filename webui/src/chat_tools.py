@@ -34,7 +34,15 @@ from email.utils import format_datetime, formataddr, getaddresses, make_msgid
 from pathlib import Path
 from typing import Callable, Iterator
 
-from anthropic import Anthropic
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    NotFoundError,
+    PermissionDeniedError,
+    RateLimitError,
+)
 from imap_tools import AND, H, MailBox, MailBoxUnencrypted, MailMessageFlags
 
 from . import chat, crypto, pii
@@ -66,6 +74,37 @@ MAX_FOLDERS_FOR_ALL_SEARCH = 20
 
 # D-72/T-09-04: harte Obergrenze für Tool-Use-Runden pro Chat-Anfrage (Endlosschutz).
 MAX_TOOL_ROUNDS = 5
+
+
+def describe_llm_error(exc: Exception) -> str:
+    """Übersetzt eine Anthropic-/Netzwerk-Ausnahme in eine konkrete, betreiber-
+    lesbare Meldung für die WebUI.
+
+    Ersetzt die frühere Sammelmeldung „LLM-Dienst nicht erreichbar." — die JEDE
+    Ausnahme gleich aussehen ließ und beim Kunden Log-Graben erzwang. Enthält NIE
+    Secrets oder Stacktraces, nur die Fehlerklasse (T-09-03). Unbekannte Ausnahmen
+    ergeben weiterhin die generische Meldung (Rückwärtskompatibilität).
+
+    Reihenfolge beachtet: `AuthenticationError`/`PermissionDeniedError`/
+    `NotFoundError`/`RateLimitError` sind Unterklassen von `APIStatusError` und
+    müssen VOR diesem geprüft werden. `APIConnectionError` ist ein Geschwister
+    (kein HTTP-Status → Netzwerk/Firewall/Proxy)."""
+    if isinstance(exc, AuthenticationError):
+        return "Authentifizierung fehlgeschlagen — API-Key ungültig oder abgelaufen (401)."
+    if isinstance(exc, PermissionDeniedError):
+        return "Zugriff verweigert — API-Key ohne Berechtigung für dieses Modell (403)."
+    if isinstance(exc, NotFoundError):
+        return "Modell nicht gefunden — konfigurierte Modell-ID prüfen (404)."
+    if isinstance(exc, RateLimitError):
+        return "Rate-Limit erreicht — kurz warten und erneut versuchen (429)."
+    if isinstance(exc, APIConnectionError):
+        return (
+            "Verbindung zu api.anthropic.com fehlgeschlagen — Netzwerk/Firewall/"
+            "Proxy des Servers prüfen (kein ausgehendes HTTPS?)."
+        )
+    if isinstance(exc, APIStatusError):
+        return f"LLM-Dienst antwortet mit Fehler (HTTP {getattr(exc, 'status_code', '?')})."
+    return "LLM-Dienst nicht erreichbar."
 
 # D-78: Untrusted-DATEN/Injection-Anker für jedes Werkzeug-Ergebnis — Mail-Inhalt
 # darf das LLM nie zu ungefragten (v. a. destruktiven) Tool-Aufrufen verleiten.
@@ -2512,8 +2551,11 @@ def _run_anthropic_tool_loop(
                 messages=messages,
             )
         except Exception as e:
-            logger.warning("agentic_chat_llm_call_failed", extra={"agent_id": agent_id, "error": str(e)})
-            yield {"type": "text", "text": "[Fehler beim LLM-Aufruf — LLM-Dienst nicht erreichbar.]"}
+            logger.warning(
+                "agentic_chat_llm_call_failed",
+                extra={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
+            )
+            yield {"type": "text", "text": f"[Fehler beim LLM-Aufruf — {describe_llm_error(e)}]"}
             return
 
         content = list(response.content or [])

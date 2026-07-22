@@ -3140,3 +3140,72 @@ def test_run_agentic_chat_and_tool_loop_accept_attachment_meta_parameter():
     assert loop_params["attachment_meta"].default is None
 
 
+
+
+# --- Quick-Task 260722: konkrete LLM-Fehlerdiagnose (describe_llm_error) ------
+
+
+def _httpx_request():
+    import httpx
+
+    return httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+def _status_exc(exc_cls, status):
+    import httpx
+
+    return exc_cls(
+        message="boom",
+        response=httpx.Response(status, request=_httpx_request()),
+        body=None,
+    )
+
+
+def test_describe_llm_error_maps_each_anthropic_class():
+    import src.chat_tools as chat_tools
+    from anthropic import (
+        APIConnectionError,
+        AuthenticationError,
+        NotFoundError,
+        PermissionDeniedError,
+        RateLimitError,
+    )
+
+    assert "401" in chat_tools.describe_llm_error(_status_exc(AuthenticationError, 401))
+    assert "403" in chat_tools.describe_llm_error(_status_exc(PermissionDeniedError, 403))
+    assert "404" in chat_tools.describe_llm_error(_status_exc(NotFoundError, 404))
+    assert "429" in chat_tools.describe_llm_error(_status_exc(RateLimitError, 429))
+
+    conn = chat_tools.describe_llm_error(
+        APIConnectionError(message="no route", request=_httpx_request())
+    )
+    assert "api.anthropic.com" in conn
+
+
+def test_describe_llm_error_generic_exception_keeps_legacy_message():
+    import src.chat_tools as chat_tools
+
+    assert chat_tools.describe_llm_error(RuntimeError("boom")) == "LLM-Dienst nicht erreichbar."
+
+
+def test_run_agentic_chat_connection_error_yields_specific_message(mocker, tmp_path, monkeypatch):
+    monkeypatch.setenv("WEBUI_CHAT_SYSTEM_PROMPT", str(_chat_system_prompt(tmp_path)))
+    _setup_env(tmp_path, monkeypatch)
+    _write_agent_env("info", provider="anthropic")
+
+    import src.chat_tools as chat_tools
+    from anthropic import APIConnectionError
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = APIConnectionError(
+        message="no route", request=_httpx_request()
+    )
+    mocker.patch("src.chat_tools.Anthropic", return_value=mock_client)
+
+    events = list(chat_tools.run_agentic_chat("info", "Hallo"))
+
+    text = "".join(e["text"] for e in events if e["type"] == "text")
+    assert "Fehler beim LLM-Aufruf" in text
+    assert "api.anthropic.com" in text
+    # Kein Key-Leak in die UI-Meldung.
+    assert "sk-ant" not in text
