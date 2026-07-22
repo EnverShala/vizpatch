@@ -39,6 +39,16 @@ def _load_or_create_key() -> bytes:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
     except PermissionError:
         pass
+    # Key dem Agent-User uebereignen (Deployment): der webui-Container (root) erzeugt
+    # den Key, der non-root agent-Container (UID 1000) muss ihn zum Entschluesseln
+    # LESEN koennen. 0o600 bleibt (root liest ohnehin). os.chown fehlt auf Windows
+    # (Tests) -> uebersprungen; Fehler (nicht root) -> ignoriert.
+    _chown = getattr(os, "chown", None)
+    if _chown is not None:
+        try:
+            _chown(path, int(os.getenv("AGENT_UID", "1000")), int(os.getenv("AGENT_GID", "1000")))
+        except (PermissionError, OSError):
+            pass
     return key
 
 
