@@ -3,3 +3,5 @@ bin/
 obj/
 *.user
 .vs/
+# ClickOnce-Publish-Output (Deliverable liegt versioniert unter dist/…/addin-publish/)
+publish/
