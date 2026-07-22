@@ -125,7 +125,7 @@ namespace VizpatchAddin.TaskPane
             // Bei Groessenaenderung der Pane die Blasen neu ausrichten (Breite/Seite).
             _log.Resize += (s, e) => RelayoutBubbles();
 
-            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 150, Padding = new Padding(10, 8, 10, 10), BackColor = UiBg };
+            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 164, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
 
             // Eingabefeld in einem gerundeten Rahmen-Container (RoundedPanel) —
             // die TextBox selbst ist randlos, der weiche Rahmen kommt vom Panel und
@@ -155,8 +155,8 @@ namespace VizpatchAddin.TaskPane
             {
                 Dock = DockStyle.Bottom,
                 FlowDirection = FlowDirection.RightToLeft,
-                Height = 46,
-                Padding = new Padding(0, 8, 0, 2),
+                Height = 52,
+                Padding = new Padding(0, 8, 0, 8),
                 BackColor = UiBg,
             };
 
