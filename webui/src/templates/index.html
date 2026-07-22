@@ -1,12 +1,7 @@
 {% extends "base.html" %}
 
 {% block header_nav %}
-<nav class="section-nav" aria-label="Bereichsnavigation">
-  <a href="#sec-webui">WebUI</a>
-  {% if agent_id %}
-  <a href="#sec-chat">Chat</a>
-  {% endif %}
-</nav>
+<nav class="section-nav" aria-label="Bereichsnavigation"><!-- DE/EN-Schalter folgt --></nav>
 {% endblock %}
 
 {% block content %}
@@ -22,48 +17,12 @@
 <div class="banner-error">&#9888; {{ error }}</div>
 {% endif %}
 
-{% if not auth_enabled %}
-<div class="banner-warning">
-  &#9888; <strong>Kein Login-Schutz aktiv — bitte zuerst Zugangsdaten setzen.</strong>
-  Diese WebUI hat Root-Zugriff auf den Host (Docker-Socket). Solange kein WebUI-Passwort gesetzt ist, sind
-  gefährliche Aktionen (Agenten anlegen/löschen, Start/Stop, Zero-Reset, Chat) gesperrt.
-  Bitte unten unter „WebUI-Login" einen Benutzer + Passwort setzen (oder — nur für isolierte Setups —
-  <code>VIZPATCH_ALLOW_NO_AUTH=true</code> setzen). Erreichbar bitte ausschließlich im vertrauenswürdigen LAN.
-</div>
-{% endif %}
-
 {% include "_status_card.html" %}
 
 <dialog id="agent-dialog">
   <button type="button" id="agent-dialog-close">Schließen</button>
   <div id="agent-dialog-body"></div>
 </dialog>
-
-<form action="/save" method="post" id="global-settings-form">
-  <input type="hidden" name="agent_id" value="{{ agent_id }}">
-  <fieldset id="sec-webui">
-    <legend>WebUI-Login (optional)</legend>
-    <p class="password-hint">&#9432; Nur nötig wenn die WebUI außerhalb des vertrauenswürdigen LAN erreichbar ist. <strong>Alle Felder leer lassen = kein Login-Schutz.</strong> Passwort wird bcrypt-gehasht gespeichert (nie im Klartext).</p>
-
-    <label for="webui_user">WebUI-Benutzername</label>
-    <input type="text" id="webui_user" name="webui_user" value="{{ global_env.WEBUI_USER or '' }}" placeholder="leer lassen = kein Login">
-
-    {% if password_configured %}
-    <label for="webui_password_current">Aktuelles Passwort <span class="hint-inline">(nur wenn Passwort geändert werden soll)</span></label>
-    <input type="password" id="webui_password_current" name="webui_password_current" value="" autocomplete="current-password" placeholder="leer lassen = Passwort unverändert">
-
-    <label for="webui_password_new">Neues Passwort <span class="hint-inline">(leer lassen = unverändert)</span></label>
-    <input type="password" id="webui_password_new" name="webui_password_new" value="" autocomplete="new-password" placeholder="leer lassen = unverändert">
-    {% else %}
-    <label for="webui_password_new">Passwort setzen <span class="hint-inline">(leer lassen = Login bleibt aus)</span></label>
-    <input type="password" id="webui_password_new" name="webui_password_new" value="" autocomplete="new-password" placeholder="leer lassen = kein Login aktivieren">
-    {% endif %}
-    <div class="section-save">
-      <button type="button" class="btn-section-save" hx-post="/save" hx-include="closest fieldset, [name='agent_id']" hx-target="#save-msg-webui" hx-swap="innerHTML">Diesen Abschnitt übernehmen</button>
-      <span id="save-msg-webui" class="save-inline-msg"></span>
-    </div>
-  </fieldset>
-</form>
 
 {% if agent_id %}
 <link rel="stylesheet" href="/static/chat.css">
@@ -221,6 +180,14 @@ document.body.addEventListener('htmx:afterSwap', function (evt) {
   }
 });
 document.getElementById('agent-dialog-close').addEventListener('click', function () {
+  document.getElementById('agent-dialog').close();
+});
+
+/* Passwort-Aenderung (260722-jrq): POST /password liefert bei Erfolg den
+ * HX-Trigger-Header `vizpatch-password-changed` (statt das ganze Formular
+ * neu zu rendern, siehe _password_form.html) — dieser globale Listener
+ * schliesst darauf den bestehenden #agent-dialog. */
+document.body.addEventListener('vizpatch-password-changed', function () {
   document.getElementById('agent-dialog').close();
 });
 </script>

@@ -1,5 +1,5 @@
 <div id="status-card" hx-get="/agents/status" hx-trigger="every 30s" hx-swap="outerHTML">
-  <h3>Agenten-Übersicht</h3>
+  <h3>Übersicht</h3>
 
   {# Autostart-Umschalter (ehem. eigene Fieldset-Sektion) — der Hinweistext
      erscheint als Hover-Tooltip (title) auf Checkbox + Schriftzug. Speichert
@@ -22,6 +22,10 @@
   </p>
 
   <button type="button" id="btn-new-agent" hx-get="/agents/new" hx-target="#agent-dialog-body" hx-swap="innerHTML">+ Neuer Agent</button>
+  <button type="button" id="btn-change-password" hx-get="/password" hx-target="#agent-dialog-body" hx-swap="innerHTML">Passwort ändern</button>
+  <form action="/logout" method="post" class="logout-form">
+    <button type="submit" class="btn-logout">Abmelden</button>
+  </form>
 
   {% if agent_statuses %}
   <table class="agent-status-table">

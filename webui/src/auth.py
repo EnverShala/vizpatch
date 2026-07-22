@@ -185,8 +185,8 @@ NO_AUTH_SETUP_HINT = "Bitte zuerst ein WebUI-Passwort setzen."
 def require_setup() -> None:
     """Defense-in-Depth (WR-07/T-jrq-02): solange KEIN WebUI-Passwort gesetzt ist,
     werden gefaehrliche state-aendernde Routen (/reset, /agents*, /agent/*,
-    /context/generate, /style/relearn, /chat/*/send) blockiert. Kein Bypass mehr
-    (VIZPATCH_ALLOW_NO_AUTH ist entfernt) — durch die `enforce_auth`-Middleware in
+    /context/generate, /style/relearn, /chat/*/send) blockiert. Es gibt keinen
+    Env-gesteuerten Bypass mehr — durch die `enforce_auth`-Middleware in
     `main.py` ohnehin unerreichbar ohne Passwort+Session, hier bewusst doppelt
     abgesichert."""
     if password_is_set():
