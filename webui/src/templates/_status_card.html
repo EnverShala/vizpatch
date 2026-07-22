@@ -27,7 +27,7 @@
       {% for agent in agent_statuses %}
       <tr>
         <td>
-          <input type="radio" name="chat-agent" value="{{ agent.id }}"
+          <input type="radio" name="chat-agent" value="{{ agent.id }}" {% if agent.id == agent_id %}checked{% endif %}
                  hx-get="/chat/{{ agent.id }}/panel" hx-target="#chat-panel" hx-swap="innerHTML" hx-trigger="change">
         </td>
         <td>

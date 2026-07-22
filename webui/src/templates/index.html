@@ -84,7 +84,7 @@
 <section class="chat-section" id="sec-chat">
   <h2>Agenten-Chat</h2>
   <p class="hint">Chatte mit dem KI-Assistenten dieses Agenten — kennt context.md, style.md und den Agent-Status. Kann auf deine Anweisung dein Postfach durchsuchen, Entwürfe anlegen/bearbeiten und Mails in den Papierkorb verschieben (nie senden, nie endgültig löschen).</p>
-  {% include "_chat.html" %}
+  <div id="chat-panel">{% include "_chat.html" %}</div>
 </section>
 <script src="/static/chat.js"></script>
 {% endif %}
@@ -178,13 +178,36 @@ async function relearnStyle(btn) {
   }
 }
 
-/* Modal-Steuerung (UMBAU-D3): ein einziger htmx:afterSwap-Listener oeffnet den
- * Dialog, sobald das Popup-Partial (Bearbeiten ODER Neuer Agent) in
- * #agent-dialog-body eingefuegt wurde. #agent-dialog-close schliesst ihn
- * wieder (natives <dialog>, kein eigener Overlay-Klick-Handler noetig). */
+/* Chat-Auswahl-Erhalt ueber den 30s-Status-Refresh (UMBAU-D2): der Refresh
+ * tauscht NUR #status-card (outerHTML) — #chat-panel bleibt dabei unberuehrt,
+ * der Chat selbst laeuft also ohnehin unbeeinflusst weiter. Die frisch
+ * eingefuegte Tabelle bringt aber KEINE serverseitige Kenntnis der aktuellen
+ * Auswahl mit (GET /agents/status kennt keinen agent_id) — daher wird die
+ * zuletzt gewaehlte Agent-ID hier clientseitig gefuehrt und nach jedem
+ * #status-card-Swap re-appliziert (nur `.checked` setzen, KEIN `change`-Event
+ * -> kein erneuter Chat-Swap durch den Refresh selbst). */
+window.vizpatchSelectedAgent = "{{ agent_id }}";
+
+document.body.addEventListener('change', function (evt) {
+  if (evt.target && evt.target.matches && evt.target.matches('input[name="chat-agent"]')) {
+    window.vizpatchSelectedAgent = evt.target.value;
+  }
+});
+
+/* Modal-Steuerung (UMBAU-D3) + Auswahl-Erhalt (UMBAU-D2) in EINEM
+ * htmx:afterSwap-Listener — unterscheidet anhand der Swap-Ziel-ID:
+ * - #agent-dialog-body (Bearbeiten- oder Neuer-Agent-Popup) -> Dialog oeffnen.
+ * - #status-card (30s-Refresh ODER Start/Stop-Aktion) -> das Radio der
+ *   zuletzt gewaehlten Agent-ID re-checken (rein visuell, kein Chat-Swap). */
 document.body.addEventListener('htmx:afterSwap', function (evt) {
-  if (evt.detail.target && evt.detail.target.id === 'agent-dialog-body') {
+  const targetId = evt.detail.target && evt.detail.target.id;
+  if (targetId === 'agent-dialog-body') {
     document.getElementById('agent-dialog').showModal();
+  } else if (targetId === 'status-card') {
+    const radio = document.querySelector(
+      'input[name="chat-agent"][value="' + window.vizpatchSelectedAgent + '"]'
+    );
+    if (radio) { radio.checked = true; }
   }
 });
 document.getElementById('agent-dialog-close').addEventListener('click', function () {

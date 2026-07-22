@@ -18,9 +18,21 @@
  * der Taskpane (webui/static/addin/taskpane.js). Der message-Listener prüft
  * event.origin (T-08-04, Spoofing-Schutz) — Nachrichten von fremden Origins
  * werden verworfen. Ohne Add-in (reiner Browser-Chat, Phase 7) läuft nie eine
- * passende Nachricht ein, der Hook liefert dann weiterhin null. */
-(function () {
+ * passende Nachricht ein, der Hook liefert dann weiterhin null.
+ *
+ * Re-Initialisierbarkeit (UMBAU-D2, Plan 260722-h9e/3): `window.initVizpatchChat`
+ * ersetzt die alte selbstausfuehrende IIFE — die Radio-Auswahl in der Agenten-
+ * Tabelle swappt #chat-panel per HTMX gegen einen frischen `#chat-root` fuer den
+ * gewaehlten Agenten (`_chat_panel.html` ruft `initVizpatchChat()` danach erneut
+ * auf). Jeder Aufruf startet mit frischem Zustand (history/sessionId/
+ * pendingAttachment/lastMailContext) — gewollt beim Agent-Wechsel, die alten
+ * Element-Listener verschwinden mit dem ersetzten DOM-Inhalt (kein Doppel-
+ * Binding). Ohne `#chat-root` auf der Seite (z. B. Anlege-Modus ohne Agent)
+ * kehrt die Funktion idempotent sofort zurueck. */
+window.initVizpatchChat = function () {
   const root = document.getElementById('chat-root');
+  if (!root) return;
+
   const agentId = root.dataset.agentId;
   const log = document.getElementById('chat-log');
   const form = document.getElementById('chat-form');
@@ -264,4 +276,8 @@
     event.preventDefault();
     submitCurrentInput();
   });
-})();
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+  window.initVizpatchChat();
+});
