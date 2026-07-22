@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Security;
@@ -179,6 +180,58 @@ namespace VizpatchAddin.Core
             request.Headers.Add("Origin", _settings.AddinOriginToken);
 
             return request;
+        }
+
+        /// <summary>
+        /// Baut den Verify-Password-Request (URL + Form-Feld <c>password</c> +
+        /// Origin-Header). Oeffentlich fuer deterministische Request-Assertions.
+        /// </summary>
+        public HttpRequestMessage BuildVerifyPasswordRequest(string password)
+        {
+            string url = _settings.BackendUrl.TrimEnd('/') + "/addin/verify-password";
+
+            var fields = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("password", password ?? ""),
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new FormUrlEncodedContent(fields),
+            };
+
+            // Gleicher CSRF-Origin-Workaround wie beim Chat-POST: ohne Origin-Header
+            // weist enforce_same_origin den Request mit 403 ab. Der Endpoint ist
+            // serverseitig in der Add-in-Origin-Allowlist freigeschaltet.
+            request.Headers.Add("Origin", _settings.AddinOriginToken);
+
+            return request;
+        }
+
+        /// <summary>
+        /// Prueft ein FRISCH eingegebenes WebUI-Passwort gegen
+        /// <c>POST {BackendUrl}/addin/verify-password</c> (Add-in-Einstellungs-Gate).
+        /// Liefert <c>true</c> bei HTTP 200, <c>false</c> bei 401. Alle anderen
+        /// Faelle (Netz-/TLS-Fehler, sonstige 4xx/5xx) werfen eine Ausnahme, damit
+        /// der Aufrufer „Backend nicht erreichbar" vom „falschen Passwort" trennen
+        /// kann.
+        /// </summary>
+        public async Task<bool> VerifyPasswordAsync(string password, CancellationToken ct)
+        {
+            using (var response = await _http.SendAsync(
+                BuildVerifyPasswordRequest(password), ct))
+            {
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    return true;
+                }
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    return false;
+                }
+                response.EnsureSuccessStatusCode(); // wirft bei allem uebrigen
+                return false;
+            }
         }
 
         public void Dispose()

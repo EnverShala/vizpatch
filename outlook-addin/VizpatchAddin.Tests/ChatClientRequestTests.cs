@@ -176,6 +176,56 @@ namespace VizpatchAddin.Tests
             return content;
         }
 
+        // --- Feature B: Add-in-Einstellungs-Gate (verify-password) ---------------
+
+        [Fact]
+        public async Task BuildVerifyPasswordRequest_UsesExactUrlFieldAndOrigin()
+        {
+            using (var client = new ChatClient(SampleSettings(), new NoopHandler()))
+            {
+                var req = client.BuildVerifyPasswordRequest("pw123");
+                Assert.Equal("https://vizpatch.lan:8000/addin/verify-password",
+                    req.RequestUri.ToString());
+                Assert.Equal(HttpMethod.Post, req.Method);
+                Assert.Contains("https://outlook.office.com", req.Headers.GetValues("Origin"));
+                string body = await req.Content.ReadAsStringAsync();
+                Assert.Contains("password=pw123", body);
+            }
+        }
+
+        [Fact]
+        public async Task VerifyPasswordAsync_ReturnsTrue_On200()
+        {
+            var handler = new CapturingHandler(new StringContent("{\"ok\":true}"), HttpStatusCode.OK);
+            using (var client = new ChatClient(SampleSettings(), handler))
+            {
+                Assert.True(await client.VerifyPasswordAsync("pw", CancellationToken.None));
+                Assert.Equal("https://vizpatch.lan:8000/addin/verify-password",
+                    handler.LastRequest.RequestUri.ToString());
+            }
+        }
+
+        [Fact]
+        public async Task VerifyPasswordAsync_ReturnsFalse_On401()
+        {
+            var handler = new CapturingHandler(new StringContent("nope"), HttpStatusCode.Unauthorized);
+            using (var client = new ChatClient(SampleSettings(), handler))
+            {
+                Assert.False(await client.VerifyPasswordAsync("wrong", CancellationToken.None));
+            }
+        }
+
+        [Fact]
+        public async Task VerifyPasswordAsync_Throws_OnServerError()
+        {
+            var handler = new CapturingHandler(new StringContent("err"), HttpStatusCode.InternalServerError);
+            using (var client = new ChatClient(SampleSettings(), handler))
+            {
+                await Assert.ThrowsAnyAsync<HttpRequestException>(
+                    () => client.VerifyPasswordAsync("pw", CancellationToken.None));
+            }
+        }
+
         /// <summary>Handler, der nie wirklich sendet (fuer reine BuildRequest-Tests).</summary>
         private sealed class NoopHandler : HttpMessageHandler
         {

@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using VizpatchAddin;
 using VizpatchAddin.Core;
@@ -311,8 +312,21 @@ namespace VizpatchAddin.TaskPane
             ShowConfigHintIfNeeded();
         }
 
-        private void SettingsButton_Click(object sender, EventArgs e)
+        private async void SettingsButton_Click(object sender, EventArgs e)
         {
+            // Add-in-Einstellungs-Gate (Feature B): bereits konfigurierte
+            // Einstellungen duerfen nur nach Eingabe des WebUI-Passworts geoeffnet
+            // werden. Erststart (noch keine Backend-URL hinterlegt) laeuft ungegatet
+            // — sonst kaeme man nie in den Dialog, um die URL ueberhaupt zu setzen.
+            var current = LoadSettingsSafe();
+            if (!string.IsNullOrWhiteSpace(current.BackendUrl))
+            {
+                if (!await AuthorizeSettingsAsync(current))
+                {
+                    return;
+                }
+            }
+
             // Settings-Dialog (D-85): persistiert via SecureSettingsStore (DPAPI).
             // Nach dem Speichern die Settings neu laden, damit der naechste Turn
             // die aktualisierte Konfiguration verwendet.
@@ -324,6 +338,50 @@ namespace VizpatchAddin.TaskPane
                     AppendSystemLine("Einstellungen gespeichert.");
                     ShowConfigHintIfNeeded();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Add-in-Einstellungs-Gate: fragt das WebUI-Passwort ab und prueft es
+        /// serverseitig (<see cref="ChatClient.VerifyPasswordAsync"/>) gegen die
+        /// bereits hinterlegte Backend-URL. Nur bei Erfolg (HTTP 200) darf der
+        /// Einstellungsdialog geoeffnet werden. Ein falsches Passwort (401) oder
+        /// ein Netz-/TLS-Fehler brechen ab (Dialog bleibt gesperrt).
+        /// </summary>
+        private async Task<bool> AuthorizeSettingsAsync(AddinSettings current)
+        {
+            string entered;
+            using (var prompt = new PasswordPrompt())
+            {
+                if (prompt.ShowDialog(this) != DialogResult.OK)
+                {
+                    return false; // vom Betreiber abgebrochen
+                }
+                entered = prompt.EnteredPassword;
+            }
+
+            try
+            {
+                using (var client = new ChatClient(current))
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+                {
+                    bool ok = await client.VerifyPasswordAsync(entered, cts.Token);
+                    if (!ok)
+                    {
+                        MessageBox.Show(this,
+                            "Falsches WebUI-Passwort — Einstellungen bleiben gesperrt.",
+                            "Vizpatch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return ok;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    "WebUI nicht erreichbar oder Passwortpruefung fehlgeschlagen:\r\n"
+                    + ex.Message + "\r\n\r\nEinstellungen bleiben gesperrt.",
+                    "Vizpatch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
             }
         }
 
@@ -854,6 +912,103 @@ namespace VizpatchAddin.TaskPane
             var textRect = new Rectangle(BoxSize + TextGap, 0, Width - BoxSize - TextGap, Height);
             TextRenderer.DrawText(g, Text, Font, textRect, ForeColor,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.WordEllipsis);
+        }
+    }
+
+    /// <summary>
+    /// Kleiner modaler Passwort-Prompt fuer das Add-in-Einstellungs-Gate
+    /// (Feature B). Fragt das WebUI-Passwort ab; die eigentliche Pruefung erfolgt
+    /// beim Aufrufer serverseitig (<see cref="ChatClient.VerifyPasswordAsync"/>).
+    /// Das Passwort wird nur im Speicher gehalten und nie persistiert.
+    /// </summary>
+    internal sealed class PasswordPrompt : Form
+    {
+        private static readonly Color PrimaryBg = Color.FromArgb(0x25, 0x63, 0xEB);
+        private static readonly Color PrimaryHover = Color.FromArgb(0x1D, 0x4E, 0xD8);
+        private static readonly Color SecondaryBg = Color.FromArgb(0xEE, 0xF1, 0xF5);
+        private static readonly Color SecondaryHover = Color.FromArgb(0xDD, 0xE3, 0xEC);
+        private static readonly Color SecondaryFg = Color.FromArgb(0x1E, 0x3A, 0x5F);
+
+        private readonly TextBox _password;
+
+        public string EnteredPassword => _password.Text;
+
+        public PasswordPrompt()
+        {
+            Text = "Vizpatch — Einstellungen entsperren";
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = false;
+            MaximizeBox = false;
+            ClientSize = new Size(400, 170);
+            Font = new Font("Segoe UI", 9.5f);
+            BackColor = Color.White;
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                Padding = new Padding(16),
+                BackColor = Color.White,
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var label = new Label
+            {
+                Text = "WebUI-Passwort eingeben, um die Einstellungen zu aendern:",
+                AutoSize = true,
+                MaximumSize = new Size(352, 0),
+                ForeColor = SecondaryFg,
+                Margin = new Padding(0, 0, 0, 12),
+            };
+            _password = new TextBox
+            {
+                UseSystemPasswordChar = true,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 10f),
+                Dock = DockStyle.Fill,
+            };
+            layout.Controls.Add(label, 0, 0);
+            layout.Controls.Add(_password, 0, 1);
+
+            var buttonBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.RightToLeft,
+                Height = 52,
+                Padding = new Padding(12),
+                BackColor = Color.White,
+            };
+            var okButton = new RoundButton(PrimaryBg, PrimaryHover, Color.White)
+            {
+                Text = "Entsperren",
+                Height = 34,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(6, 0, 0, 0),
+                Font = new Font("Segoe UI Semibold", 9.5f),
+                DialogResult = DialogResult.OK,
+            };
+            var cancelButton = new RoundButton(SecondaryBg, SecondaryHover, SecondaryFg)
+            {
+                Text = "Abbrechen",
+                Height = 34,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(6, 0, 0, 0),
+                Font = new Font("Segoe UI Semibold", 9.5f),
+                DialogResult = DialogResult.Cancel,
+            };
+            buttonBar.Controls.Add(okButton);
+            buttonBar.Controls.Add(cancelButton);
+
+            // Fill-Inhalt zuerst, Bottom-Leiste zuletzt (Docking-Reihenfolge).
+            Controls.Add(layout);
+            Controls.Add(buttonBar);
+            AcceptButton = okButton;
+            CancelButton = cancelButton;
         }
     }
 }

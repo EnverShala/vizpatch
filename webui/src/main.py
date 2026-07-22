@@ -152,7 +152,10 @@ async def enforce_same_origin(request: Request, call_next):
             ok = urlparse(referer).netloc == host
         # Add-in-Ausnahme (Origin-basiert): fremde Office/Outlook-Origins duerfen
         # AUSSCHLIESSLICH den Add-in-Chat-Pfad ansprechen.
-        if not ok and origin and _ADDIN_CHAT_PATH_RE.match(request.url.path):
+        if not ok and origin and (
+            _ADDIN_CHAT_PATH_RE.match(request.url.path)
+            or request.url.path == "/addin/verify-password"
+        ):
             ok = _origin_allowed_for_addin(origin)
         if not ok:
             return PlainTextResponse("cross-origin request rejected", status_code=403)
@@ -807,6 +810,24 @@ def addin_manifest(user: str = Depends(auth.require_auth)):
     manifest_path = Path("src/templates/addin_manifest.xml")
     xml_text = manifest_path.read_text(encoding="utf-8").replace("{ADDIN_BASE_URL}", base_url)
     return PlainTextResponse(xml_text, media_type="application/xml")
+
+
+@app.post("/addin/verify-password", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("10/minute")
+def addin_verify_password(request: Request, password: str = Form("")):
+    """Add-in-Einstellungs-Gate: prüft ein FRISCH eingegebenes WebUI-Passwort
+    gegen `WEBUI_PASSWORD` (bcrypt). 200 `{ok:true}` bei korrekt, sonst 401. Das
+    Add-in ruft dies vor dem Öffnen des Einstellungsdialogs auf und gibt die
+    Felder nur bei 200 frei.
+
+    Session-Gate-Ausnahme über den `/addin/`-Präfix (das VSTO-WebBrowser-Control
+    trägt keinen Session-Cookie); Origin über die Add-in-Allowlist erlaubt (siehe
+    `enforce_same_origin`). `require_setup` stellt sicher, dass überhaupt ein
+    Passwort gesetzt ist. Das Passwort wird NIE geloggt; Rate-Limit gegen
+    Brute-Force."""
+    if auth.verify_password((password or "").strip()):
+        return {"ok": True}
+    raise HTTPException(status_code=401, detail="Falsches Passwort.")
 
 
 def _sse_data_frame(text: str) -> str:
