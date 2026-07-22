@@ -21,10 +21,10 @@ Paket-Inhalt (vom USB-Stick) nach `/opt/vizpatch` kopieren.
 **1. Integrität prüfen + Images laden**
 ```bash
 cd /opt/vizpatch
-sha256sum -c vizpatch-v1.9.0.tar.sha256
-sha256sum -c vizpatch-webui-v1.9.0.tar.sha256
-docker load -i vizpatch-v1.9.0.tar
-docker load -i vizpatch-webui-v1.9.0.tar
+sha256sum -c vizpatch-v1.10.0.tar.sha256
+sha256sum -c vizpatch-webui-v1.10.0.tar.sha256
+docker load -i vizpatch-v1.10.0.tar
+docker load -i vizpatch-webui-v1.10.0.tar
 ```
 
 **2. Docker-Socket-GID setzen (einmalig)**
@@ -57,6 +57,15 @@ Danach startet Vizpatch nach jedem Server-Neustart automatisch. Test: `sudo rebo
     wird automatisch dem Provider zugeordnet.
   - context.md (Firmenwissen; per KI-Assistent vorschlagbar).
   - Datenschutz-Checkbox bestätigen → **Speichern**.
+
+  > **Neu (v1.10.0): Zugänge werden beim Speichern geprüft.** Beim Speichern testet die
+  > WebUI die eingegebenen Zugänge live: IMAP-Anmeldung **und** API-Key (Aufruf gegen den
+  > LLM-Anbieter). Funktioniert eins von beiden nicht, wird **nicht gespeichert** — es
+  > erscheint eine konkrete Meldung (z. B. „Verbindung zu api.anthropic.com fehlgeschlagen
+  > — Netzwerk/Firewall/Proxy prüfen" oder „IMAP-Anmeldung fehlgeschlagen"). So entsteht
+  > kein Agent mit falschen Zugängen. **Wichtig:** Der Server muss ausgehend ins Internet
+  > dürfen (HTTPS/443 zum LLM-Anbieter, z. B. `api.anthropic.com`) und den IMAP-Server
+  > erreichen.
 - **Starten:** In der Übersichts-Tabelle beim Agenten auf **Start** — läuft ab dem
   nächsten Poll-Zyklus (Standard alle 5 Min). Mehrere Agenten/Postfächer sind möglich
   (ein Container, sequentieller Poll).
@@ -132,6 +141,13 @@ Im Chat-Bereich auf **„Einstellungen"** und eintragen:
 
 Das ist die **einzige** Verbindung zwischen Add-in und Server: ein HTTP-Aufruf über das LAN.
 Das Passwort wird am PC verschlüsselt gespeichert (DPAPI, nie Klartext).
+
+> **Neu (v1.10.0): Einstellungen sind passwortgeschützt.** Beim allerersten Einrichten
+> (noch keine Backend-URL hinterlegt) ist der Dialog offen. Sobald die Verbindung einmal
+> steht, fragt **„Einstellungen"** künftig das **WebUI-Passwort** ab und lässt Änderungen
+> nur nach korrekter Eingabe zu — Schutz davor, dass jemand am PC Backend-URL/Zugangsdaten
+> unbefugt verstellt. (Setzt voraus, dass die WebUI erreichbar ist; ist sie es nicht, bleibt
+> der Dialog gesperrt.)
 
 > **HTTP vs. HTTPS:** Über HTTP werden die Zugangsdaten unverschlüsselt übers Netz
 > gesendet — im isolierten Kunden-LAN vertretbar. Für höhere Sicherheit HTTPS via
