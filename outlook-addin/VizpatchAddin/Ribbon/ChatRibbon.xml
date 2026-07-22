@@ -10,7 +10,7 @@
       <tab idMso="TabMail" >
         <group id="vizpatchGroup" label="Vizpatch">
           <toggleButton id="vizpatchChatToggle"
-                        label="Vizpatch-Chat"
+                        label="Chat"
                         size="large"
                         imageMso="ConversationsGroup"
                         onAction="OnToggleChat"

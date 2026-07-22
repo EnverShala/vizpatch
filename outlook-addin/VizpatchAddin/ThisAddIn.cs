@@ -34,7 +34,10 @@ namespace VizpatchAddin
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
             _chatControl = new ChatTaskPaneHost();
-            _chatPane = this.CustomTaskPanes.Add(_chatControl, "Vizpatch-Chat");
+            // Kein Wortmarken-Titel mehr ("Vizpatch-Chat") — die Marke zeigt jetzt
+            // das Emblem-Logo oben im Pane-Inhalt (ChatView). Der Outlook-Titelbalken
+            // kann technisch nur Text tragen, daher bewusst leer.
+            _chatPane = this.CustomTaskPanes.Add(_chatControl, " ");
             _chatPane.Width = 420;
             // Standardmaessig ausgeblendet — der Betreiber blendet die Pane bei
             // Bedarf ueber den Ribbon-Toggle ein.

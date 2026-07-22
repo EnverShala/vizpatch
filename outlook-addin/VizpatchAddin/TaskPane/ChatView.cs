@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using VizpatchAddin;
@@ -65,6 +66,16 @@ namespace VizpatchAddin.TaskPane
         private static readonly Color UiFg = Color.FromArgb(0x20, 0x20, 0x20);
         private static readonly Color BtnBg = Color.FromArgb(0xEF, 0xEF, 0xEF);
         private static readonly Color BtnBorder = Color.FromArgb(0xAD, 0xAD, 0xAD);
+
+        // Chat-Blasen-Farben identisch zum Web-UI (webui/static/chat.css):
+        // Nutzer rechtsbuendig in Blau (#2563eb) auf Weiss, Assistent linksbuendig
+        // in hellem Grau (#eef1f5) auf Dunkel. Eine RichTextBox kennt keine echten
+        // abgerundeten Sprechblasen — nachgebildet ueber SelectionAlignment
+        // (rechts/links) + SelectionBackColor (Blasenfarbe hinter dem Text).
+        private static readonly Color UserBubbleBg = Color.FromArgb(0x25, 0x63, 0xEB);
+        private static readonly Color UserBubbleFg = Color.White;
+        private static readonly Color AssistantBubbleBg = Color.FromArgb(0xEE, 0xF1, 0xF5);
+        private static readonly Color AssistantBubbleFg = Color.FromArgb(0x11, 0x11, 0x11);
 
         private static Button MakeButton(string text)
         {
@@ -164,6 +175,61 @@ namespace VizpatchAddin.TaskPane
 
             this.Controls.Add(_log);
             this.Controls.Add(inputPanel);
+
+            // Emblem-Logo oben in der Pane (statt des frueheren Wortmarken-Titels
+            // "Vizpatch-Chat"). Nur den Kreis/Flieger, ohne Schriftzug. Wird als
+            // eingebettete Ressource geladen; schlaegt das fehl, bleibt die Pane
+            // einfach ohne Logo (kein Absturz). Zuletzt hinzugefuegt, damit es
+            // ueber _log (Fill) am oberen Rand andockt.
+            var emblem = LoadEmblemSafe();
+            if (emblem != null)
+            {
+                var logoBox = new PictureBox
+                {
+                    Dock = DockStyle.Top,
+                    Height = 64,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = UiBg,
+                    Padding = new Padding(0, 6, 0, 6),
+                    Image = emblem,
+                };
+                this.Controls.Add(logoBox);
+            }
+        }
+
+        /// <summary>Laedt das eingebettete Emblem-PNG robust — jeder Fehler
+        /// (Ressource fehlt/defekt) fuehrt zu <c>null</c> (keine Anzeige), nie zu
+        /// einem Absturz der Pane. Die Ressource wird ueber das Namenssuffix
+        /// gesucht (unabhaengig vom exakten Namespace-Praefix).</summary>
+        private static Image LoadEmblemSafe()
+        {
+            try
+            {
+                var asm = Assembly.GetExecutingAssembly();
+                foreach (var name in asm.GetManifestResourceNames())
+                {
+                    if (name.EndsWith("vizpatch_emblem.png", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using (var stream = asm.GetManifestResourceStream(name))
+                        {
+                            if (stream != null)
+                            {
+                                using (var img = Image.FromStream(stream))
+                                {
+                                    // Unabhaengige Kopie — loest die Bindung an den
+                                    // (gleich geschlossenen) Ressourcen-Stream.
+                                    return new Bitmap(img);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // bewusst geschluckt — kein Logo ist besser als ein Absturz.
+            }
+            return null;
         }
 
         private static AddinSettings LoadSettingsSafe()
@@ -275,9 +341,8 @@ namespace VizpatchAddin.TaskPane
                     }
                 }
 
-                AppendRoleLine("Sie", Color.FromArgb(0, 90, 158));
-                AppendUserText(message);
-                AppendRoleLine("Assistent", Color.FromArgb(34, 34, 34));
+                AppendUserBubble(message);
+                BeginAssistantBubble();
 
                 try
                 {
@@ -413,28 +478,62 @@ namespace VizpatchAddin.TaskPane
             }
         }
 
-        private void AppendRoleLine(string role, Color color)
+        /// <summary>Setzt Ausrichtung + Hintergrund einer neutralen (linksbuendigen,
+        /// nicht eingefaerbten) Zeile — Basis fuer Tool-/Fehler-/System-Zeilen und
+        /// die Absaetze zwischen den Sprechblasen.</summary>
+        private void ResetLineFormat()
         {
-            _log.SelectionStart = _log.TextLength;
-            _log.SelectionColor = color;
-            _log.SelectionFont = new Font(_log.Font, FontStyle.Bold);
-            _log.AppendText((_log.TextLength > 0 ? "\n" : "") + role + ":\n");
+            _log.SelectionAlignment = HorizontalAlignment.Left;
+            _log.SelectionBackColor = UiBg;
+            _log.SelectionColor = UiFg;
             _log.SelectionFont = new Font(_log.Font, FontStyle.Regular);
-            _log.SelectionColor = Color.Black;
+        }
+
+        /// <summary>Nutzer-Nachricht als rechtsbuendige, blau hinterlegte Blase
+        /// (wie webui .chat-bubble-user).</summary>
+        private void AppendUserBubble(string text)
+        {
+            // Vorherigen Absatz sauber abschliessen (neutral), dann die Blase.
+            if (_log.TextLength > 0)
+            {
+                _log.SelectionStart = _log.TextLength;
+                ResetLineFormat();
+                _log.AppendText("\n");
+            }
+            _log.SelectionStart = _log.TextLength;
+            _log.SelectionAlignment = HorizontalAlignment.Right;
+            _log.SelectionBackColor = UserBubbleBg;
+            _log.SelectionColor = UserBubbleFg;
+            _log.SelectionFont = new Font(_log.Font, FontStyle.Regular);
+            // Randleerzeichen als leichtes "Polster" hinter der Einfaerbung.
+            _log.AppendText(" " + text + " ");
             ScrollToEnd();
         }
 
-        private void AppendUserText(string text)
+        /// <summary>Beginnt die linksbuendige, grau hinterlegte Assistenten-Blase
+        /// (wie webui .chat-bubble-assistant); die Text-Chunks folgen per
+        /// <see cref="AppendAssistantChunk"/>.</summary>
+        private void BeginAssistantBubble()
         {
-            _log.SelectionColor = Color.Black;
-            _log.AppendText(text + "\n");
+            _log.SelectionStart = _log.TextLength;
+            ResetLineFormat();
+            _log.AppendText("\n");
+            _log.SelectionStart = _log.TextLength;
+            _log.SelectionAlignment = HorizontalAlignment.Left;
+            _log.SelectionBackColor = AssistantBubbleBg;
+            _log.SelectionColor = AssistantBubbleFg;
+            _log.AppendText(" ");
             ScrollToEnd();
         }
 
         private void AppendAssistantChunk(string chunk)
         {
+            // Formatierung je Chunk erneut setzen — dazwischen koennen Tool-Zeilen
+            // die Auswahl-Attribute veraendert haben.
             _log.SelectionStart = _log.TextLength;
-            _log.SelectionColor = Color.Black;
+            _log.SelectionAlignment = HorizontalAlignment.Left;
+            _log.SelectionBackColor = AssistantBubbleBg;
+            _log.SelectionColor = AssistantBubbleFg;
             _log.AppendText(chunk);
             ScrollToEnd();
         }
@@ -442,36 +541,39 @@ namespace VizpatchAddin.TaskPane
         private void AppendToolLine(string label)
         {
             _log.SelectionStart = _log.TextLength;
+            ResetLineFormat();
             _log.SelectionColor = Color.FromArgb(120, 120, 120);
             _log.SelectionFont = new Font(_log.Font, FontStyle.Italic);
             _log.AppendText("\n[Werkzeug] " + label + "\n");
-            _log.SelectionFont = new Font(_log.Font, FontStyle.Regular);
-            _log.SelectionColor = Color.Black;
+            ResetLineFormat();
             ScrollToEnd();
         }
 
         private void AppendErrorLine(string text)
         {
             _log.SelectionStart = _log.TextLength;
+            ResetLineFormat();
             _log.SelectionColor = Color.FromArgb(178, 34, 34);
             _log.AppendText("\n[Fehler] " + text + "\n");
-            _log.SelectionColor = Color.Black;
+            ResetLineFormat();
             ScrollToEnd();
         }
 
         private void AppendSystemLine(string text)
         {
             _log.SelectionStart = _log.TextLength;
+            ResetLineFormat();
             _log.SelectionColor = Color.FromArgb(120, 120, 120);
             _log.SelectionFont = new Font(_log.Font, FontStyle.Italic);
             _log.AppendText(text + "\n");
-            _log.SelectionFont = new Font(_log.Font, FontStyle.Regular);
-            _log.SelectionColor = Color.Black;
+            ResetLineFormat();
             ScrollToEnd();
         }
 
         private void AppendNewLine()
         {
+            _log.SelectionStart = _log.TextLength;
+            ResetLineFormat();
             _log.AppendText("\n");
             ScrollToEnd();
         }

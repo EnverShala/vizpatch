@@ -128,9 +128,11 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 
-  <!-- Ribbon-XML wird zur Laufzeit als eingebettete Ressource geladen (GetCustomUI). -->
+  <!-- Ribbon-XML + Emblem-Logo werden zur Laufzeit als eingebettete Ressourcen
+       geladen (GetCustomUI bzw. ChatView.LoadEmblemSafe). -->
   <ItemGroup>
     <EmbeddedResource Include="Ribbon\ChatRibbon.xml" />
+    <EmbeddedResource Include="Resources\vizpatch_emblem.png" />
   </ItemGroup>
 
   <ItemGroup>
