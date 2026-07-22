@@ -209,13 +209,9 @@
           } else if (parsed.eventType === 'done') {
             /* Stream-Ende — nichts anzuhängen. */
           } else if (parsed.eventType === 'tool') {
-            /* Tool-Aktivität (D-80): eigene, dezente Statuszeile im Log — wird
-             * NICHT an den Antworttext angehängt, damit die finale Antwort
-             * sauber bleibt (z. B. für den history-Turn nach Streamende). */
-            const toolLine = document.createElement('div');
-            toolLine.className = 'chat-tool-activity';
-            toolLine.textContent = parsed.data;
-            log.appendChild(toolLine);
+            /* Tool-Aktivität wird bewusst NICHT angezeigt (Betreiber-Wunsch: keine
+             * "werkzeug_..."-Statuszeilen im Chat) — Event wird verworfen. Der
+             * Antworttext bleibt davon unberührt. */
           } else {
             assistantText += parsed.data;
             assistantBubble.textContent += parsed.data;
