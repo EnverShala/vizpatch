@@ -38,6 +38,7 @@ namespace VizpatchAddin.TaskPane
     {
         private FlowLayoutPanel _log;
         private Bubble _currentAssistant;
+        private Panel _inputPanel;
         private TextBox _input;
         private RoundButton _sendButton;
         private RoundButton _resetButton;
@@ -126,7 +127,9 @@ namespace VizpatchAddin.TaskPane
             // Bei Groessenaenderung der Pane die Blasen neu ausrichten (Breite/Seite).
             _log.Resize += (s, e) => RelayoutBubbles();
 
-            var inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 176, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
+            // Height ist nur der Startwert — AdjustInputPanelHeight() skaliert das
+            // Eingabefeld proportional zur Pane-Hoehe (~28%, siehe unten).
+            _inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 176, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
 
             // Eingabefeld in einem gerundeten Rahmen-Container (RoundedPanel) —
             // die TextBox selbst ist randlos, der weiche Rahmen kommt vom Panel und
@@ -197,12 +200,17 @@ namespace VizpatchAddin.TaskPane
 
             // Reihenfolge steuert das Docking: buttonBar zuunterst, optionsBar
             // darueber, Eingabefeld fuellt den Rest.
-            inputPanel.Controls.Add(inputFrame);
-            inputPanel.Controls.Add(optionsBar);
-            inputPanel.Controls.Add(buttonBar);
+            _inputPanel.Controls.Add(inputFrame);
+            _inputPanel.Controls.Add(optionsBar);
+            _inputPanel.Controls.Add(buttonBar);
 
             this.Controls.Add(_log);
-            this.Controls.Add(inputPanel);
+            this.Controls.Add(_inputPanel);
+
+            // Eingabefeld proportional zur Pane-Hoehe halten (~28%), sobald die
+            // Pane ihre echte Groesse kennt bzw. sich aendert.
+            this.Resize += (s, e) => AdjustInputPanelHeight();
+            AdjustInputPanelHeight();
 
             // Volles Vizpatch-Logo oben in der Pane (statt des frueheren
             // Wortmarken-Titels "Vizpatch-Chat"). Wird als eingebettete Ressource
@@ -310,6 +318,37 @@ namespace VizpatchAddin.TaskPane
             _log.Controls.Clear();
             _currentAssistant = null;
             ShowConfigHintIfNeeded();
+        }
+
+        // Fixe Chrome-Hoehe im _inputPanel: buttonBar(52) + optionsBar(38) +
+        // vertikales Panel-Padding(8+14) = 112 px. Der Rest des Panels ist das
+        // eigentliche Textfeld (inputFrame, Dock=Fill).
+        private const int InputChromeHeight = 112;
+
+        /// <summary>
+        /// Haelt das Eingabe-Textfeld proportional zur Pane-Hoehe (~28% des
+        /// Chatbereichs), statt fest 176 px. Skaliert mit, wenn der Betreiber die
+        /// Task Pane groesser/kleiner zieht. Untergrenze = der bisherige Startwert
+        /// (176 px), Obergrenze = 60% der Pane, damit der Chat-Verlauf immer
+        /// sichtbar bleibt.
+        /// </summary>
+        private void AdjustInputPanelHeight()
+        {
+            if (_inputPanel == null)
+            {
+                return;
+            }
+            int total = this.ClientSize.Height;
+            if (total <= 0)
+            {
+                return; // Pane hat noch keine echte Groesse — Resize triggert spaeter erneut.
+            }
+            int textTarget = (int)Math.Round(total * 0.28);
+            int panelHeight = textTarget + InputChromeHeight;
+            int max = (int)Math.Round(total * 0.60);
+            if (panelHeight < 176) panelHeight = 176;
+            if (panelHeight > max) panelHeight = max;
+            _inputPanel.Height = panelHeight;
         }
 
         private async void SettingsButton_Click(object sender, EventArgs e)
