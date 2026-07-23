@@ -151,6 +151,61 @@ async function relearnStyle(btn) {
   }
 }
 
+/* „Verbindung testen"-Buttons im Agent-Formular (Betreiber-Wunsch): prueft IMAP
+ * bzw. LLM-API live gegen den echten Dienst, OHNE zu speichern. Nutzt serverseitig
+ * exakt dieselbe Probe wie /save (validate_conn). Leer gelassenes Passwort-/Key-Feld
+ * -> es wird der bereits gespeicherte Wert getestet. Ergebnis als kurze farbige
+ * Meldung direkt unterm Feld; ist das Meldungs-Element nicht da, per alert(). */
+async function testConnection(target, btn) {
+  const resultEl = document.getElementById(target === 'imap' ? 'imap-test-result' : 'llm-test-result');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Teste (~bis 15s)…';
+  if (resultEl) { resultEl.textContent = ''; resultEl.className = 'test-result'; }
+  try {
+    const fd = new FormData();
+    fd.append('target', target);
+    fd.append('agent_id', document.getElementById('active-agent-id').value);
+    // Aktuell eingetippte Werte mitgeben (leer = bereits gespeicherten Wert testen).
+    const userEl = document.getElementById('imap_user');
+    const pwEl = document.getElementById('imap_password');
+    const keyEl = document.getElementById('llm_api_key');
+    if (userEl) fd.append('imap_user', userEl.value);
+    if (pwEl) fd.append('imap_password', pwEl.value);
+    if (keyEl) fd.append('llm_api_key', keyEl.value);
+    const res = await fetch('/test-connection', {method: 'POST', body: fd});
+    const msg = await res.text();
+    if (resultEl) {
+      resultEl.textContent = (res.ok ? '✓ ' : '⚠ ') + msg;
+      resultEl.className = 'test-result ' + (res.ok ? 'test-ok' : 'test-fail');
+    } else {
+      alert(msg);
+    }
+  } catch (e) {
+    if (resultEl) {
+      resultEl.textContent = '⚠ Netzwerkfehler: ' + e;
+      resultEl.className = 'test-result test-fail';
+    } else {
+      alert('Netzwerkfehler: ' + e);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+/* Zero-Reset (Danger Zone): roter „ALLES LÖSCHEN"-Button -> Ja/Nein-Rückfrage ->
+ * WebUI-Admin-Passwort -> erst dann POST /reset. Das Passwort wird serverseitig
+ * geprüft (auth.verify_password); ohne korrektes Passwort löscht der Endpoint
+ * nichts. Ersetzt das frühere „LÖSCHEN"-Eintippen im Aufklapper. */
+function confirmReset() {
+  if (!confirm('Sind Sie sicher, dass Sie ALLES löschen wollen?\n\nAlle Agenten, verarbeitete Mails und der Verschlüsselungs-Key werden unwiderruflich gelöscht.')) return;
+  const pw = prompt('Zur Bestätigung das WebUI-Admin-Passwort eingeben:');
+  if (!pw) return;
+  document.getElementById('reset-password').value = pw;
+  document.getElementById('reset-form').submit();
+}
+
 /* Autostart-Umschalter in der Agenten-Uebersicht (_status_card.html). Speichert
  * bei jeder Aenderung sofort per fetch an /save. Der Wert wird IMMER explizit
  * mitgegeben ('true'/'false') — eine unchecked Checkbox wuerde sonst gar nichts
@@ -224,13 +279,9 @@ document.body.addEventListener('vizpatch-password-changed', function () {
   <h2>&#9888; Danger Zone — Zero-Reset</h2>
   <p>Löscht ALLE Agenten (Konfiguration + verarbeitete E-Mails), den Verschlüsselungs-Key und stoppt/entfernt den Agent-Container. WebUI läuft weiter, ist danach wieder im Erst-Setup-Zustand (kein Login, keine Agenten). <strong>Nicht rückgängig zu machen.</strong></p>
 
-  <details>
-    <summary>Zero-Reset öffnen…</summary>
-    <form action="/reset" method="post" onsubmit="return confirm('Wirklich alles löschen? Dies kann nicht rückgängig gemacht werden.');">
-      <label for="reset_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
-      <input type="text" name="confirmation" id="reset_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
-      <button type="submit" class="btn-danger">Jetzt alles löschen</button>
-    </form>
-  </details>
+  <form action="/reset" method="post" id="reset-form">
+    <input type="hidden" name="password" id="reset-password">
+    <button type="button" class="btn-danger" onclick="confirmReset()">ALLES LÖSCHEN</button>
+  </form>
 </section>
 {% endblock %}

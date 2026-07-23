@@ -1,15 +1,17 @@
+import io
 import json
 import logging
 import mimetypes
 import os
 import re
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -700,6 +702,127 @@ def context_generate(
     return PlainTextResponse(seed_text)
 
 
+@app.post("/test-connection", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("10/minute")
+def test_connection_endpoint(
+    request: Request,
+    target: str = Form(...),          # "imap" oder "llm"
+    agent_id: str = Form(""),
+    imap_user: str = Form(None),
+    imap_password: str = Form(None),
+    llm_api_key: str = Form(None),
+    user: str = Depends(auth.require_auth),
+):
+    """Live-Verbindungstest für IMAP bzw. LLM OHNE zu speichern (Betreiber-Wunsch:
+    „Verbindung testen"-Button im Agent-Formular). Nutzt exakt dieselbe Probe-Logik
+    wie POST /save (`validate_conn`), persistiert aber nichts. Ein leer gelassenes
+    Passwort-/Key-Feld fällt auf den bereits gespeicherten (entschlüsselten) Wert
+    zurück — genau wie beim Speichern. Erfolg -> 200 + kurze Meldung; Fehlschlag ->
+    400 + betreiber-lesbare Meldung (beides ohne Secrets)."""
+    existing_agent_env: dict[str, str] = {}
+    if agent_id:
+        try:
+            existing_agent_env = agents_io.read_env_raw(agent_id)
+        except ValueError:
+            existing_agent_env = {}
+
+    if target == "imap":
+        submitted_pw = (imap_password or "").strip()
+        if submitted_pw:
+            pw_plain = imap_password
+        else:
+            enc = existing_agent_env.get("IMAP_PASSWORD", "") or ""
+            try:
+                pw_plain = crypto.decrypt_value(enc) if enc else ""
+            except Exception:
+                pw_plain = ""
+        probe_env = {
+            "IMAP_HOST": existing_agent_env.get("IMAP_HOST", ""),
+            "IMAP_PORT": existing_agent_env.get("IMAP_PORT", ""),
+            "IMAP_USE_SSL": existing_agent_env.get("IMAP_USE_SSL", ""),
+            "IMAP_USER": (imap_user if imap_user is not None else existing_agent_env.get("IMAP_USER", "")) or "",
+            "IMAP_PASSWORD": pw_plain,
+        }
+        try:
+            validate_conn.check_imap(probe_env)
+        except validate_conn.ConnectionCheckError as e:
+            return PlainTextResponse(str(e), status_code=400)
+        return PlainTextResponse("IMAP-Verbindung erfolgreich — Anmeldung akzeptiert.")
+
+    if target == "llm":
+        submitted_key = (llm_api_key or "").strip()
+        if submitted_key and submitted_key != agents_io.MASKED:
+            key_plain = llm_api_key
+            provider = llm_detect.detect_llm_provider(llm_api_key) or ""
+        else:
+            enc = existing_agent_env.get("LLM_API_KEY", "") or ""
+            try:
+                key_plain = crypto.decrypt_value(enc) if enc else ""
+            except Exception:
+                key_plain = ""
+            provider = (existing_agent_env.get("LLM_PROVIDER") or "").strip()
+        if not key_plain:
+            return PlainTextResponse("Kein API-Key vorhanden — bitte Key eintragen.", status_code=400)
+        if provider not in ("anthropic", "openai", "google"):
+            return PlainTextResponse(
+                "API-Key-Format nicht erkannt — erwartet sk-ant-… (Anthropic), "
+                "sk-… (OpenAI) oder AIza… (Google).",
+                status_code=400,
+            )
+        try:
+            validate_conn.check_llm(provider, key_plain)
+        except validate_conn.ConnectionCheckError as e:
+            return PlainTextResponse(str(e), status_code=400)
+        label = PROVIDER_LABELS.get(provider, provider)
+        return PlainTextResponse(f"{label}-API erreichbar — Key gültig.")
+
+    raise HTTPException(status_code=400, detail="unbekanntes Testziel")
+
+
+# Ablageort des mitgelieferten Add-in-ClickOnce-Bundles (setup.exe + Application
+# Files + .vsto/Manifeste). Das Deployment-Paket legt `addin-publish/` neben die
+# docker-compose.yml; die WebUI mountet das Paketverzeichnis read-only nach
+# /compose (siehe docker-compose.yml `- .:/compose:ro`), daher der Default. In der
+# lokalen Test-Instanz fehlt der Ordner i. d. R. -> der Endpoint antwortet dann
+# sauber mit 404 (kein Absturz).
+ADDIN_BUNDLE_DIR = os.getenv("ADDIN_BUNDLE_DIR", "/compose/addin-publish")
+
+
+@app.get("/addin-installer", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("30/minute")
+def addin_installer_endpoint(
+    request: Request,
+    user: str = Depends(auth.require_auth),
+):
+    """Lädt den Outlook-Add-in-Installer als ZIP herunter (Betreiber-Wunsch:
+    Add-in bequem auf einem weiteren PC installieren). Gezippt wird das
+    mitgelieferte `addin-publish/`-Bundle (setup.exe + Application Files +
+    .vsto/Manifeste) — ClickOnce braucht den KOMPLETTEN Ordner, ein einzelnes
+    setup.exe genügt nicht. Das ZIP behält die `addin-publish/`-Ordnerstruktur.
+
+    Hinweis Mark-of-the-Web: ein per Browser geladenes ZIP ist „aus dem Internet"
+    markiert; am Ziel-PC einmal ZIP → Eigenschaften → „Zulassen", dann entpacken,
+    dann `setup.exe`. Enthält keine Secrets."""
+    bundle = Path(ADDIN_BUNDLE_DIR)
+    if not bundle.is_dir() or not any(bundle.rglob("*")):
+        raise HTTPException(
+            status_code=404,
+            detail="Add-in-Installer ist auf diesem Server nicht hinterlegt (addin-publish/ fehlt).",
+        )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(bundle.rglob("*")):
+            if path.is_file():
+                # relative_to(bundle.parent) -> ZIP-Wurzel enthält den Ordner
+                # "addin-publish/…", damit ClickOnce die relativen Pfade findet.
+                zf.write(path, path.relative_to(bundle.parent).as_posix())
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="vizpatch-addin-installer.zip"'},
+    )
+
+
 STY05_HINT = (
     "Zu wenig verwertbares Mail-Material und kein Freitext — bitte Stil kurz im "
     "Feld beschreiben oder später erneut versuchen."
@@ -1331,12 +1454,16 @@ def save(
 @limiter.limit("3/minute")
 def reset_all_endpoint(
     request: Request,
-    confirmation: str = Form(""),
+    password: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
-    if confirmation != "LÖSCHEN":
+    # Zero-Reset ist irreversibel -> zusätzlich zum Session-Login wird das
+    # WebUI-Admin-Passwort erneut abgefragt (Frontend: roter Button -> Ja/Nein ->
+    # Passwort-Prompt). Falsches/leeres Passwort blockt hart; es wird nichts
+    # gelöscht. Ersetzt das frühere „LÖSCHEN"-Eintippen.
+    if not auth.verify_password(password):
         return RedirectResponse(
-            f"/?error={quote('Zero-Reset abgebrochen: Bestätigungswort war nicht ‚LÖSCHEN‘.')}",
+            f"/?error={quote('Zero-Reset abgebrochen: falsches WebUI-Passwort.')}",
             status_code=303,
         )
     # Alle Agenten (Config + State) entfernen (MA-01/D-50).

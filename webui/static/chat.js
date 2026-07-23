@@ -137,6 +137,41 @@ window.initVizpatchChat = function () {
     resetBtn.addEventListener('click', resetHistory);
   }
 
+  /* "Add-in herunterladen": laedt den Outlook-Add-in-Installer als ZIP
+   * (das komplette addin-publish/-Bundle — ClickOnce braucht den ganzen Ordner).
+   * Ist auf diesem Server kein Bundle hinterlegt (z. B. lokale Test-Instanz),
+   * antwortet der Endpoint mit 404 -> wir zeigen eine kurze Meldung statt eines
+   * kaputten Downloads. Sonst per Blob speichern (Content-Disposition gibt den
+   * Dateinamen vor). */
+  const connectBtn = document.getElementById('chat-connect-btn');
+  if (connectBtn) {
+    connectBtn.addEventListener('click', async function () {
+      const original = connectBtn.textContent;
+      connectBtn.disabled = true;
+      try {
+        const res = await fetch('/addin-installer');
+        if (!res.ok) {
+          alert('Add-in-Installer ist auf diesem Server nicht hinterlegt (Fehler ' + res.status + ').');
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vizpatch-addin-installer.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Download fehlgeschlagen: ' + e);
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = original;
+      }
+    });
+  }
+
   function addBubble(role) {
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble chat-bubble-' + role;

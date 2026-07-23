@@ -28,6 +28,9 @@
     <label for="imap_password">IMAP-Passwort (IMAP_PASSWORD)</label>
     <input type="password" id="imap_password" name="imap_password" value="" placeholder="**** (leer lassen = unverändert)">
 
+    <button type="button" class="btn-test-conn" onclick="testConnection('imap', this)">IMAP-Verbindung testen</button>
+    <p class="test-result" id="imap-test-result" role="status" aria-live="polite"></p>
+
     {% set drafts_source = drafts_status.detection_source if drafts_status else None %}
     {% if drafts_source == 'unresolved' %}
     <div class="banner-error">
@@ -61,6 +64,9 @@
       {% elif env.LLM_PROVIDER == 'google' %}Erkannter LLM-Provider: Google
       {% else %}Noch kein Key gespeichert{% endif %}
     </p>
+
+    <button type="button" class="btn-test-conn" onclick="testConnection('llm', this)">API-Verbindung testen</button>
+    <p class="test-result" id="llm-test-result" role="status" aria-live="polite"></p>
 
     <p class="hint avv-hint" id="avv-anthropic" {% if env.LLM_PROVIDER != 'anthropic' %}style="display:none"{% endif %}>
       AVV-Hinweis (Anthropic): Anthropic bietet einen Auftragsverarbeitungsvertrag (AVV/DPA) inkl. Zero-Data-Retention-Option für die API an — vor produktivem Einsatz abschließen.

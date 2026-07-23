@@ -409,6 +409,51 @@ code {
   cursor: pointer;
 }
 
+/* „Verbindung testen"-Buttons (IMAP/LLM) im Agent-Formular: dezenter
+ * Sekundär-Button direkt unter dem jeweiligen Eingabefeld, klar vom großen
+ * „Speichern"-Primärbutton abgesetzt. */
+.btn-test-conn {
+  display: inline-block;
+  margin-top: 0.5rem;
+  background: #eef1f5;
+  color: #1e3a5f;
+  border: 1px solid #ccd3de;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-test-conn:hover {
+  background: #dde3ec;
+}
+
+.btn-test-conn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Ergebniszeile des Verbindungstests — kurz, farbcodiert, unter dem Feld.
+ * Leer (kein Test gelaufen) = unsichtbar, damit kein Layout-Sprung entsteht. */
+.test-result {
+  font-size: 0.82rem;
+  margin: 0.35rem 0 0;
+  min-height: 1em;
+}
+
+.test-result:empty {
+  display: none;
+}
+
+.test-result.test-ok {
+  color: #155724;
+}
+
+.test-result.test-fail {
+  color: #b22222;
+  font-weight: 500;
+}
+
 .config-warning {
   background: #fff3cd;
   border-left: 4px solid #ffc107;

@@ -127,8 +127,9 @@ namespace VizpatchAddin.TaskPane
             // Bei Groessenaenderung der Pane die Blasen neu ausrichten (Breite/Seite).
             _log.Resize += (s, e) => RelayoutBubbles();
 
-            // Height ist nur der Startwert — AdjustInputPanelHeight() skaliert das
-            // Eingabefeld proportional zur Pane-Hoehe (~28%, siehe unten).
+            // Height ist nur der Startwert — AdjustInputPanelHeight() setzt die
+            // Hoehe inhaltsabhaengig (klein starten, mit dem Text mitwachsen, max
+            // 30% der Pane, siehe unten).
             _inputPanel = new Panel { Dock = DockStyle.Bottom, Height = 176, Padding = new Padding(10, 8, 10, 14), BackColor = UiBg };
 
             // Eingabefeld in einem gerundeten Rahmen-Container (RoundedPanel) —
@@ -151,6 +152,10 @@ namespace VizpatchAddin.TaskPane
                 BorderStyle = BorderStyle.None,
             };
             _input.KeyDown += Input_KeyDown;
+            // Mit der getippten Textmenge mitwachsen (Betreiber-Wunsch nach dem
+            // Kundentermin): jede Aenderung rechnet die Panelhoehe neu, gedeckelt
+            // auf hoechstens 30% der Pane-Hoehe.
+            _input.TextChanged += (s, e) => AdjustInputPanelHeight();
             _input.Enter += (s, e) => { inputFrame.BorderColor = InputBorderFocus; inputFrame.Invalidate(); };
             _input.Leave += (s, e) => { inputFrame.BorderColor = InputBorder; inputFrame.Invalidate(); };
             inputFrame.Controls.Add(_input);
@@ -207,8 +212,9 @@ namespace VizpatchAddin.TaskPane
             this.Controls.Add(_log);
             this.Controls.Add(_inputPanel);
 
-            // Eingabefeld proportional zur Pane-Hoehe halten (~28%), sobald die
-            // Pane ihre echte Groesse kennt bzw. sich aendert.
+            // Eingabefeld inhaltsabhaengig dimensionieren (klein starten, mitwachsen,
+            // max 30% der Pane), sobald die Pane ihre echte Groesse kennt bzw. sich
+            // aendert.
             this.Resize += (s, e) => AdjustInputPanelHeight();
             AdjustInputPanelHeight();
 
@@ -321,20 +327,23 @@ namespace VizpatchAddin.TaskPane
         }
 
         // Fixe Chrome-Hoehe im _inputPanel: buttonBar(52) + optionsBar(38) +
-        // vertikales Panel-Padding(8+14) = 112 px. Der Rest des Panels ist das
-        // eigentliche Textfeld (inputFrame, Dock=Fill).
+        // vertikales Panel-Padding(8+14) = 112 px. Dazu kommt der Innenabstand des
+        // inputFrame (oben+unten = 16). Der Rest ist die eigentliche Textflaeche.
         private const int InputChromeHeight = 112;
+        private const int InputFramePadding = 16;
 
         /// <summary>
-        /// Haelt das Eingabe-Textfeld proportional zur Pane-Hoehe (~28% des
-        /// Chatbereichs), statt fest 176 px. Skaliert mit, wenn der Betreiber die
-        /// Task Pane groesser/kleiner zieht. Untergrenze = der bisherige Startwert
-        /// (176 px), Obergrenze = 60% der Pane, damit der Chat-Verlauf immer
-        /// sichtbar bleibt.
+        /// Haelt das Eingabefeld KLEIN und laesst es mit der getippten Textmenge
+        /// MITWACHSEN (Betreiber-Wunsch nach dem Kundentermin): Start bei ~2 Zeilen,
+        /// waechst Zeile fuer Zeile, gedeckelt auf HOECHSTENS 30% der Pane-Hoehe. Ab
+        /// dem Deckel scrollt das Textfeld intern (ScrollBars.Vertical). Frueher war
+        /// das Feld fest ~28% der Pane hoch -> es wirkte dauerhaft zu gross und stahl
+        /// dem Chat-Verlauf Platz. Wird bei jedem TextChanged UND bei Pane-Resize
+        /// aufgerufen.
         /// </summary>
         private void AdjustInputPanelHeight()
         {
-            if (_inputPanel == null)
+            if (_inputPanel == null || _input == null)
             {
                 return;
             }
@@ -343,11 +352,33 @@ namespace VizpatchAddin.TaskPane
             {
                 return; // Pane hat noch keine echte Groesse — Resize triggert spaeter erneut.
             }
-            int textTarget = (int)Math.Round(total * 0.28);
-            int panelHeight = textTarget + InputChromeHeight;
-            int max = (int)Math.Round(total * 0.60);
-            if (panelHeight < 176) panelHeight = 176;
-            if (panelHeight > max) panelHeight = max;
+
+            // Verfuegbare Textbreite grob aus der Panelbreite (Panel-Padding 10+10 +
+            // inputFrame-Padding 10+10 = ~40 px seitlicher Rahmen).
+            int textWidth = _inputPanel.ClientSize.Width - 40;
+            if (textWidth < 40) textWidth = 40;
+
+            // Benoetigte Texthoehe fuer den aktuellen Inhalt (Wortumbruch).
+            string probe = _input.Text.Length > 0 ? _input.Text : "Ag";
+            int textHeight = TextRenderer.MeasureText(
+                probe, _input.Font, new Size(textWidth, int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+
+            int lineHeight = _input.Font.Height;
+            int minTextHeight = lineHeight * 2;                 // Startgroesse ~2 Zeilen
+            if (textHeight < minTextHeight) textHeight = minTextHeight;
+
+            int panelHeight = textHeight + InputFramePadding + InputChromeHeight;
+
+            // Deckel: hoechstens 30% der Pane. Die Untergrenze (2 Zeilen + Leisten)
+            // gewinnt nur auf sehr kleinen Panes, wo 30% darunter laege — sonst
+            // waere gar kein Bedienen mehr moeglich.
+            int minPanel = minTextHeight + InputFramePadding + InputChromeHeight;
+            int cap = (int)Math.Round(total * 0.30);
+            int maxPanel = Math.Max(cap, minPanel);
+            if (panelHeight < minPanel) panelHeight = minPanel;
+            if (panelHeight > maxPanel) panelHeight = maxPanel;
+
             _inputPanel.Height = panelHeight;
         }
 
@@ -762,11 +793,19 @@ namespace VizpatchAddin.TaskPane
 
         private void ScrollToEnd()
         {
-            int n = _log.Controls.Count;
-            if (n > 0)
+            if (_log.Controls.Count == 0)
             {
-                _log.ScrollControlIntoView(_log.Controls[n - 1]);
+                return;
             }
+            // Erst das Layout aktualisieren, damit die (waehrend des Streamings
+            // gewachsene) Blasenhoehe schon steht — sonst zielt der Scroll auf
+            // veraltete Positionen und die neueste Zeile bleibt unsichtbar (Teil
+            // des Kundenbugs: „man kann nicht runterscrollen").
+            _log.PerformLayout();
+            // Y ueber die volle Inhaltshoehe setzen -> AutoScroll klemmt auf das
+            // tatsaechliche Maximum = ganz unten. Zeigt zuverlaessig die letzte
+            // Zeile, auch bei Blasen, die hoeher als der sichtbare Bereich sind.
+            _log.AutoScrollPosition = new Point(0, _log.DisplayRectangle.Height);
         }
 
         /// <summary>
@@ -781,12 +820,54 @@ namespace VizpatchAddin.TaskPane
             public Color BubbleColor;
             private const int Radius = 14;
 
+            // IDENTISCHE Flags fuer Messung (GetPreferredSize) UND Zeichnung
+            // (OnPaint). Weichen sie voneinander ab, ist das selbst gezeichnete
+            // Textlayout hoeher als die vom Label gemessene Groesse -> die
+            // letzte(n) Zeile(n) werden abgeschnitten (genau der Kundenbug:
+            // Antwort nicht vollstaendig lesbar). NoPrefix: '&' im Text nicht als
+            // Tastenkuerzel verschlucken.
+            private const TextFormatFlags BubbleTextFlags =
+                TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top
+                | TextFormatFlags.NoPrefix;
+
             public Bubble()
             {
                 AutoSize = true;
                 Padding = new Padding(11, 8, 11, 8);
                 Margin = new Padding(6, 4, 6, 4);
                 DoubleBuffered = true;
+            }
+
+            /// <summary>
+            /// Misst die Blasengroesse mit EXAKT denselben Flags/derselben Breite,
+            /// mit der OnPaint zeichnet — zweistufig: erst die natuerliche Breite
+            /// (gedeckelt auf <see cref="Control.MaximumSize"/>.Width) bestimmen,
+            /// dann die Hoehe bei genau dieser Breite. Damit ist das Label immer
+            /// hoch genug fuer den umgebrochenen Text; nichts wird mehr
+            /// abgeschnitten. Die Basis-Label-AutoSize-Messung passte nicht zur
+            /// selbst gezeichneten WordBreak-Ausgabe und war der Grund fuer die zu
+            /// kurzen Blasen.
+            /// </summary>
+            public override Size GetPreferredSize(Size proposedSize)
+            {
+                int cap = MaximumSize.Width > 0
+                    ? MaximumSize.Width
+                    : (proposedSize.Width > 1 ? proposedSize.Width : 320);
+                int capText = cap - Padding.Horizontal;
+                if (capText < 1) capText = 1;
+
+                string text = string.IsNullOrEmpty(Text) ? " " : Text;
+                // 1) natuerliche Breite (<= capText).
+                Size natural = TextRenderer.MeasureText(
+                    text, Font, new Size(capText, int.MaxValue), BubbleTextFlags);
+                int drawTextWidth = natural.Width < 1 ? 1 : natural.Width;
+                // 2) Hoehe bei genau dieser Zeichenbreite (kann mehr Zeilen ergeben).
+                Size measured = TextRenderer.MeasureText(
+                    text, Font, new Size(drawTextWidth, int.MaxValue), BubbleTextFlags);
+
+                return new Size(
+                    drawTextWidth + Padding.Horizontal,
+                    measured.Height + Padding.Vertical + 2); // +2 px Sicherheitspuffer
             }
 
             protected override void OnPaint(PaintEventArgs e)
@@ -802,8 +883,7 @@ namespace VizpatchAddin.TaskPane
                     Padding.Left, Padding.Top,
                     Width - Padding.Horizontal, Height - Padding.Vertical);
                 TextRenderer.DrawText(
-                    e.Graphics, Text, Font, textRect, ForeColor,
-                    TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top);
+                    e.Graphics, Text, Font, textRect, ForeColor, BubbleTextFlags);
             }
         }
     }
