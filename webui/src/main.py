@@ -700,6 +700,83 @@ def context_generate(
     return PlainTextResponse(seed_text)
 
 
+@app.post("/test-connection", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("10/minute")
+def test_connection_endpoint(
+    request: Request,
+    target: str = Form(...),          # "imap" oder "llm"
+    agent_id: str = Form(""),
+    imap_user: str = Form(None),
+    imap_password: str = Form(None),
+    llm_api_key: str = Form(None),
+    user: str = Depends(auth.require_auth),
+):
+    """Live-Verbindungstest für IMAP bzw. LLM OHNE zu speichern (Betreiber-Wunsch:
+    „Verbindung testen"-Button im Agent-Formular). Nutzt exakt dieselbe Probe-Logik
+    wie POST /save (`validate_conn`), persistiert aber nichts. Ein leer gelassenes
+    Passwort-/Key-Feld fällt auf den bereits gespeicherten (entschlüsselten) Wert
+    zurück — genau wie beim Speichern. Erfolg -> 200 + kurze Meldung; Fehlschlag ->
+    400 + betreiber-lesbare Meldung (beides ohne Secrets)."""
+    existing_agent_env: dict[str, str] = {}
+    if agent_id:
+        try:
+            existing_agent_env = agents_io.read_env_raw(agent_id)
+        except ValueError:
+            existing_agent_env = {}
+
+    if target == "imap":
+        submitted_pw = (imap_password or "").strip()
+        if submitted_pw:
+            pw_plain = imap_password
+        else:
+            enc = existing_agent_env.get("IMAP_PASSWORD", "") or ""
+            try:
+                pw_plain = crypto.decrypt_value(enc) if enc else ""
+            except Exception:
+                pw_plain = ""
+        probe_env = {
+            "IMAP_HOST": existing_agent_env.get("IMAP_HOST", ""),
+            "IMAP_PORT": existing_agent_env.get("IMAP_PORT", ""),
+            "IMAP_USE_SSL": existing_agent_env.get("IMAP_USE_SSL", ""),
+            "IMAP_USER": (imap_user if imap_user is not None else existing_agent_env.get("IMAP_USER", "")) or "",
+            "IMAP_PASSWORD": pw_plain,
+        }
+        try:
+            validate_conn.check_imap(probe_env)
+        except validate_conn.ConnectionCheckError as e:
+            return PlainTextResponse(str(e), status_code=400)
+        return PlainTextResponse("IMAP-Verbindung erfolgreich — Anmeldung akzeptiert.")
+
+    if target == "llm":
+        submitted_key = (llm_api_key or "").strip()
+        if submitted_key and submitted_key != agents_io.MASKED:
+            key_plain = llm_api_key
+            provider = llm_detect.detect_llm_provider(llm_api_key) or ""
+        else:
+            enc = existing_agent_env.get("LLM_API_KEY", "") or ""
+            try:
+                key_plain = crypto.decrypt_value(enc) if enc else ""
+            except Exception:
+                key_plain = ""
+            provider = (existing_agent_env.get("LLM_PROVIDER") or "").strip()
+        if not key_plain:
+            return PlainTextResponse("Kein API-Key vorhanden — bitte Key eintragen.", status_code=400)
+        if provider not in ("anthropic", "openai", "google"):
+            return PlainTextResponse(
+                "API-Key-Format nicht erkannt — erwartet sk-ant-… (Anthropic), "
+                "sk-… (OpenAI) oder AIza… (Google).",
+                status_code=400,
+            )
+        try:
+            validate_conn.check_llm(provider, key_plain)
+        except validate_conn.ConnectionCheckError as e:
+            return PlainTextResponse(str(e), status_code=400)
+        label = PROVIDER_LABELS.get(provider, provider)
+        return PlainTextResponse(f"{label}-API erreichbar — Key gültig.")
+
+    raise HTTPException(status_code=400, detail="unbekanntes Testziel")
+
+
 STY05_HINT = (
     "Zu wenig verwertbares Mail-Material und kein Freitext — bitte Stil kurz im "
     "Feld beschreiben oder später erneut versuchen."
