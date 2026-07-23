@@ -4,6 +4,11 @@ import pytest
 from docker.errors import NotFound
 
 
+# authed_client setzt WEBUI_PASSWORD = bcrypt-Hash von "pw" -> auth.verify_password("pw")
+# ist True. Der Zero-Reset verlangt jetzt das WebUI-Admin-Passwort (statt des
+# früheren „LÖSCHEN"-Eintippens): korrektes Passwort löscht, falsches/leeres blockt.
+
+
 def _setup_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
     monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
@@ -24,16 +29,15 @@ def _mock_agent_container(mocker, exists=True):
     return mock_client, mock_container
 
 
-def test_reset_requires_confirmation(authed_client, mocker, tmp_path, monkeypatch):
+def test_reset_wrong_password_rejected(authed_client, mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
     import src.agents_io as agents_io
     agents_io.write_env("info", {"AGENT_ENABLED": "false"})
     response = authed_client.post(
         "/reset",
-        auth=("admin", "pw"),
         follow_redirects=False,
-        data={"confirmation": "falschesWort"},
+        data={"password": "falschesPasswort"},
     )
     assert response.status_code == 303
     assert "error=" in response.headers.get("location", "")
@@ -41,20 +45,19 @@ def test_reset_requires_confirmation(authed_client, mocker, tmp_path, monkeypatc
     assert (tmp_path / "config" / "agents" / "info").exists()
 
 
-def test_reset_empty_confirmation_rejected(authed_client, mocker, tmp_path, monkeypatch):
+def test_reset_empty_password_rejected(authed_client, mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     _mock_agent_container(mocker)
     response = authed_client.post(
         "/reset",
-        auth=("admin", "pw"),
         follow_redirects=False,
-        data={"confirmation": ""},
+        data={"password": ""},
     )
     assert response.status_code == 303
     assert "error=" in response.headers.get("location", "")
 
 
-def test_reset_with_correct_confirmation_deletes_all_agents_and_key(authed_client, mocker, tmp_path, monkeypatch):
+def test_reset_with_correct_password_deletes_all_agents_and_key(authed_client, mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     mock_client, mock_container = _mock_agent_container(mocker)
     import src.agents_io as agents_io
@@ -67,9 +70,8 @@ def test_reset_with_correct_confirmation_deletes_all_agents_and_key(authed_clien
 
     response = authed_client.post(
         "/reset",
-        auth=("admin", "pw"),
         follow_redirects=False,
-        data={"confirmation": "LÖSCHEN"},
+        data={"password": "pw"},
     )
     assert response.status_code == 303
     assert "reset=1" in response.headers.get("location", "")
@@ -86,7 +88,7 @@ def test_reset_with_correct_confirmation_deletes_all_agents_and_key(authed_clien
     mock_container.remove.assert_called_once_with(force=True)
 
 
-def test_reset_wrong_confirmation_deletes_nothing(authed_client, mocker, tmp_path, monkeypatch):
+def test_reset_wrong_password_deletes_nothing(authed_client, mocker, tmp_path, monkeypatch):
     _setup_env(tmp_path, monkeypatch)
     mock_client, mock_container = _mock_agent_container(mocker)
     import src.agents_io as agents_io
@@ -96,9 +98,8 @@ def test_reset_wrong_confirmation_deletes_nothing(authed_client, mocker, tmp_pat
 
     response = authed_client.post(
         "/reset",
-        auth=("admin", "pw"),
         follow_redirects=False,
-        data={"confirmation": "falsch"},
+        data={"password": "falsch"},
     )
     assert response.status_code == 303
     assert "error=" in response.headers.get("location", "")
@@ -114,9 +115,8 @@ def test_reset_when_agent_container_missing(authed_client, mocker, tmp_path, mon
     agents_io.write_env("agent-a", {"AGENT_ENABLED": "true"})
     response = authed_client.post(
         "/reset",
-        auth=("admin", "pw"),
         follow_redirects=False,
-        data={"confirmation": "LÖSCHEN"},
+        data={"password": "pw"},
     )
     # Container fehlt → kein Fehler, andere Aufräumung trotzdem
     assert response.status_code == 303
@@ -137,6 +137,7 @@ def test_index_shows_danger_zone(authed_client, mocker, tmp_path, monkeypatch):
     _mock_agent_container(mocker)
     response = authed_client.get("/", auth=("admin", "pw"))
     assert response.status_code == 200
-    assert 'name="confirmation"' in response.text
-    assert "LÖSCHEN" in response.text
+    # Neuer Danger-Zone-Flow: roter Button + verstecktes Passwort-Feld, POST /reset.
     assert 'action="/reset"' in response.text
+    assert 'name="password"' in response.text
+    assert "ALLES LÖSCHEN" in response.text

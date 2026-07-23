@@ -137,6 +137,24 @@ window.initVizpatchChat = function () {
     resetBtn.addEventListener('click', resetHistory);
   }
 
+  /* "Mit Outlook verknuepfen": laedt eine Verknuepfungs-Datei herunter
+   * (Backend-URL + Agent-ID + Benutzer + Origin-Token, KEIN Passwort). Auf einem
+   * anderen PC importiert das Outlook-Add-in sie beim Start automatisch; das
+   * Passwort wird dort einmalig eingegeben (DPAPI). Der Download nutzt einen
+   * temporaeren <a download> — der Content-Disposition-Header des Servers gibt
+   * den Dateinamen vor. */
+  const connectBtn = document.getElementById('chat-connect-btn');
+  if (connectBtn) {
+    connectBtn.addEventListener('click', function () {
+      const a = document.createElement('a');
+      a.href = '/connect-config?agent_id=' + encodeURIComponent(agentId);
+      a.download = 'vizpatch-verknuepfung.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+  }
+
   function addBubble(role) {
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble chat-bubble-' + role;

@@ -194,6 +194,18 @@ async function testConnection(target, btn) {
   }
 }
 
+/* Zero-Reset (Danger Zone): roter „ALLES LÖSCHEN"-Button -> Ja/Nein-Rückfrage ->
+ * WebUI-Admin-Passwort -> erst dann POST /reset. Das Passwort wird serverseitig
+ * geprüft (auth.verify_password); ohne korrektes Passwort löscht der Endpoint
+ * nichts. Ersetzt das frühere „LÖSCHEN"-Eintippen im Aufklapper. */
+function confirmReset() {
+  if (!confirm('Sind Sie sicher, dass Sie ALLES löschen wollen?\n\nAlle Agenten, verarbeitete Mails und der Verschlüsselungs-Key werden unwiderruflich gelöscht.')) return;
+  const pw = prompt('Zur Bestätigung das WebUI-Admin-Passwort eingeben:');
+  if (!pw) return;
+  document.getElementById('reset-password').value = pw;
+  document.getElementById('reset-form').submit();
+}
+
 /* Autostart-Umschalter in der Agenten-Uebersicht (_status_card.html). Speichert
  * bei jeder Aenderung sofort per fetch an /save. Der Wert wird IMMER explizit
  * mitgegeben ('true'/'false') — eine unchecked Checkbox wuerde sonst gar nichts
@@ -267,13 +279,9 @@ document.body.addEventListener('vizpatch-password-changed', function () {
   <h2>&#9888; Danger Zone — Zero-Reset</h2>
   <p>Löscht ALLE Agenten (Konfiguration + verarbeitete E-Mails), den Verschlüsselungs-Key und stoppt/entfernt den Agent-Container. WebUI läuft weiter, ist danach wieder im Erst-Setup-Zustand (kein Login, keine Agenten). <strong>Nicht rückgängig zu machen.</strong></p>
 
-  <details>
-    <summary>Zero-Reset öffnen…</summary>
-    <form action="/reset" method="post" onsubmit="return confirm('Wirklich alles löschen? Dies kann nicht rückgängig gemacht werden.');">
-      <label for="reset_confirm">Zur Bestätigung <strong>LÖSCHEN</strong> eintippen:</label>
-      <input type="text" name="confirmation" id="reset_confirm" required autocomplete="off" pattern="LÖSCHEN" title="Muss exakt 'LÖSCHEN' sein">
-      <button type="submit" class="btn-danger">Jetzt alles löschen</button>
-    </form>
-  </details>
+  <form action="/reset" method="post" id="reset-form">
+    <input type="hidden" name="password" id="reset-password">
+    <button type="button" class="btn-danger" onclick="confirmReset()">ALLES LÖSCHEN</button>
+  </form>
 </section>
 {% endblock %}

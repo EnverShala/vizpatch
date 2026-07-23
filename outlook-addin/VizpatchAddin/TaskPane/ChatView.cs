@@ -58,8 +58,44 @@ namespace VizpatchAddin.TaskPane
         {
             BuildUi();
             _settings = LoadSettingsSafe();
+            TryAutoProvisionIfUnconfigured();
             _sessionId = SessionIdGenerator.NewSessionId();
             ShowConfigHintIfNeeded();
+        }
+
+        /// <summary>
+        /// „Mit Outlook verknüpfen" (Auto-Import): Ist noch KEINE Backend-URL
+        /// konfiguriert, wird beim Start nach der von der WebUI erzeugten
+        /// Verknüpfungs-Datei gesucht (Downloads-/Konfig-Ordner). Wird sie
+        /// gefunden, übernimmt das Add-in Backend-URL/Agent-ID/Benutzer/
+        /// Origin-Token und speichert sie. Das Passwort bleibt leer und wird —
+        /// DPAPI-bedingt — einmalig über „Einstellungen" am Ziel-PC eingegeben.
+        /// Jeder Fehler ist unkritisch: es bleibt bei den bisherigen
+        /// Einstellungen (die Pane darf nie deshalb abstürzen).
+        /// </summary>
+        private void TryAutoProvisionIfUnconfigured()
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_settings.BackendUrl))
+                {
+                    return; // bereits konfiguriert — nie ueberschreiben
+                }
+                var provisioned = ConnectProvisioning.TryImport();
+                if (provisioned == null)
+                {
+                    return;
+                }
+                SecureSettingsStore.Save(provisioned);
+                _settings = LoadSettingsSafe();
+                AppendSystemLine(
+                    "Verknüpfung importiert (Backend-URL und Agent-ID übernommen). "
+                    + "Bitte einmalig das WebUI-Passwort über \"Einstellungen\" eingeben.");
+            }
+            catch
+            {
+                // Provisionierung ist rein optional — niemals die Pane gefaehrden.
+            }
         }
 
         // Explizite, theme-unabhaengige Farben: In der VSTO-CustomTaskPane erben

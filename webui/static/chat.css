@@ -30,12 +30,33 @@ body.chat-standalone #chat-root {
   height: 100vh;
 }
 
-/* Toolbar ueber dem Log: sekundaere Aktionen, rechtsbuendig, bewusst leise. */
+/* Toolbar ueber dem Log: links "Mit Outlook verknuepfen", rechts "Verlauf
+ * zuruecksetzen" — beide als dezente Sekundaeraktionen. */
 #chat-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 0.35rem;
   flex-shrink: 0;
+}
+
+/* "Mit Outlook verknuepfen" (linksbuendig): laedt die Verknuepfungs-Datei fuer
+ * das Add-in auf einem anderen PC herunter. Gleiche leise Optik wie der
+ * Reset-Button, aber in Vizpatch-Blau als aktive Einladung. */
+#chat-connect-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid #c7d2ec;
+  background: #eef2fb;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+#chat-connect-btn:hover {
+  background: #e0e8fa;
+  border-color: #2563eb;
 }
 
 #chat-reset-btn {

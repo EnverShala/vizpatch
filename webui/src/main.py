@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -777,6 +777,34 @@ def test_connection_endpoint(
     raise HTTPException(status_code=400, detail="unbekanntes Testziel")
 
 
+@app.get("/connect-config", dependencies=[Depends(auth.require_setup)])
+@limiter.limit("30/minute")
+def connect_config_endpoint(
+    request: Request,
+    agent_id: str = "",
+    user: str = Depends(auth.require_auth),
+):
+    """„Mit Outlook verknüpfen": liefert eine kleine JSON-Datei zum Download, die
+    das Outlook-Add-in beim Start automatisch importiert — Backend-URL (aus dem
+    Host dieses Requests abgeleitet, dieselbe LAN-Adresse wie im Browser),
+    Agent-ID, Benutzer (`admin`) und Origin-Token. **KEIN Passwort**: das wird
+    DPAPI-bedingt einmalig am Ziel-PC über „Einstellungen" eingegeben. Enthält
+    keine Secrets, daher unbedenklich als Download."""
+    backend_url = str(request.base_url).rstrip("/")
+    payload = {
+        "BackendUrl": backend_url,
+        "AgentId": agent_id or "",
+        "Username": "admin",
+        "AddinOriginToken": "https://outlook.office.com",
+    }
+    body = json.dumps(payload, indent=2, ensure_ascii=False)
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="vizpatch-verknuepfung.json"'},
+    )
+
+
 STY05_HINT = (
     "Zu wenig verwertbares Mail-Material und kein Freitext — bitte Stil kurz im "
     "Feld beschreiben oder später erneut versuchen."
@@ -1408,12 +1436,16 @@ def save(
 @limiter.limit("3/minute")
 def reset_all_endpoint(
     request: Request,
-    confirmation: str = Form(""),
+    password: str = Form(""),
     user: str = Depends(auth.require_auth),
 ):
-    if confirmation != "LÖSCHEN":
+    # Zero-Reset ist irreversibel -> zusätzlich zum Session-Login wird das
+    # WebUI-Admin-Passwort erneut abgefragt (Frontend: roter Button -> Ja/Nein ->
+    # Passwort-Prompt). Falsches/leeres Passwort blockt hart; es wird nichts
+    # gelöscht. Ersetzt das frühere „LÖSCHEN"-Eintippen.
+    if not auth.verify_password(password):
         return RedirectResponse(
-            f"/?error={quote('Zero-Reset abgebrochen: Bestätigungswort war nicht ‚LÖSCHEN‘.')}",
+            f"/?error={quote('Zero-Reset abgebrochen: falsches WebUI-Passwort.')}",
             status_code=303,
         )
     # Alle Agenten (Config + State) entfernen (MA-01/D-50).
