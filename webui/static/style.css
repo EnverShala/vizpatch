@@ -620,6 +620,65 @@ dialog#agent-dialog::backdrop {
   cursor: pointer;
 }
 
+/* Verwaltungs-Aufklapper (Umbenennen / Löschen) unter dem Speichern-Button:
+ * einheitlich abgesetzt, damit sie als eigene Sektionen lesbar sind statt
+ * direkt am großen Speichern-Button zu kleben. */
+.agent-manage-details {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.agent-manage-details > summary {
+  font-weight: 500;
+  color: #1e3a5f;
+  padding: 0.25rem 0;
+}
+
+.agent-delete-details > summary {
+  color: #dc3545;
+}
+
+/* Umbenennen-Formular: Feld + kompakter Button in einer Zeile statt eines
+ * überdimensionierten Block-Buttons (der generische button[type=submit]-Stil
+ * wirkte hier fehl am Platz — Inkonsistenz zu den Löschen-Buttons). */
+.agent-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.agent-rename-form label {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.agent-rename-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ID-Präfix, damit dieser kompakte Stil den generischen
+ * button[type="submit"] (0,1,1) sicher schlägt. */
+#agent-dialog-body button.btn-rename {
+  display: inline-block;
+  margin: 0;
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#agent-dialog-body button.btn-rename:hover {
+  background: #545b62;
+}
+
 /* Ja/Nein-Bestätigung beim Agenten-Löschen */
 .delete-confirm-frage {
   margin: 0.5rem 0 0.25rem;
@@ -628,8 +687,16 @@ dialog#agent-dialog::backdrop {
 
 .delete-confirm-actions {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+/* im Aktions-Row keine Einzel-Margins (btn-danger bringt sonst margin-top mit
+ * -> vertikaler Versatz zum „Nein"-Button) */
+.delete-confirm-actions .btn-danger,
+.delete-confirm-actions .btn-cancel {
+  margin: 0;
 }
 
 .btn-cancel {
@@ -637,8 +704,10 @@ dialog#agent-dialog::backdrop {
   color: #fff;
   border: none;
   border-radius: 4px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  /* gleiche Maße wie .btn-danger, damit „Ja, löschen"/„Nein" bündig sind */
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   cursor: pointer;
 }
 

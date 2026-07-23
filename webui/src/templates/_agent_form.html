@@ -137,15 +137,15 @@
 </form>
 
 {% if mode == 'edit' %}
-<details>
+<details class="agent-manage-details">
   <summary>Agent umbenennen</summary>
-  <form action="/agents/{{ agent_id }}/rename" method="post">
+  <form action="/agents/{{ agent_id }}/rename" method="post" class="agent-rename-form">
     <label for="new_name">Neuer Name</label>
     <input type="text" id="new_name" name="new_name" required>
-    <button type="submit">Umbenennen</button>
+    <button type="submit" class="btn-rename">Umbenennen</button>
   </form>
 </details>
-<details class="agent-delete-details">
+<details class="agent-manage-details agent-delete-details">
   <summary>Agent löschen</summary>
   <form action="/agents/{{ agent_id }}/delete" method="post">
     {# confirmation bleibt serverseitig Pflicht (delete_agent_endpoint prüft == 'LÖSCHEN');
