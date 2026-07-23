@@ -344,9 +344,19 @@ namespace VizpatchAddin.TaskPane
         /// <summary>
         /// Add-in-Einstellungs-Gate: fragt das WebUI-Passwort ab und prueft es
         /// serverseitig (<see cref="ChatClient.VerifyPasswordAsync"/>) gegen die
-        /// bereits hinterlegte Backend-URL. Nur bei Erfolg (HTTP 200) darf der
-        /// Einstellungsdialog geoeffnet werden. Ein falsches Passwort (401) oder
-        /// ein Netz-/TLS-Fehler brechen ab (Dialog bleibt gesperrt).
+        /// bereits hinterlegte Backend-URL.
+        ///
+        /// Zwei Faelle werden bewusst unterschieden:
+        /// <list type="bullet">
+        /// <item>Backend ERREICHBAR, Passwort falsch (HTTP 401): Dialog bleibt
+        ///   gesperrt — genau der Schutz, den das Gate leisten soll.</item>
+        /// <item>Backend NICHT erreichbar (falsche/veraltete URL, Server aus,
+        ///   TLS-Fehler): eine Passwortpruefung ist gar nicht moeglich. Ohne
+        ///   Ausweg waere die Konfiguration dann fuer immer gesperrt (man kaeme
+        ///   nie an die falsche URL, um sie zu korrigieren — Lockout-Falle).
+        ///   Deshalb wird hier eine ausdrueckliche Rueckfrage angeboten, den
+        ///   Dialog zum KORRIGIEREN der Verbindung trotzdem zu oeffnen.</item>
+        /// </list>
         /// </summary>
         private async Task<bool> AuthorizeSettingsAsync(AddinSettings current)
         {
@@ -365,6 +375,7 @@ namespace VizpatchAddin.TaskPane
                 using (var client = new ChatClient(current))
                 using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
                 {
+                    // false = erreichbares Backend, aber falsches Passwort (401).
                     bool ok = await client.VerifyPasswordAsync(entered, cts.Token);
                     if (!ok)
                     {
@@ -377,11 +388,19 @@ namespace VizpatchAddin.TaskPane
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this,
-                    "WebUI nicht erreichbar oder Passwortpruefung fehlgeschlagen:\r\n"
-                    + ex.Message + "\r\n\r\nEinstellungen bleiben gesperrt.",
-                    "Vizpatch", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
+                // Backend nicht erreichbar -> Passwort kann nicht geprueft werden.
+                // Ausweg gegen die Lockout-Falle: Dialog zum Korrigieren der
+                // Verbindung (v.a. der Backend-URL) trotzdem oeffnen lassen.
+                var choice = MessageBox.Show(this,
+                    "Das WebUI-Backend unter\r\n    " + (current.BackendUrl ?? "(keine URL)")
+                    + "\r\nist nicht erreichbar, daher kann das Passwort nicht geprueft werden:\r\n"
+                    + ex.Message + "\r\n\r\n"
+                    + "Einstellungen trotzdem oeffnen, um die Verbindung (z. B. die "
+                    + "Backend-URL) zu korrigieren?",
+                    "Vizpatch — Verbindung pruefen",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+                return choice == DialogResult.Yes;
             }
         }
 
