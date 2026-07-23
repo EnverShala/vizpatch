@@ -79,7 +79,9 @@ def test_agent_edit_partial_shows_consent_timestamp_and_prechecked_when_already_
     })
     response = authed_client.get("/agents/info/edit", auth=("admin", "pw"))
     html = response.text
-    assert "Zugestimmt am 2026-07-17T10:00:00+00:00" in html
+    # Consent-Zeit wird jetzt in deutscher Ortszeit (MEZ/MESZ) angezeigt statt roh-UTC:
+    # 2026-07-17T10:00:00+00:00 -> 12:00 MESZ (Sommerzeit).
+    assert "Zugestimmt am 17.07.2026 12:00 (MESZ)" in html
     checkbox_start = html.index('name="privacy_consent"')
     surrounding = html[checkbox_start:checkbox_start + 200]
     assert "checked" in surrounding

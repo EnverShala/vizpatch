@@ -44,7 +44,7 @@
           <span class="state-exited">Inaktiv</span>
           {% endif %}
         </td>
-        <td>{% if agent.last_poll %}{{ agent.last_poll }}{% else %}keine Daten{% endif %}</td>
+        <td>{% if agent.last_poll %}{{ agent.last_poll | localzeit }}{% else %}keine Daten{% endif %}</td>
         <td>
           {% if agent.status_json and agent.status_json.error %}
           <span class="state-error">{{ agent.status_json.error }}</span>

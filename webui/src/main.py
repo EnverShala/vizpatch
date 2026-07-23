@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract, validate_conn
+from . import agents_io, auth, chat, chat_tools, config_io, crypto, docker_ctrl, llm_detect, llm_seed, state_reader, style_extract, timefmt, validate_conn
 from .logging_setup import setup_logging
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -37,6 +37,8 @@ app = FastAPI(title="Vizpatch WebUI", version="1.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates = Jinja2Templates(directory="src/templates")
+# Zeitanzeige in deutscher Ortszeit (MEZ/MESZ) — {{ wert | localzeit }}.
+templates.env.filters["localzeit"] = timefmt.to_local_str
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 PROVIDER_LABELS = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google"}

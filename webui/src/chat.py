@@ -22,7 +22,7 @@ from typing import Callable, Iterator
 
 from anthropic import Anthropic
 
-from . import crypto, pii, state_reader
+from . import crypto, pii, state_reader, timefmt
 from .agents_io import get_agent_enabled, read_context_md, read_env_raw, read_style_md
 from .style_extract import MODEL_DRAFT_DEFAULTS
 
@@ -115,8 +115,8 @@ def _format_agent_status(agent_id: str) -> str:
         f"- Läuft aktuell (Heuristik): {'ja' if running else 'nein'}",
         f"- Drafts-Ordner: {status_json.get('drafts_folder') or '[unbekannt]'}",
         f"- Erkennungs-Methode Drafts-Ordner: {status_json.get('detection_source') or '[unbekannt]'}",
-        f"- Letzter Poll (verarbeitete Mails): {last_poll.isoformat() if last_poll else 'noch kein Poll'}",
-        f"- Letzter Zyklus (Heartbeat): {status_json.get('last_cycle') or '[unbekannt]'}",
+        f"- Letzter Poll (verarbeitete Mails): {timefmt.to_local_str(last_poll, 'noch kein Poll')}",
+        f"- Letzter Zyklus (Heartbeat): {timefmt.to_local_str(status_json.get('last_cycle'), '[unbekannt]')}",
         f"- Letzter Fehler: {error}",
     ]
     return "\n".join(lines)

@@ -129,7 +129,7 @@
       Ich stimme den <a href="/datenschutz" target="_blank" rel="noopener">Datenschutzbestimmungen</a> zu
     </label>
     {% if privacy_consent_accepted %}
-    <p class="hint">&#10003; Zugestimmt am {{ privacy_consent_at }}</p>
+    <p class="hint">&#10003; Zugestimmt am {{ privacy_consent_at | localzeit }}</p>
     {% endif %}
   </fieldset>
 

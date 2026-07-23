@@ -351,7 +351,9 @@ def test_build_system_prompt_includes_compact_status(tmp_path, monkeypatch):
 
     assert "Entwürfe" in prompt
     assert "IMAP-Timeout beim letzten Zyklus" in prompt
-    assert "2026-07-17T10:00:00+00:00" in prompt
+    # last_cycle wird jetzt in deutscher Ortszeit (MEZ/MESZ) angezeigt statt roh-UTC:
+    # 2026-07-17T10:00:00Z -> 12:00 MESZ (Sommerzeit).
+    assert "17.07.2026 12:00 (MESZ)" in prompt
     assert state_reader  # nur zur Doku, kein direkter Aufruf hier nötig
 
 
