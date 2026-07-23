@@ -53,8 +53,16 @@ def test_dangerous_route_returns_401_with_password_but_no_session(pw_set_client)
     assert r.status_code == 401
 
 
-def test_dangerous_route_works_with_valid_session(authed_client):
-    """(c): gueltige Session -> Route laeuft normal durch."""
+def test_dangerous_route_works_with_valid_session(authed_client, tmp_path, monkeypatch):
+    """(c): gueltige Session -> Route laeuft normal durch.
+
+    Config-/Data-Root auf tmp isolieren (sonst schreibt POST /agents in den
+    echten Default `/config` — auf Linux root-eigen -> PermissionError). Der
+    Login der authed_client-Fixture haengt nur an WEBUI_PASSWORD, nicht am
+    Config-Root, daher genuegt es, die Roots vor dem POST hier zu setzen."""
+    monkeypatch.setenv("WEBUI_CONFIG_ROOT", str(tmp_path / "config"))
+    monkeypatch.setenv("WEBUI_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("VIZPATCH_SECRET_KEY_FILE", str(tmp_path / ".secret_key"))
     r = authed_client.post("/agents", data={"name_or_email": "info"}, follow_redirects=False)
     assert r.status_code in (200, 303)
 
