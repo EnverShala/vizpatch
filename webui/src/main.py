@@ -1,9 +1,11 @@
+import io
 import json
 import logging
 import mimetypes
 import os
 import re
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -777,31 +779,47 @@ def test_connection_endpoint(
     raise HTTPException(status_code=400, detail="unbekanntes Testziel")
 
 
-@app.get("/connect-config", dependencies=[Depends(auth.require_setup)])
+# Ablageort des mitgelieferten Add-in-ClickOnce-Bundles (setup.exe + Application
+# Files + .vsto/Manifeste). Das Deployment-Paket legt `addin-publish/` neben die
+# docker-compose.yml; die WebUI mountet das Paketverzeichnis read-only nach
+# /compose (siehe docker-compose.yml `- .:/compose:ro`), daher der Default. In der
+# lokalen Test-Instanz fehlt der Ordner i. d. R. -> der Endpoint antwortet dann
+# sauber mit 404 (kein Absturz).
+ADDIN_BUNDLE_DIR = os.getenv("ADDIN_BUNDLE_DIR", "/compose/addin-publish")
+
+
+@app.get("/addin-installer", dependencies=[Depends(auth.require_setup)])
 @limiter.limit("30/minute")
-def connect_config_endpoint(
+def addin_installer_endpoint(
     request: Request,
-    agent_id: str = "",
     user: str = Depends(auth.require_auth),
 ):
-    """„Mit Outlook verknüpfen": liefert eine kleine JSON-Datei zum Download, die
-    das Outlook-Add-in beim Start automatisch importiert — Backend-URL (aus dem
-    Host dieses Requests abgeleitet, dieselbe LAN-Adresse wie im Browser),
-    Agent-ID, Benutzer (`admin`) und Origin-Token. **KEIN Passwort**: das wird
-    DPAPI-bedingt einmalig am Ziel-PC über „Einstellungen" eingegeben. Enthält
-    keine Secrets, daher unbedenklich als Download."""
-    backend_url = str(request.base_url).rstrip("/")
-    payload = {
-        "BackendUrl": backend_url,
-        "AgentId": agent_id or "",
-        "Username": "admin",
-        "AddinOriginToken": "https://outlook.office.com",
-    }
-    body = json.dumps(payload, indent=2, ensure_ascii=False)
+    """Lädt den Outlook-Add-in-Installer als ZIP herunter (Betreiber-Wunsch:
+    Add-in bequem auf einem weiteren PC installieren). Gezippt wird das
+    mitgelieferte `addin-publish/`-Bundle (setup.exe + Application Files +
+    .vsto/Manifeste) — ClickOnce braucht den KOMPLETTEN Ordner, ein einzelnes
+    setup.exe genügt nicht. Das ZIP behält die `addin-publish/`-Ordnerstruktur.
+
+    Hinweis Mark-of-the-Web: ein per Browser geladenes ZIP ist „aus dem Internet"
+    markiert; am Ziel-PC einmal ZIP → Eigenschaften → „Zulassen", dann entpacken,
+    dann `setup.exe`. Enthält keine Secrets."""
+    bundle = Path(ADDIN_BUNDLE_DIR)
+    if not bundle.is_dir() or not any(bundle.rglob("*")):
+        raise HTTPException(
+            status_code=404,
+            detail="Add-in-Installer ist auf diesem Server nicht hinterlegt (addin-publish/ fehlt).",
+        )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(bundle.rglob("*")):
+            if path.is_file():
+                # relative_to(bundle.parent) -> ZIP-Wurzel enthält den Ordner
+                # "addin-publish/…", damit ClickOnce die relativen Pfade findet.
+                zf.write(path, path.relative_to(bundle.parent).as_posix())
     return Response(
-        content=body,
-        media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="vizpatch-verknuepfung.json"'},
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="vizpatch-addin-installer.zip"'},
     )
 
 

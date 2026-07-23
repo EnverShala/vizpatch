@@ -137,21 +137,38 @@ window.initVizpatchChat = function () {
     resetBtn.addEventListener('click', resetHistory);
   }
 
-  /* "Mit Outlook verknuepfen": laedt eine Verknuepfungs-Datei herunter
-   * (Backend-URL + Agent-ID + Benutzer + Origin-Token, KEIN Passwort). Auf einem
-   * anderen PC importiert das Outlook-Add-in sie beim Start automatisch; das
-   * Passwort wird dort einmalig eingegeben (DPAPI). Der Download nutzt einen
-   * temporaeren <a download> — der Content-Disposition-Header des Servers gibt
-   * den Dateinamen vor. */
+  /* "Add-in herunterladen": laedt den Outlook-Add-in-Installer als ZIP
+   * (das komplette addin-publish/-Bundle — ClickOnce braucht den ganzen Ordner).
+   * Ist auf diesem Server kein Bundle hinterlegt (z. B. lokale Test-Instanz),
+   * antwortet der Endpoint mit 404 -> wir zeigen eine kurze Meldung statt eines
+   * kaputten Downloads. Sonst per Blob speichern (Content-Disposition gibt den
+   * Dateinamen vor). */
   const connectBtn = document.getElementById('chat-connect-btn');
   if (connectBtn) {
-    connectBtn.addEventListener('click', function () {
-      const a = document.createElement('a');
-      a.href = '/connect-config?agent_id=' + encodeURIComponent(agentId);
-      a.download = 'vizpatch-verknuepfung.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+    connectBtn.addEventListener('click', async function () {
+      const original = connectBtn.textContent;
+      connectBtn.disabled = true;
+      try {
+        const res = await fetch('/addin-installer');
+        if (!res.ok) {
+          alert('Add-in-Installer ist auf diesem Server nicht hinterlegt (Fehler ' + res.status + ').');
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vizpatch-addin-installer.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Download fehlgeschlagen: ' + e);
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = original;
+      }
     });
   }
 
