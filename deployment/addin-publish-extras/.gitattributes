@@ -1,0 +1,4 @@
+# Windows-Skripte müssen mit CRLF ausgecheckt werden (cmd/PowerShell erwarten das
+# zuverlässig, v. a. .cmd). Im Repo als LF gehalten, beim Checkout -> CRLF.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

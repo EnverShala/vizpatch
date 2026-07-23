@@ -106,6 +106,16 @@ if [ -d "${ADDIN_PUBLISH_SRC}" ]; then
   echo "==> Add-in-ClickOnce-Paket beilegen: ${ADDIN_PUBLISH_SRC} -> addin-publish/"
   mkdir -p "${DIST_DIR}/addin-publish"
   cp -r "${ADDIN_PUBLISH_SRC}/." "${DIST_DIR}/addin-publish/"
+  # Signatur-/Vertrauens-Helfer in JEDES Bundle legen (neben setup.exe/.vsto) —
+  # loesen am Kunden-PC die Mark-of-the-Web-Sperre + "Herausgeber nicht
+  # verifiziert"-Warnung. INSTALLIEREN.cmd = Doppelklick-Weg, ruft das ps1 und
+  # startet danach setup.exe. Quelle: deployment/addin-publish-extras/ (versioniert).
+  # Mit CRLF ins Bundle schreiben (Windows-Skripte; cmd.exe ist bei LF in
+  # if()-Bloecken empfindlich). Quelle darf LF ODER CRLF sein.
+  for f in INSTALLIEREN.cmd vertrauen-einrichten.ps1; do
+    sed 's/\r$//; s/$/\r/' "deployment/addin-publish-extras/${f}" > "${DIST_DIR}/addin-publish/${f}"
+  done
+  echo "==> Signatur-Helfer beigelegt (CRLF): INSTALLIEREN.cmd + vertrauen-einrichten.ps1"
 else
   echo "==> HINWEIS: ${ADDIN_PUBLISH_SRC} nicht gefunden — Add-in-Paket NICHT beigelegt."
   echo "    (Add-in vorab auf Windows veroeffentlichen, siehe README.addin-outlook.md Kap. 2c.)"
