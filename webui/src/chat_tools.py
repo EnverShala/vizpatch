@@ -45,7 +45,7 @@ from anthropic import (
 )
 from imap_tools import AND, H, MailBox, MailBoxUnencrypted, MailMessageFlags
 
-from . import chat, crypto, pii
+from . import chat, crypto, pii, timefmt
 from .agents_io import read_env_raw
 from .provider_config import resolve_imap_config
 
@@ -620,7 +620,7 @@ def _mails_suchen_all_folders(
                     "ordner": name,
                     "von": _anon_field(anonymizer, msg.from_ or ""),
                     "betreff": _anon_field(anonymizer, msg.subject or ""),
-                    "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+                    "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
                     "body_redigiert": body,
                 }
             )
@@ -710,7 +710,7 @@ def mails_suchen(
                 "ordner": target_folder,
                 "von": _anon_field(anonymizer, msg.from_ or ""),
                 "betreff": _anon_field(anonymizer, msg.subject or ""),
-                "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+                "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
                 "body_redigiert": body,
             }
         )
@@ -777,7 +777,7 @@ def mail_lesen(
         "von": _anon_field(anonymizer, msg.from_ or ""),
         "an": _anon_field(anonymizer, _mail_recipients(msg)),
         "betreff": _anon_field(anonymizer, msg.subject or ""),
-        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+        "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
         "body_redigiert": body,
     }
 
@@ -845,7 +845,7 @@ def entwuerfe_auflisten(
             "uid": str(getattr(msg, "uid", "") or ""),
             "an": _anon_field(anonymizer, _mail_recipients(msg)),
             "betreff": _anon_field(anonymizer, msg.subject or ""),
-            "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+            "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
         }
         for msg in messages
     ]
@@ -914,7 +914,7 @@ def entwurf_lesen(
         "von": _anon_field(anonymizer, msg.from_ or ""),
         "an": _anon_field(anonymizer, _mail_recipients(msg)),
         "betreff": _anon_field(anonymizer, msg.subject or ""),
-        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+        "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
         "body_redigiert": body,
         "in_reply_to": threading_headers["in_reply_to"],
         "references": threading_headers["references"],
@@ -1767,7 +1767,7 @@ def mail_in_papierkorb(
                     "ziel": {
                         "betreff": _anon_field(anonymizer, msg.subject or ""),
                         "absender": _anon_field(anonymizer, msg.from_ or ""),
-                        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+                        "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
                         "ordner": target_folder,
                     },
                     "confirmation_token": expected_tokens[0],
@@ -1899,7 +1899,7 @@ def entwurf_in_papierkorb(
                     "ziel": {
                         "betreff": _anon_field(anonymizer, msg.subject or ""),
                         "absender": _anon_field(anonymizer, msg.from_ or ""),
-                        "datum": msg.date.isoformat() if getattr(msg, "date", None) else None,
+                        "datum": timefmt.to_local_str(msg.date) if getattr(msg, "date", None) else None,
                         "ordner": drafts_folder,
                     },
                     "confirmation_token": expected_tokens[0],
