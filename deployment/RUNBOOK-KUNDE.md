@@ -7,9 +7,10 @@ Kurzanleitung für den Rollout beim Kunden. Zwei Teile:
 
 > **Wichtig zum Verständnis:** Der Linux-Server macht die eigentliche Arbeit
 > (Postfach pollen, Entwürfe anlegen, Chat-Logik). Das Outlook-Add-in ist nur ein
-> dünner Client, der über das LAN mit dem Server spricht. **Die Add-in-Dateien
-> liegen NICHT auf dem Linux-Server** — sie werden auf einem Windows-Rechner
-> gebaut/veröffentlicht und auf den Kunden-PC kopiert (siehe Teil B).
+> dünner Client, der über das LAN mit dem Server spricht. Das Add-in ist
+> **Windows-Software** (auf einem Windows-Rechner gebaut/veröffentlicht); den
+> **fertigen Installer** kann man aber bequem **direkt aus der WebUI herunterladen**
+> (Button „⬇ Add-in herunterladen") oder per USB/Freigabe verteilen (siehe Teil B).
 
 ---
 
@@ -21,10 +22,10 @@ Paket-Inhalt (vom USB-Stick) nach `/opt/vizpatch` kopieren.
 **1. Integrität prüfen + Images laden**
 ```bash
 cd /opt/vizpatch
-sha256sum -c vizpatch-v1.11.0.tar.sha256
-sha256sum -c vizpatch-webui-v1.11.0.tar.sha256
-docker load -i vizpatch-v1.11.0.tar
-docker load -i vizpatch-webui-v1.11.0.tar
+sha256sum -c vizpatch-v1.12.0.tar.sha256
+sha256sum -c vizpatch-webui-v1.12.0.tar.sha256
+docker load -i vizpatch-v1.12.0.tar
+docker load -i vizpatch-webui-v1.12.0.tar
 ```
 
 **2. Docker-Socket-GID setzen (einmalig)**
@@ -66,6 +67,10 @@ Danach startet Vizpatch nach jedem Server-Neustart automatisch. Test: `sudo rebo
   > kein Agent mit falschen Zugängen. **Wichtig:** Der Server muss ausgehend ins Internet
   > dürfen (HTTPS/443 zum LLM-Anbieter, z. B. `api.anthropic.com`) und den IMAP-Server
   > erreichen.
+  >
+  > **Neu (v1.12.0):** Im Formular gibt es zusätzlich je einen Button **„IMAP-Verbindung
+  > testen"** und **„API-Verbindung testen"** — damit lassen sich die Zugänge prüfen, OHNE
+  > zu speichern (Ergebnis als kurze Meldung direkt unter dem Feld).
 - **Starten:** In der Übersichts-Tabelle beim Agenten auf **Start** — läuft ab dem
   nächsten Poll-Zyklus (Standard alle 5 Min). Mehrere Agenten/Postfächer sind möglich
   (ein Container, sequentieller Poll).
@@ -89,37 +94,48 @@ des Postfachs an — nie automatisch versendet.
 
 ## Teil B — Outlook-Add-in (Windows-PC, optional)
 
-Das Add-in bringt den Vizpatch-Chat direkt in Outlook classic. Es ist **Windows-Software**
-und wird getrennt vom Server verteilt.
+Das Add-in bringt den Vizpatch-Chat direkt in Outlook classic. Es ist **Windows-Software**;
+den fertigen Installer gibt es per **WebUI-Download** oder per USB/Freigabe.
 
 > Nur **Outlook classic** lädt das Add-in — das „neue Outlook"/OWA nicht.
 
-### So kommt das Add-in auf den Kunden-PC (die häufige Frage)
+### So kommt das Add-in auf den Kunden-PC
 
-Der Linux-Server liefert das Add-in **nicht** aus — es ist Windows-Software und wird
-separat auf den Kunden-PC kopiert. Ein **fertig veröffentlichtes ClickOnce-Paket liegt
-bereits bei**: im Ordner **`addin-publish/`** (neben diesem Server-Paket auf dem USB-Stick).
-Kein eigener Build nötig.
+Zwei Wege — beide liefern dasselbe fertige ClickOnce-Paket, **kein eigener Build nötig**:
 
-Inhalt von `addin-publish/`:
-- **`setup.exe`** — der Installer (empfohlener Weg; prüft Voraussetzungen mit).
-- `VizpatchAddin.vsto` — alternative Installationsdatei (Doppelklick, wenn Voraussetzungen sicher vorhanden).
-- `Application Files/` — die zugehörigen Programmdateien (müssen im selben Ordner bleiben).
+- **Neu (v1.12.0) — Direkt-Download aus der WebUI (bequemster Weg im LAN):** In der WebUI
+  beim gewählten Agenten oben links über dem Chat auf **„⬇ Add-in herunterladen"** klicken —
+  das lädt das komplette Installer-Paket als ZIP (`vizpatch-addin-installer.zip`).
+- **USB-Stick / Netzwerkfreigabe:** Der Ordner **`addin-publish/`** liegt dem Server-Paket
+  bei — auf den Kunden-PC kopieren.
 
-**Installation am Kunden-PC:**
+Inhalt des Pakets (`addin-publish/` bzw. entpacktes ZIP):
+- **`INSTALLIEREN.cmd`** — **empfohlener Weg** (Doppelklick, siehe unten).
+- `vertrauen-einrichten.ps1` — wird von `INSTALLIEREN.cmd` aufgerufen (richtet das
+  Zertifikat-Vertrauen ein; kann auch allein per Rechtsklick → „Mit PowerShell ausführen").
+- `setup.exe` — der eigentliche ClickOnce-Installer.
+- `VizpatchAddin.vsto` + `Application Files/` — die Programmdateien (im selben Ordner lassen).
 
-1. **`addin-publish/` auf den Kunden-PC bringen** — beide Wege im selben Netz problemlos:
-   - **Netzwerkfreigabe (bequem):** Ordner auf einen im LAN erreichbaren Windows-Share legen
-     und am Kunden-PC `\\rechner\freigabe\addin-publish\setup.exe` starten.
-   - **USB-Stick (einfachster Weg):** Ordner rüberkopieren, lokal `setup.exe` starten.
-2. **`setup.exe` ausführen** → installiert das Add-in (Per-User, keine Adminrechte). Fehlen
+**Installation am Kunden-PC (empfohlen):**
+
+1. **Paket auf den PC bringen** und — falls als ZIP heruntergeladen — **entpacken**.
+   *(Tipp: Wurde das ZIP über den Browser geladen, es vorab entsperren: Rechtsklick auf die
+   ZIP → Eigenschaften → „Zulassen"/„Entsperren" → OK. `INSTALLIEREN.cmd` erledigt das
+   Entsperren sonst selbst.)*
+2. **`INSTALLIEREN.cmd` doppelklicken.** Das Skript entfernt die Download-Sperre
+   (Mark-of-the-Web), richtet das Vertrauen für das (selbstsignierte) Zertifikat ein und
+   startet danach `setup.exe` — **ohne** die Meldung „Herausgeber nicht verifiziert". Fehlen
    Voraussetzungen (.NET Framework 4.8 / VSTO-2010-Runtime), bietet der Installer sie an —
-   auf einem Rechner mit Outlook classic sind sie i.d.R. schon vorhanden. Meldung „Herausgeber
-   nicht verifiziert" (selbstsigniertes Dev-Zertifikat) bewusst mit **Installieren** bestätigen.
-   *(Alternativ, wenn die Voraussetzungen sicher vorhanden sind: `VizpatchAddin.vsto` per
-   Doppelklick öffnen.)*
+   auf einem Outlook-classic-Rechner sind sie i.d.R. schon vorhanden.
+   *(Erscheint einmalig eine Windows-Rückfrage „Ausführen?", mit Ja bestätigen; beim
+   Zertifikat-Import in den Maschinen-Speicher ggf. „Ja".)*
 3. **Outlook classic starten:** im Menüband erscheint die Gruppe **„Vizpatch"** mit dem
    Button **„Vizpatch"** → Chat-Bereich rechts einblenden.
+
+> **Alternative (manuell):** Statt `INSTALLIEREN.cmd` direkt `setup.exe` starten. Dann kommt
+> bei selbstsigniertem Zertifikat die Meldung „Herausgeber nicht verifiziert" — bewusst mit
+> **Installieren** bestätigen. `INSTALLIEREN.cmd` erspart genau diese Warnung und das
+> manuelle Entsperren.
 
 > **Voraussetzungen auf dem Kunden-PC:** .NET Framework 4.8 (auf Windows 10/11 bereits
 > vorhanden) und die VSTO-2010-Runtime (kommt mit jeder Outlook-classic-Installation mit) —
